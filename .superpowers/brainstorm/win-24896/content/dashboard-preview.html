@@ -1,0 +1,125 @@
+<h2>Preview do Dashboard (Neon-Retro Glassmorphism)</h2>
+<p class="subtitle">Mockup interativo mostrando o faturamento, gráficos e a nova estrutura de cartões aninhados de alto contraste</p>
+
+<!-- Layout Wrapper: Simulates the dashboard main screen -->
+<div style="background-color: #020617; color: #f8fafc; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); overflow: hidden; font-family: 'Plus Jakarta Sans', sans-serif;">
+  
+  <!-- Sleek Top Header -->
+  <div style="background-color: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); border-b: 1px solid rgba(255,255,255,0.06); padding: 16px 24px; display: flex; justify-content: space-between; align-items: center;">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span style="font-size: 11px; font-family: monospace; color: #94a3b8; font-weight: bold; text-transform: uppercase;">ADMIN / <span style="color: #c5a059;">BALANÇO FINANCEIRO</span></span>
+    </div>
+    <div style="display: flex; gap: 8px; font-size: 10px; font-family: monospace;">
+      <span style="background-color: rgba(197, 160, 89, 0.15); border: 1px solid rgba(197, 160, 89, 0.3); color: #c5a059; padding: 4px 10px; border-radius: 4px; font-weight: bold;">Filtro: Hoje</span>
+    </div>
+  </div>
+
+  <!-- Main Grid Area -->
+  <div style="padding: 24px; display: flex; flex-direction: column; gap: 24px;">
+    
+    <!-- Bento Stats Grid (High-Contrast Neon Realism) -->
+    <div style="display: grid; grid-template-cols: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px;">
+      
+      <!-- Card 1: Revenue -->
+      <div style="background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(197, 160, 89, 0.25); border-radius: 8px; padding: 16px; box-shadow: 0 4px 20px rgba(197,160,89,0.06);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 8.5px; font-family: monospace; color: #94a3b8; font-weight: bold; text-transform: uppercase;">Cortes Feitos</span>
+          <span style="font-size: 14px;">✂️</span>
+        </div>
+        <h3 style="font-size: 20px; font-family: monospace; color: #fff; margin: 0; font-weight: bold; text-shadow: 0 0 10px rgba(197,160,89,0.25);">R$ 2.450,00</h3>
+        <p style="font-size: 9px; color: #64748b; margin: 4px 0 0 0; font-style: italic;">38 agendamentos concluídos</p>
+      </div>
+
+      <!-- Card 2: Expenses -->
+      <div style="background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 8px; padding: 16px; box-shadow: 0 4px 20px rgba(239,68,68,0.06);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 8.5px; font-family: monospace; color: #94a3b8; font-weight: bold; text-transform: uppercase;">Despesas Totais</span>
+          <span style="font-size: 14px; color: #ef4444;">📉</span>
+        </div>
+        <h3 style="font-size: 20px; font-family: monospace; color: #f87171; margin: 0; font-weight: bold; text-shadow: 0 0 10px rgba(239,68,68,0.25);">R$ 620,00</h3>
+        <p style="font-size: 9px; color: #64748b; margin: 4px 0 0 0; font-style: italic;">Aluguel e insumos</p>
+      </div>
+
+      <!-- Card 3: Net Profit -->
+      <div style="background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(16px); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 8px; padding: 16px; box-shadow: 0 4px 20px rgba(16,185,129,0.08);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 8.5px; font-family: monospace; color: #94a3b8; font-weight: bold; text-transform: uppercase;">Lucro Líquido</span>
+          <span style="font-size: 14px; color: #10b981;">💰</span>
+        </div>
+        <h3 style="font-size: 20px; font-family: monospace; color: #34d399; margin: 0; font-weight: bold; text-shadow: 0 0 10px rgba(16,185,129,0.3);">R$ 1.830,00</h3>
+        <p style="font-size: 9px; color: #64748b; margin: 4px 0 0 0; font-style: italic;">Saldo em caixa livre</p>
+      </div>
+    </div>
+
+    <!-- Comparative Column Setup: Card Nesting Before vs After -->
+    <div style="display: grid; grid-template-columns: 1fr; md:grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 10px;">
+      
+      <!-- Nesting BEFORE (Same color nesting, poor contrast) -->
+      <div style="background-color: #161616; border: 1px solid #27272a; padding: 20px; border-radius: 8px;">
+        <h4 style="font-size: 11px; text-transform: uppercase; font-family: monospace; color: #ef4444; margin: 0 0 12px 0; font-weight: bold;">⚠️ ANTES: Aninhamento de Mesma Cor</h4>
+        <p style="font-size: 9.5px; color: #94a3b8; margin: 0 0 16px 0; line-height: 1.4;">Os cartões internos possuíam a mesma cor que o fundo, dificultando a visualização e tornando a interface confusa e sem hierarquia.</p>
+        
+        <div style="background-color: #161616; border: 1px solid #27272a; padding: 12px; border-radius: 4px; display: flex; flex-direction: column; gap: 8px;">
+          <div style="background-color: #161616; border: 1px solid #27272a; padding: 8px; border-radius: 4px;">
+            <p style="font-size: 10px; margin: 0; color: #fff;">Serviço: Corte Degradê - R$ 60,00</p>
+          </div>
+          <div style="background-color: #161616; border: 1px solid #27272a; padding: 8px; border-radius: 4px;">
+            <p style="font-size: 10px; margin: 0; color: #fff;">Serviço: Barba Imperial - R$ 45,00</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Nesting AFTER (Glassmorphism + Dark solid nesting) -->
+      <div style="background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.08); padding: 20px; border-radius: 8px; box-shadow: 0 12px 24px rgba(0,0,0,0.4);">
+        <h4 style="font-size: 11px; text-transform: uppercase; font-family: monospace; color: #34d399; margin: 0 0 12px 0; font-weight: bold;">✅ DEPOIS: Hierarquia & Glassmorphism</h4>
+        <p style="font-size: 9.5px; color: #94a3b8; margin: 0 0 16px 0; line-height: 1.4;">Fundo do painel escuro (#020617), cartão principal translúcido e cartões aninhados escuros e sem bordas, criando excelente contraste e sensação de profundidade.</p>
+        
+        <!-- Nested Container -->
+        <div style="background: rgba(2, 6, 23, 0.45); border: 1px solid rgba(255,255,255,0.04); padding: 12px; border-radius: 6px; display: flex; flex-direction: column; gap: 8px;">
+          <div style="background: rgba(2, 6, 23, 0.8); padding: 8px 12px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 10px; color: #e2e8f0; font-weight: 500;">Corte Degradê</span>
+            <span style="font-size: 10px; color: #34d399; font-weight: bold; font-family: monospace;">+ R$ 60,00</span>
+          </div>
+          <div style="background: rgba(2, 6, 23, 0.8); padding: 8px 12px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 10px; color: #e2e8f0; font-weight: 500;">Barba Imperial</span>
+            <span style="font-size: 10px; color: #34d399; font-weight: bold; font-family: monospace;">+ R$ 45,00</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Chart / Visual representation of Cashflow -->
+    <div style="background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.08); padding: 20px; border-radius: 8px; box-shadow: 0 12px 24px rgba(0,0,0,0.4);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-b: 1px solid rgba(255,255,255,0.06); padding-bottom: 8px;">
+        <span style="font-size: 11px; font-weight: bold; color: #c5a059; font-family: serif; font-style: italic;">Gráfico de Faturamento Recente</span>
+        <span style="font-size: 8px; font-family: monospace; color: #64748b;">(Atualizado em tempo real)</span>
+      </div>
+      
+      <!-- Simulated Chart Area -->
+      <div style="height: 120px; display: flex; align-items: flex-end; justify-content: space-between; padding-top: 10px; gap: 8px;">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1;">
+          <div style="width: 100%; height: 35px; background: linear-gradient(to top, rgba(197, 160, 89, 0.1), #c5a059); border-radius: 3px; box-shadow: 0 0 10px rgba(197,160,89,0.3);"></div>
+          <span style="font-size: 8px; font-family: monospace; color: #64748b;">Seg</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1;">
+          <div style="width: 100%; height: 55px; background: linear-gradient(to top, rgba(197, 160, 89, 0.1), #c5a059); border-radius: 3px; box-shadow: 0 0 10px rgba(197,160,89,0.3);"></div>
+          <span style="font-size: 8px; font-family: monospace; color: #64748b;">Ter</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1;">
+          <div style="width: 100%; height: 40px; background: linear-gradient(to top, rgba(197, 160, 89, 0.1), #c5a059); border-radius: 3px; box-shadow: 0 0 10px rgba(197,160,89,0.3);"></div>
+          <span style="font-size: 8px; font-family: monospace; color: #64748b;">Qua</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1;">
+          <div style="width: 100%; height: 85px; background: linear-gradient(to top, rgba(197, 160, 89, 0.1), #c5a059); border-radius: 3px; box-shadow: 0 0 10px rgba(197,160,89,0.4);"></div>
+          <span style="font-size: 8px; font-family: monospace; color: #64748b;">Qui</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1;">
+          <div style="width: 100%; height: 110px; background: linear-gradient(to top, rgba(197, 160, 89, 0.1), #c5a059); border-radius: 3px; box-shadow: 0 0 12px rgba(197,160,89,0.5);"></div>
+          <span style="font-size: 8px; font-family: monospace; color: #64748b;">Sex</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>

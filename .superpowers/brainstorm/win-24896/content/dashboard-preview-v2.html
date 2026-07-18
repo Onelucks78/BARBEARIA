@@ -1,0 +1,206 @@
+<h2>Dashboard Premium (Midnight Navy & Gold Imperial)</h2>
+<p class="subtitle">Mockup do painel de administração com fundo azul luxo #05091c, Playfair Display itálico elegante e bordas douradas quentes</p>
+
+<!-- Layout Wrapper: Simulates the dashboard main screen with a flat layout -->
+<div style="background-color: #05091c; color: #f8fafc; border-radius: 8px; border: 1px solid rgba(197, 160, 89, 0.15); overflow: hidden; font-family: 'Plus Jakarta Sans', sans-serif;">
+  
+  <!-- Sleek Top Header -->
+  <div style="background-color: rgba(8, 15, 37, 0.75); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(197, 160, 89, 0.12); padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span style="font-size: 11px; font-family: monospace; color: #94a3b8; font-weight: bold; text-transform: uppercase;">Admin / <span style="color: #c5a059;">Balanço Financeiro</span></span>
+    </div>
+    
+    <!-- Date Filter Selector / Switcher matching original code -->
+    <div style="display: flex; gap: 2px; font-size: 10px; font-family: monospace; background-color: rgba(2, 6, 23, 0.6); padding: 2px; border: 1px solid rgba(255,255,255,0.05); border-radius: 4px;">
+      <span style="background-color: #c5a059; color: #000; padding: 4px 10px; border-radius: 2px; font-weight: bold; cursor: pointer;">Hoje</span>
+      <span style="color: #94a3b8; padding: 4px 10px; border-radius: 2px; cursor: pointer;">Últimos 7 dias</span>
+      <span style="color: #94a3b8; padding: 4px 10px; border-radius: 2px; cursor: pointer;">30 dias</span>
+      <span style="color: #94a3b8; padding: 4px 10px; border-radius: 2px; cursor: pointer;">Todo histórico</span>
+    </div>
+  </div>
+
+  <!-- Flat Content Area: Margins and border of the main area removed to flatten hierarchy -->
+  <div style="padding: 24px; display: flex; flex-direction: column; gap: 24px;">
+    
+    <!-- Bento Stats Grid (High-Contrast Midnight Navy Glass Cards - Emojis removed!) -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px;">
+      
+      <!-- Card 1: Revenue -->
+      <div style="background: rgba(8, 15, 37, 0.75); backdrop-filter: blur(16px); border: 1px solid rgba(197, 160, 89, 0.18); border-radius: 8px; padding: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 8.5px; font-family: monospace; color: #94a3b8; font-weight: bold; text-transform: uppercase;">Cortes Feitos</span>
+        </div>
+        <h3 style="font-size: 20px; font-family: monospace; color: #fff; margin: 0; font-weight: bold; text-shadow: 0 0 10px rgba(197,160,89,0.25);">R$ 2.450,00</h3>
+        <p style="font-size: 9px; color: #64748b; margin: 4px 0 0 0;">38 agendamentos concluídos</p>
+      </div>
+
+      <!-- Card 2: Plan Revenue (Stripe) -->
+      <div style="background: rgba(8, 15, 37, 0.75); backdrop-filter: blur(16px); border: 1px solid rgba(197, 160, 89, 0.18); border-radius: 8px; padding: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 8.5px; font-family: monospace; color: #94a3b8; font-weight: bold; text-transform: uppercase;">Receita de Planos (Stripe)</span>
+        </div>
+        <h3 id="plans-revenue-text" style="font-size: 20px; font-family: monospace; color: #fff; margin: 0; font-weight: bold; text-shadow: 0 0 10px rgba(197,160,89,0.25);">R$ 450,00</h3>
+        <p style="font-size: 9px; color: #64748b; margin: 4px 0 0 0;">Assinaturas ativas no Stripe</p>
+      </div>
+
+      <!-- Card 3: Expenses -->
+      <div style="background: rgba(8, 15, 37, 0.75); backdrop-filter: blur(16px); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 8px; padding: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 8.5px; font-family: monospace; color: #94a3b8; font-weight: bold; text-transform: uppercase;">Despesas Totais</span>
+        </div>
+        <h3 style="font-size: 20px; font-family: monospace; color: #f87171; margin: 0; font-weight: bold; text-shadow: 0 0 10px rgba(239,68,68,0.25);">R$ 620,00</h3>
+        <p style="font-size: 9px; color: #64748b; margin: 4px 0 0 0;">Aluguel e insumos</p>
+      </div>
+
+      <!-- Card 4: Net Profit (Cortes + Planos - Despesas) -->
+      <div style="background: rgba(8, 15, 37, 0.8); backdrop-filter: blur(16px); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 8px; padding: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 8.5px; font-family: monospace; color: #94a3b8; font-weight: bold; text-transform: uppercase;">Lucro Líquido</span>
+        </div>
+        <h3 id="net-profit-text" style="font-size: 20px; font-family: monospace; color: #34d399; margin: 0; font-weight: bold; text-shadow: 0 0 10px rgba(16,185,129,0.3);">R$ 2.280,00</h3>
+        <p style="font-size: 9px; color: #64748b; margin: 4px 0 0 0;">Saldo livre acumulado</p>
+      </div>
+    </div>
+
+    <!-- Development Sandbox: Simulate Stripe webhook payments -->
+    <div style="background: rgba(8, 15, 37, 0.45); border: 1px dashed rgba(197, 160, 89, 0.3); padding: 14px; border-radius: 6px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+      <div>
+        <span style="font-size: 10px; font-weight: bold; color: #c5a059; font-family: monospace; text-transform: uppercase; block;">Ambiente de Simulação Stripe</span>
+        <span style="font-size: 9px; color: #94a3b8; block;">Clique no botão para simular um pagamento de assinatura via Webhook no backend.</span>
+      </div>
+      <button 
+        type="button" 
+        onclick="simulateStripePayment()"
+        style="background: #c5a059; color: #000; border: none; padding: 8px 16px; font-size: 10px; font-weight: bold; font-family: monospace; border-radius: 4px; cursor: pointer; text-transform: uppercase; transition: transform 0.1s;"
+        onmousedown="this.style.transform='scale(0.95)'"
+        onmouseup="this.style.transform='scale(1)'"
+      >
+        Simular Pagamento Stripe (R$ 150,00)
+      </button>
+    </div>
+
+    <!-- Green Line Chart Card (Restored as requested - Dots completely removed) -->
+    <div style="background: rgba(8, 15, 37, 0.75); backdrop-filter: blur(16px); border: 1px solid rgba(197, 160, 89, 0.18); padding: 20px; border-radius: 8px; box-shadow: 0 12px 24px rgba(0,0,0,0.4); display: flex; flex-direction: column; gap: 16px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <!-- Restored beautiful playfair italic header for admin panel as requested! -->
+        <span style="font-size: 13px; font-weight: normal; color: #34d399; font-family: 'Playfair Display', serif; font-style: italic;">Evolução de Lucro Líquido (Valores em R$)</span>
+        <span style="font-size: 8px; font-family: monospace; color: #64748b;">Segunda a Sexta</span>
+      </div>
+      
+      <!-- SVG Green Line Chart with BRL Values on hover simulation -->
+      <div style="height: 140px; position: relative;">
+        <!-- Simulated Y-Axis Labels in R$ -->
+        <div style="position: absolute; left: 0; top: 0; bottom: 0; display: flex; flex-direction: column; justify-content: space-between; font-size: 8px; font-family: monospace; color: #64748b; pointer-events: none; z-index: 10;">
+          <span>R$ 3.000</span>
+          <span>R$ 2.000</span>
+          <span>R$ 1.000</span>
+          <span>R$ 0</span>
+        </div>
+        
+        <svg viewBox="0 0 500 120" style="width: 100%; height: 100%; overflow: visible; padding-left: 45px;" preserveAspectRatio="none">
+          <!-- Grid lines -->
+          <line x1="0" y1="30" x2="500" y2="30" stroke="rgba(255,255,255,0.04)" stroke-dasharray="3,3" />
+          <line x1="0" y1="60" x2="500" y2="60" stroke="rgba(255,255,255,0.04)" stroke-dasharray="3,3" />
+          <line x1="0" y1="90" x2="500" y2="90" stroke="rgba(255,255,255,0.04)" stroke-dasharray="3,3" />
+          <line x1="0" y1="110" x2="500" y2="110" stroke="rgba(16,185,129,0.15)" stroke-width="1.5" />
+
+          <!-- Gradient area below green line -->
+          <defs>
+            <linearGradient id="chart-green-gradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#10b981" stop-opacity="0.25"></stop>
+              <stop offset="100%" stop-color="#10b981" stop-opacity="0.0"></stop>
+            </linearGradient>
+          </defs>
+          <path d="M 0 100 L 100 80 L 200 95 L 300 45 L 400 30 L 500 15 L 500 110 L 0 110 Z" fill="url(#chart-green-gradient)" />
+          
+          <!-- Glowing green line path - Thinned to stroke-width="1.5" -->
+          <path d="M 0 100 L 100 80 L 200 95 L 300 45 L 400 30 L 500 15" fill="none" stroke="#10b981" stroke-width="1.5" stroke-linecap="round" filter="drop-shadow(0px 2px 4px rgba(16,185,129,0.4))" />
+        </svg>
+      </div>
+    </div>
+
+    <!-- Flattened Transaction List (High Contrast & Font Sizes Increased) -->
+    <div style="background: rgba(8, 15, 37, 0.75); backdrop-filter: blur(16px); border: 1px solid rgba(197, 160, 89, 0.18); padding: 20px; border-radius: 8px; box-shadow: 0 12px 24px rgba(0,0,0,0.4);">
+      <h4 style="font-size: 13px; text-transform: uppercase; font-family: monospace; color: #fff; margin: 0 0 14px 0; font-weight: bold; border-bottom: 1px solid rgba(197, 160, 89, 0.12); padding-bottom: 8px;">
+        Últimas Transações Registradas
+      </h4>
+      
+      <!-- Flat List of Transactions (No nested cards! Solid background elements directly on card background) -->
+      <div id="transactions-list-container" style="display: flex; flex-direction: column; gap: 8px;">
+        
+        <!-- Row 1: Revenue (Corte Degradê) -->
+        <div style="background: rgba(2, 6, 23, 0.5); padding: 12px 16px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; border-left: 3px solid #10b981;">
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 13px; color: #e2e8f0; font-weight: 600;">Corte Degradê (Carlos)</span>
+            <span style="font-size: 9px; color: #64748b; font-family: monospace; text-transform: uppercase;">Serviço · PIX · 18/07/2026</span>
+          </div>
+          <span style="font-size: 15px; color: #10b981; font-weight: bold; font-family: monospace;">+ R$ 60,00</span>
+        </div>
+
+        <!-- Row 2: Expense (Produtos Shampoos) -->
+        <div style="background: rgba(2, 6, 23, 0.5); padding: 12px 16px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; border-left: 3px solid #ef4444;">
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 13px; color: #e2e8f0; font-weight: 600;">Compra de golas higiênicas e toalhas</span>
+            <span style="font-size: 9px; color: #64748b; font-family: monospace; text-transform: uppercase;">Despesa · Dinheiro · 18/07/2026</span>
+          </div>
+          <span style="font-size: 15px; color: #ef4444; font-weight: bold; font-family: monospace;">- R$ 120,00</span>
+        </div>
+
+        <!-- Row 3: Revenue (Barba Imperial) -->
+        <div style="background: rgba(2, 6, 23, 0.5); padding: 12px 16px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; border-left: 3px solid #10b981;">
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-size: 13px; color: #e2e8f0; font-weight: 600;">Barba Imperial (Carlos)</span>
+            <span style="font-size: 9px; color: #64748b; font-family: monospace; text-transform: uppercase;">Serviço · Cartão · 18/07/2026</span>
+          </div>
+          <span style="font-size: 15px; color: #10b981; font-weight: bold; font-family: monospace;">+ R$ 45,00</span>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  let plansRev = 450;
+  let cortesRev = 2450;
+  let despesas = 620;
+  
+  function simulateStripePayment() {
+    plansRev += 150;
+    let net = cortesRev + plansRev - despesas;
+    
+    // Update dashboard text elements
+    document.getElementById('plans-revenue-text').textContent = 'R$ ' + plansRev.toFixed(2).replace('.', ',');
+    document.getElementById('net-profit-text').textContent = 'R$ ' + net.toFixed(2).replace('.', ',');
+    
+    // Create new transaction row elements dynamically
+    const container = document.getElementById('transactions-list-container');
+    const newRow = document.createElement('div');
+    newRow.style.background = 'rgba(2, 6, 23, 0.5)';
+    newRow.style.padding = '12px 16px';
+    newRow.style.borderRadius = '4px';
+    newRow.style.display = 'flex';
+    newRow.style.justifyContent = 'space-between';
+    newRow.style.alignItems = 'center';
+    newRow.style.borderLeft = '3px solid #10b981';
+    newRow.style.animation = 'fadeIn 0.5s ease-out';
+    
+    newRow.innerHTML = `
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <span style="font-size: 13px; color: #e2e8f0; font-weight: 600;">Assinatura Stripe Recorrente (Confirmada)</span>
+        <span style="font-size: 9px; color: #64748b; font-family: monospace; text-transform: uppercase;">Plano · Stripe Webhook · Hoje</span>
+      </div>
+      <span style="font-size: 15px; color: #10b981; font-weight: bold; font-family: monospace;">+ R$ 150,00</span>
+    `;
+    
+    container.insertBefore(newRow, container.firstChild);
+  }
+</script>
+
+<style>
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>

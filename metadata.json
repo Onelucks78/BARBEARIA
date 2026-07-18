@@ -1,0 +1,6 @@
+{
+  "name": "Site de Barbearia",
+  "description": "Site completo para barbearia com agendamento livre de cadastro e painel administrativo integrado para controle de serviços, produtos, agenda, clientes e finanças.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

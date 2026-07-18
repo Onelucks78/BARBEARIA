@@ -1,0 +1,112 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Playfair Display", Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-display: "Outfit", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  
+  --color-gold-50: #faf7f0;
+  --color-gold-100: #f3edd9;
+  --color-gold-200: #e7dbb3;
+  --color-gold-300: #d6bf84;
+  --color-gold-450: #c5a059;
+  --color-gold-500: #c5a059;
+  --color-gold-600: #b38e46;
+  --color-gold-700: #947234;
+  --color-gold-800: #745828;
+  --color-gold-900: #55401e;
+  --color-gold-950: #332611;
+
+  --color-stone-700: rgba(197, 160, 89, 0.28);
+  --color-stone-750: rgba(197, 160, 89, 0.18);
+  --color-stone-800: rgba(197, 160, 89, 0.12);
+  --color-stone-850: rgba(197, 160, 89, 0.07);
+  --color-stone-900: #141311;
+  --color-stone-950: #0a0a09;
+}
+
+/* Base resets & styles matching Sophisticated Dark design */
+html {
+  font-family: var(--font-sans);
+  background-color: #060504;
+  color: #e4e4e7;
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbars for Dark Mode */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #060504;
+}
+::-webkit-scrollbar-thumb {
+  background: #1a1715;
+  border: 2px solid #060504;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #c5a059;
+}
+
+/* Premium Glassmorphism & Gold Highlight Utilities */
+.glass-panel {
+  background: rgba(18, 16, 14, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(197, 160, 89, 0.08);
+}
+
+.glass-panel-premium {
+  background: rgba(8, 15, 37, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(197, 160, 89, 0.18);
+}
+
+.glass-panel-nested {
+  background: rgba(2, 6, 23, 0.5);
+  border: none;
+}
+
+.glass-panel-hover:hover {
+  border-color: rgba(197, 160, 89, 0.25);
+  box-shadow: 0 10px 30px -10px rgba(197, 160, 89, 0.08);
+  transform: translateY(-2px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.gold-glow {
+  box-shadow: 0 0 20px rgba(197, 160, 89, 0.15);
+}
+
+.gold-glow-hover:hover {
+  box-shadow: 0 0 25px rgba(197, 160, 89, 0.25);
+}
+
+.text-gold-glow {
+  text-shadow: 0 0 12px rgba(197, 160, 89, 0.4);
+}
+
+.radial-gold-glow {
+  background: radial-gradient(circle at 50% 50%, rgba(197, 160, 89, 0.12) 0%, transparent 65%);
+}
+
+.gold-border-gradient {
+  border-image: linear-gradient(to right, #c5a059, #55401e) 1;
+}
+
+/* Smooth custom animations */
+@keyframes pulse-slow {
+  0%, 100% { opacity: 0.2; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(1.05); }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 8s infinite ease-in-out;
+}
+
+
