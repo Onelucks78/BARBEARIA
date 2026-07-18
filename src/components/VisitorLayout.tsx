@@ -281,11 +281,11 @@ export default function VisitorLayout({
           <img src={s.imagem_url} alt={s.nome} className="w-full h-full object-cover group-hover:scale-110 transition duration-500" referrerPolicy="no-referrer" />
         </div>
         <div className="space-y-1">
-          <h3 className="font-serif font-semibold text-foreground text-lg group-hover:text-primary transition-colors tracking-wide">{s.nome}</h3>
+          <h3 className="font-semibold text-foreground text-lg group-hover:text-primary transition-colors tracking-wide">{s.nome}</h3>
           <p className="text-muted-foreground text-xs line-clamp-2 leading-relaxed max-w-xl">{s.descricao}</p>
           
           <div className="flex items-center gap-3 pt-1">
-            <span className="text-xs font-mono uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5 text-primary" /> {s.duracao_minutos} min
             </span>
             <span className="w-1 h-1 bg-muted rounded-full"></span>
@@ -297,7 +297,7 @@ export default function VisitorLayout({
       </div>
 
       <div className="sm:text-right w-full sm:w-auto pt-4 sm:pt-0 border-t sm:border-t-0 border-border flex sm:flex-col items-center sm:items-end justify-between gap-3 shrink-0">
-        <span className="font-serif font-semibold text-primary text-2xl text-gold-glow">
+        <span className="font-semibold text-primary text-2xl text-gold-glow">
           {formatBRL(s.preco)}
         </span>
         <a 
@@ -308,7 +308,7 @@ export default function VisitorLayout({
               (window as any).selectBarberService(s);
             }
           }}
-          className="text-xs uppercase tracking-widest font-bold text-primary hover:bg-primary hover:text-black flex items-center gap-1 bg-primary/5 px-4 py-2.5 rounded-md border border-primary/30 transition-all duration-300 font-mono shadow-md hover:shadow-primary/10 hover:scale-105 active:scale-95"
+          className="text-xs uppercase tracking-widest font-bold text-primary hover:bg-primary hover:text-black flex items-center gap-1 bg-primary/5 px-4 py-2.5 rounded-md border border-primary/30 transition-all duration-300 shadow-md hover:shadow-primary/10 hover:scale-105 active:scale-95"
         >
           Reservar corte
         </a>
@@ -323,13 +323,13 @@ export default function VisitorLayout({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3.5 min-w-0">
             <div className="w-10 h-10 bg-gradient-to-br from-primary to-primary/80 rounded-md rotate-45 flex items-center justify-center text-primary-foreground shadow-lg shadow-primary/15 shrink-0 hover:rotate-[225deg] transition-all duration-700">
-              <span className="-rotate-45 font-serif text-primary-foreground font-bold text-xl flex items-center justify-center">
+              <span className="-rotate-45 text-primary-foreground font-bold text-xl flex items-center justify-center">
                 <Scissors className="w-4.5 h-4.5 text-primary-foreground" />
               </span>
             </div>
             <div className="min-w-0">
-              <span className="font-serif font-semibold text-base xs:text-lg sm:text-xl lg:text-2xl tracking-wider sm:tracking-widest uppercase block text-foreground text-gold-glow">Detalhe Barbearia</span>
-              <span className="text-xs xs:text-xs text-primary uppercase tracking-[0.2em] sm:tracking-[0.28em] block font-mono">Style & Tradition</span>
+              <span className="font-semibold text-base xs:text-lg sm:text-xl lg:text-2xl tracking-wider sm:tracking-widest uppercase block text-foreground text-gold-glow">Detalhe Barbearia</span>
+              <span className="text-xs xs:text-xs text-primary uppercase tracking-[0.2em] sm:tracking-[0.28em] block">Style & Tradition</span>
             </div>
           </div>
           
@@ -430,8 +430,8 @@ export default function VisitorLayout({
                               )}
                             </div>
                             <div className="text-left">
-                              <h4 className="font-serif font-bold text-sm text-foreground">{loggedClient.nome}</h4>
-                              <p className="text-xs text-muted-foreground font-mono">{loggedClient.email}</p>
+                              <h4 className="font-bold text-sm text-foreground">{loggedClient.nome}</h4>
+                              <p className="text-xs text-muted-foreground">{loggedClient.email}</p>
                             </div>
                           </div>
 
@@ -454,7 +454,7 @@ export default function VisitorLayout({
                                 onClientLogout();
                                 setShowProfilePop(false);
                               }}
-                              className="w-full bg-background border border-border hover:border-red-200 dark:border-red-900/30 hover:bg-red-100 dark:bg-red-950/10 text-muted-foreground hover:text-red-600 dark:text-red-400 font-mono text-xs uppercase tracking-widest font-bold py-2 rounded-sm flex items-center justify-center gap-1.5 transition cursor-pointer"
+                              className="w-full bg-background border border-border hover:border-red-200 dark:border-red-900/30 hover:bg-red-100 dark:bg-red-950/10 text-muted-foreground hover:text-red-600 dark:text-red-400 text-xs uppercase tracking-widest font-bold py-2 rounded-sm flex items-center justify-center gap-1.5 transition cursor-pointer"
                             >
                               <LogOut className="w-3.5 h-3.5" /> Sair da conta
                             </button>
@@ -466,7 +466,7 @@ export default function VisitorLayout({
                             <User className="w-5 h-5 text-primary" />
                           </div>
                           <div className="space-y-1">
-                            <h4 className="font-serif text-sm font-semibold text-foreground">Área do Cliente</h4>
+                            <h4 className="text-sm font-semibold text-foreground">Área do Cliente</h4>
                             <p className="text-xs text-muted-foreground leading-relaxed max-w-[210px] mx-auto">
                               Conecte sua conta do Google de forma descomplicada para agendar sessões e manter seus contatos atualizados.
                             </p>
@@ -489,7 +489,7 @@ export default function VisitorLayout({
                                 setIsGoogleLoading(false);
                               }
                             }}
-                            className="w-full py-2.5 bg-background hover:bg-accent border border-border hover:border-primary/40 text-muted-foreground disabled:opacity-50 text-xs font-bold uppercase tracking-widest rounded-sm transition duration-150 cursor-pointer flex items-center justify-center font-mono gap-1.5 shadow-md"
+                            className="w-full py-2.5 bg-background hover:bg-accent border border-border hover:border-primary/40 text-muted-foreground disabled:opacity-50 text-xs font-bold uppercase tracking-widest rounded-sm transition duration-150 cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
                           >
                             {isGoogleLoading ? (
                               <>
@@ -529,19 +529,19 @@ export default function VisitorLayout({
               <Flame className="w-3.5 h-3.5 text-primary" /> Estilo Premium, Navalha & Tradição
             </div>
             
-            <h1 className="font-serif font-normal text-4xl sm:text-5xl lg:text-6.5xl tracking-wide leading-[1.1] text-white italic">
+            <h1 className="font-normal text-4xl sm:text-5xl lg:text-6.5xl tracking-wide leading-[1.1] text-white">
               Corte Perfeito <br />
-              <span className="text-primary not-italic text-gold-glow">Sem Cadastro</span> e Sem Burocracia
+              <span className="text-primary not-text-gold-glow">Sem Cadastro</span> e Sem Burocracia
             </h1>
             
-            <p className="text-muted-foreground text-sm sm:text-base leading-relaxed max-w-lg italic font-sans font-light">
-              Bem-vindo à <strong className="text-foreground not-italic font-bold">Detalhe Barbearia</strong>. Conforto de alto nível, massagem capilar, toalha quente aromática e café premium inclusos. Seu horário assegurado em menos de 1 minuto!
+            <p className="text-muted-foreground text-sm sm:text-base leading-relaxed max-w-lg font-sans font-light">
+              Bem-vindo à <strong className="text-foreground not-font-bold">Detalhe Barbearia</strong>. Conforto de alto nível, massagem capilar, toalha quente aromática e café premium inclusos. Seu horário assegurado em menos de 1 minuto!
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 pt-4">
               <a 
                 href="#agendar-sessao"
-                className="bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-black text-xs uppercase tracking-[0.2em] font-black px-7 py-4.5 rounded-md text-center shadow-lg shadow-primary/10 hover:shadow-primary/20 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center gap-2.5 cursor-pointer font-mono"
+                className="bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-black text-xs uppercase tracking-[0.2em] font-black px-7 py-4.5 rounded-md text-center shadow-lg shadow-primary/10 hover:shadow-primary/20 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center gap-2.5 cursor-pointer"
               >
                 Escolher Horário Imperial <ArrowDown className="w-4 h-4 text-black animate-bounce" />
               </a>
@@ -556,16 +556,16 @@ export default function VisitorLayout({
             {/* Quick value badges */}
             <div className="grid grid-cols-3 gap-4 pt-6 border-t border-border/60 max-w-md text-xs">
               <div className="space-y-1">
-                <span className="text-primary font-serif font-bold text-lg text-gold-glow">Carlos S.</span>
-                <p className="text-muted-foreground text-[8.5px] uppercase tracking-widest font-mono">Barbeiro Único</p>
+                <span className="text-primary font-bold text-lg text-gold-glow">Carlos S.</span>
+                <p className="text-muted-foreground text-[8.5px] uppercase tracking-widest">Barbeiro Único</p>
               </div>
               <div className="space-y-1">
-                <span className="text-primary font-serif font-bold text-lg text-gold-glow">Toalha Quente</span>
-                <p className="text-muted-foreground text-[8.5px] uppercase tracking-widest font-mono">Grátis no Corte</p>
+                <span className="text-primary font-bold text-lg text-gold-glow">Toalha Quente</span>
+                <p className="text-muted-foreground text-[8.5px] uppercase tracking-widest">Grátis no Corte</p>
               </div>
               <div className="space-y-1">
-                <span className="text-primary font-serif font-bold text-lg text-gold-glow">Sem Senha</span>
-                <p className="text-muted-foreground text-[8.5px] uppercase tracking-widest font-mono">Agende sem login</p>
+                <span className="text-primary font-bold text-lg text-gold-glow">Sem Senha</span>
+                <p className="text-muted-foreground text-[8.5px] uppercase tracking-widest">Agende sem login</p>
               </div>
             </div>
           </div>
@@ -581,12 +581,12 @@ export default function VisitorLayout({
                   className="w-16 h-16 rounded-md border border-primary/40 object-cover shrink-0 shadow-md shadow-primary/5"
                 />
                 <div>
-                  <h3 className="font-serif font-bold text-lg text-white">Emerson Santiago</h3>
-                  <p className="text-primary text-xs font-serif italic">Dono & Master Barber</p>
-                  <p className="text-xs text-muted-foreground font-mono mt-0.5">12 anos de experiência</p>
+                  <h3 className="font-bold text-lg text-white">Emerson Santiago</h3>
+                  <p className="text-primary text-xs">Dono & Master Barber</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">12 anos de experiência</p>
                 </div>
               </div>
-              <p className="text-muted-foreground text-xs italic leading-relaxed font-light">
+              <p className="text-muted-foreground text-xs leading-relaxed font-light">
                 "Aqui, cada cliente recebe um atendimento focado e de alta precisão. Não divido minha atenção e cuido de cada detalhe com navalha afiada e produtos de primeira linha."
               </p>
             </div>
@@ -600,7 +600,7 @@ export default function VisitorLayout({
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_80%_20%,rgba(197,160,89,0.04),transparent_50%)]" />
         <div className="max-w-7xl mx-auto px-2.5 xs:px-4 sm:px-6 lg:px-8 relative z-10 space-y-6">
           <div className="text-center max-w-2xl mx-auto space-y-3 mb-8">
-            <h2 className="font-serif font-normal text-3xl sm:text-4xl text-white tracking-tight italic">
+            <h2 className="font-normal text-3xl sm:text-4xl text-white tracking-tight">
               Agendar Horário Online
             </h2>
             <p className="text-blue-200/70 text-xs font-sans max-w-lg mx-auto leading-relaxed">
@@ -634,7 +634,7 @@ export default function VisitorLayout({
             <section id="servicos" className="space-y-12">
               <div className="flex items-center justify-between border-b border-border pb-4">
                 <div>
-                  <h2 className="font-serif font-normal text-3xl text-foreground tracking-tight italic">Cortes & Cuidados</h2>
+                  <h2 className="font-normal text-3xl text-foreground tracking-tight">Cortes & Cuidados</h2>
                   <p className="text-muted-foreground text-xs mt-1">Serviços executados com toalha de vapor quente e lavagem final inclusas</p>
                 </div>
                 <span className="text-xs font-bold tracking-widest uppercase bg-muted text-primary border border-border px-3.5 py-1.5 rounded-sm">
@@ -647,7 +647,7 @@ export default function VisitorLayout({
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 border-b border-border pb-2">
                     <Scissors className="w-4 h-4 text-primary" />
-                    <h3 className="font-serif font-semibold text-lg text-foreground italic tracking-wide">Cortes</h3>
+                    <h3 className="font-semibold text-lg text-foreground tracking-wide">Cortes</h3>
                   </div>
                   <div className="space-y-4">
                     {cortes.map((s) => renderServiceRow(s))}
@@ -660,7 +660,7 @@ export default function VisitorLayout({
                 <div className="space-y-4 pt-4">
                   <div className="flex items-center gap-2 border-b border-border pb-2">
                     <Sparkles className="w-4 h-4 text-primary" />
-                    <h3 className="font-serif font-semibold text-lg text-foreground italic tracking-wide">Cuidados</h3>
+                    <h3 className="font-semibold text-lg text-foreground tracking-wide">Cuidados</h3>
                   </div>
                   <div className="space-y-4">
                     {cuidados.map((s) => renderServiceRow(s))}
@@ -673,7 +673,7 @@ export default function VisitorLayout({
                 <div className="space-y-4 pt-4">
                   <div className="flex items-center gap-2 border-b border-border pb-2">
                     <Clock3 className="w-4 h-4 text-primary" />
-                    <h3 className="font-serif font-semibold text-lg text-foreground italic tracking-wide">Outros Serviços</h3>
+                    <h3 className="font-semibold text-lg text-foreground tracking-wide">Outros Serviços</h3>
                   </div>
                   <div className="space-y-4">
                     {outrosServicos.map((s) => renderServiceRow(s))}
@@ -684,26 +684,26 @@ export default function VisitorLayout({
 
             {/* Expediente Imperial Block below Cortes & Cuidados */}
             <section className="glass-panel-premium text-muted-foreground rounded-lg p-6 shadow-xl space-y-4">
-              <h3 className="font-serif font-normal text-lg flex items-center gap-2 text-primary border-b border-border/40 pb-3 italic">
+              <h3 className="font-normal text-lg flex items-center gap-2 text-primary border-b border-border/40 pb-3">
                 <Clock3 className="w-5 h-5 text-primary" /> Expediente Imperial
               </h3>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs text-muted-foreground">
                 <div className="p-3 bg-background/40 border border-border/60 rounded-md space-y-1">
                   <span className="font-semibold text-muted-foreground uppercase tracking-widest text-xs block">Segunda a Sexta:</span>
-                  <span className="font-mono text-foreground text-xs">09:00h às 19:00h</span>
+                  <span className="text-foreground text-xs">09:00h às 19:00h</span>
                 </div>
                 <div className="p-3 bg-background/40 border border-border/60 rounded-md space-y-1">
                   <span className="font-semibold text-muted-foreground uppercase tracking-widest text-xs block">Intervalo Almoço:</span>
-                  <span className="font-mono text-foreground text-xs">12:00h às 13:30h</span>
+                  <span className="text-foreground text-xs">12:00h às 13:30h</span>
                 </div>
                 <div className="p-3 bg-background/40 border border-border/60 rounded-md space-y-1">
                   <span className="font-semibold text-muted-foreground uppercase tracking-widest text-xs block">Sábado:</span>
-                  <span className="font-mono text-foreground text-xs">08:00h às 18:00h</span>
+                  <span className="text-foreground text-xs">08:00h às 18:00h</span>
                 </div>
                 <div className="p-3 bg-background/40 border border-border/60 rounded-md space-y-1">
                   <span className="font-semibold text-muted-foreground uppercase tracking-widest text-xs block">Domingos e Feriados:</span>
-                  <span className="text-muted-foreground italic text-xs">Fechado</span>
+                  <span className="text-muted-foreground text-xs">Fechado</span>
                 </div>
               </div>
             </section>
@@ -712,7 +712,7 @@ export default function VisitorLayout({
             <section id="produtos" className="space-y-6">
               <div className="flex items-center justify-between border-b border-border pb-4">
                 <div>
-                  <h2 className="font-serif font-normal text-3xl text-foreground tracking-tight italic">Vitrine & Produtos</h2>
+                  <h2 className="font-normal text-3xl text-foreground tracking-tight">Vitrine & Produtos</h2>
                   <p className="text-muted-foreground text-xs mt-1">Nossos cosméticos e finalizadores de uso profissional à venda na cadeira</p>
                 </div>
                 <span className="text-xs font-bold tracking-widest uppercase bg-muted text-primary border border-border px-3.5 py-1.5 rounded-md flex items-center gap-1">
@@ -741,16 +741,16 @@ export default function VisitorLayout({
                       </div>
                       
                       <div className="space-y-1">
-                        <h3 className="font-serif font-bold text-foreground text-sm group-hover:text-primary transition-colors">{p.nome}</h3>
+                        <h3 className="font-bold text-foreground text-sm group-hover:text-primary transition-colors">{p.nome}</h3>
                         <p className="text-muted-foreground text-xs leading-relaxed line-clamp-2">{p.descricao}</p>
                       </div>
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
-                      <span className="font-serif font-semibold text-primary text-base text-gold-glow">
+                      <span className="font-semibold text-primary text-base text-gold-glow">
                         {formatBRL(p.preco)}
                       </span>
-                      <span className="text-xs text-muted-foreground font-mono">
+                      <span className="text-xs text-muted-foreground">
                         {p.estoque} restantes
                       </span>
                     </div>
@@ -770,7 +770,7 @@ export default function VisitorLayout({
               ✂
             </div>
             <div>
-              <p className="text-foreground text-sm font-serif tracking-wide">Detalhe Barbearia</p>
+              <p className="text-foreground text-sm tracking-wide">Detalhe Barbearia</p>
               <p className="text-xs text-muted-foreground">© 2026 Emerson Santiago. Todos os direitos reservados.</p>
             </div>
           </div>
@@ -809,8 +809,8 @@ export default function VisitorLayout({
                     <User className="w-6 h-6 text-muted-foreground" />
                   )}
                 </div>
-                <h3 className="font-serif font-normal text-lg text-foreground italic">Concluir seu Registro</h3>
-                <p className="text-xs font-mono text-muted-foreground uppercase tracking-widest leading-relaxed">
+                <h3 className="font-normal text-lg text-foreground">Concluir seu Registro</h3>
+                <p className="text-xs text-muted-foreground uppercase tracking-widest leading-relaxed">
                   Insira seus dados para salvar seu perfil
                 </p>
               </div>
@@ -818,7 +818,7 @@ export default function VisitorLayout({
               <form onSubmit={handleSaveNewRegistration} className="space-y-4">
                 <div className="space-y-3 text-xs">
                   <div className="space-y-1">
-                    <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground font-mono block">Nome Completo:</label>
+                    <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground block">Nome Completo:</label>
                     <input 
                       type="text" 
                       required
@@ -830,7 +830,7 @@ export default function VisitorLayout({
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground font-mono block">WhatsApp / Celular com DDD:</label>
+                    <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground block">WhatsApp / Celular com DDD:</label>
                     <input 
                       type="text" 
                       required
@@ -842,7 +842,7 @@ export default function VisitorLayout({
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground font-mono block">Foto de Perfil (Arraste ou Selecione):</label>
+                    <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground block">Foto de Perfil (Arraste ou Selecione):</label>
                     <div 
                       onDragOver={handleDragOver}
                       onDragLeave={handleDragLeave}
@@ -867,10 +867,10 @@ export default function VisitorLayout({
                         ) : (
                           <Camera className="w-6 h-6 text-muted-foreground mb-1" />
                         )}
-                        <span className="text-xs font-mono font-bold uppercase tracking-wider text-muted-foreground">
+                        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                           Arraste sua foto aqui ou Clique
                         </span>
-                        <span className="text-[7.5px] text-muted-foreground font-mono italic">
+                        <span className="text-[7.5px] text-muted-foreground">
                           JPG, PNG ou WEBP
                         </span>
                       </div>
@@ -886,7 +886,7 @@ export default function VisitorLayout({
                       onClientLogout();
                       setShowRegistrationModal(false);
                     }}
-                    className="flex-1 bg-card border border-border hover:border-red-200 dark:border-red-900 hover:bg-red-100 dark:bg-red-950/20 text-muted-foreground hover:text-red-600 dark:text-red-400 font-mono text-xs uppercase tracking-widest font-bold px-3 py-3 rounded-sm transition cursor-pointer text-center"
+                    className="flex-1 bg-card border border-border hover:border-red-200 dark:border-red-900 hover:bg-red-100 dark:bg-red-950/20 text-muted-foreground hover:text-red-600 dark:text-red-400 text-xs uppercase tracking-widest font-bold px-3 py-3 rounded-sm transition cursor-pointer text-center"
                   >
                     Sair
                   </button>
@@ -932,10 +932,10 @@ export default function VisitorLayout({
               </button>
 
               <div className="space-y-1 pb-1">
-                <h3 className="font-serif font-normal text-xl text-foreground italic flex items-center gap-2">
+                <h3 className="font-normal text-xl text-foreground flex items-center gap-2">
                   <Calendar className="w-5 h-5 text-primary" /> Meus Agendamentos
                 </h3>
-                <p className="text-xs font-mono text-muted-foreground uppercase tracking-widest leading-relaxed">
+                <p className="text-xs text-muted-foreground uppercase tracking-widest leading-relaxed">
                   Confira suas sessões agendadas na Detalhe Barbearia
                 </p>
               </div>
@@ -944,13 +944,13 @@ export default function VisitorLayout({
                 {loadingBookings ? (
                   <div className="text-center py-8 space-y-2">
                     <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-                    <span className="text-xs text-muted-foreground uppercase tracking-widest font-mono block">Buscando suas sessões...</span>
+                    <span className="text-xs text-muted-foreground uppercase tracking-widest block">Buscando suas sessões...</span>
                   </div>
                 ) : clientBookings.length === 0 ? (
                   <div className="text-center py-10 text-muted-foreground space-y-2">
                     <Clock className="w-8 h-8 mx-auto opacity-35 text-primary" />
-                    <p className="font-serif italic text-xs text-muted-foreground">Nenhum agendamento ativo.</p>
-                    <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground">Escolha um horário e garanta sua sessão!</p>
+                    <p className="text-xs text-muted-foreground">Nenhum agendamento ativo.</p>
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground">Escolha um horário e garanta sua sessão!</p>
                   </div>
                 ) : (
                   clientBookings.map((b) => {
@@ -971,15 +971,15 @@ export default function VisitorLayout({
                       >
                         <div className="flex justify-between items-start gap-2">
                           <div className="space-y-1">
-                            <span className="text-[8.5px] font-mono font-bold uppercase text-primary bg-primary/10 px-2 py-0.5 rounded-sm">
+                            <span className="text-[8.5px] font-bold uppercase text-primary bg-primary/10 px-2 py-0.5 rounded-sm">
                               Código: {b.id}
                             </span>
-                            <h5 className="font-serif font-bold text-sm text-foreground mt-1">
+                            <h5 className="font-bold text-sm text-foreground mt-1">
                               {servicesNames}
                             </h5>
                           </div>
                           
-                          <span className={`text-xs font-mono font-extrabold uppercase px-2 py-0.5 rounded-full tracking-wider ${
+                          <span className={`text-xs font-extrabold uppercase px-2 py-0.5 rounded-full tracking-wider ${
                             b.status === 'confirmado' ? 'bg-primary/20 text-primary border border-primary/35' :
                             b.status === 'agendado' ? 'bg-amber-100 dark:bg-amber-950/20 text-amber-500 border border-amber-200 dark:border-amber-900/40' :
                             b.status === 'concluido' ? 'bg-emerald-100 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/40' :
@@ -989,7 +989,7 @@ export default function VisitorLayout({
                           </span>
                         </div>
                         
-                        <div className="pt-2 text-xs text-muted-foreground border-t border-border/85 flex items-center justify-between font-mono">
+                        <div className="pt-2 text-xs text-muted-foreground border-t border-border/85 flex items-center justify-between">
                           <span className="flex items-center gap-1.5">
                             <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
                             Data: <span className="text-foreground">{formattedDate}</span>
@@ -1009,7 +1009,7 @@ export default function VisitorLayout({
                 <button
                   type="button"
                   onClick={() => setShowBookingsModal(false)}
-                  className="w-full bg-background hover:bg-card border border-border hover:border-primary/40 text-muted-foreground font-mono text-xs uppercase tracking-widest font-bold py-3 rounded-sm flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  className="w-full bg-background hover:bg-card border border-border hover:border-primary/40 text-muted-foreground text-xs uppercase tracking-widest font-bold py-3 rounded-sm flex items-center justify-center gap-1.5 transition cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" /> Fechar Janela
                 </button>

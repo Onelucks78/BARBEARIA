@@ -111,6 +111,16 @@ export interface LancamentoFinanceiro {
   updated_at: string;
 }
 
+// Assinatura recorrente do cliente, empacotada como JSON dentro de Cliente.observacoes
+export interface ClienteSubscription {
+  plan: string;
+  status: string;
+  price: number;
+  renews_at: string; // ISO date
+  card_last4?: string;
+  card_brand?: string;
+}
+
 export interface CategoriaFinanceira {
   id: string;
   nome: string;

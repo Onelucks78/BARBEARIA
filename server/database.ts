@@ -1,13 +1,13 @@
 import fs from 'fs';
 import path from 'path';
-import { 
-  Barbeiro, 
-  Servico, 
-  Produto, 
-  Cliente, 
-  Agendamento, 
-  Expediente, 
-  Bloqueio, 
+import {
+  Barbeiro,
+  Servico,
+  Produto,
+  Cliente,
+  Agendamento,
+  Expediente,
+  Bloqueio,
   LancamentoFinanceiro,
   CategoriaFinanceira
 } from '../src/types.ts';

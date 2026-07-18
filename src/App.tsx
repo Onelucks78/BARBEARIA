@@ -133,8 +133,8 @@ export default function App() {
           <Scissors className="w-6 h-6" />
         </div>
         <div className="text-center space-y-1">
-          <h2 className="font-display font-black text-xl tracking-tight uppercase text-white">Detalhe Barbearia</h2>
-          <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Carregando poltronas e navalhas...</p>
+          <h2 className="font-black text-xl tracking-tight uppercase text-white">Detalhe Barbearia</h2>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider">Carregando poltronas e navalhas...</p>
         </div>
       </div>
     );

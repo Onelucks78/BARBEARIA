@@ -10,7 +10,8 @@ import {
   Sparkles, 
   LogOut,
   Menu,
-  Plus
+  Plus,
+  Repeat
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle.tsx';
 
@@ -35,26 +36,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
   planStats
 }) => {
   return (
-    <aside className="hidden lg:flex lg:w-64 bg-sidebar lg:border-r border-sidebar-border flex-col justify-between shrink-0 select-none h-full overflow-y-auto">
+    <aside className="hidden lg:flex lg:w-56 xl:w-64 bg-sidebar lg:border-r border-sidebar-border flex-col justify-between shrink-0 select-none h-full overflow-y-auto">
       {/* Top Branding & Nav */}
-      <div className="p-6 space-y-6">
+      <div className="p-4 xl:p-6 space-y-6">
         {/* Logo / Branding */}
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-sm bg-primary rotate-45 flex items-center justify-center font-bold text-xs text-primary-foreground">
             <span className="-rotate-45">AI</span>
           </div>
           <div>
-            <span className="font-serif font-normal text-sm tracking-widest uppercase block text-primary">Escritório</span>
-            <span className="text-[9px] text-primary/70 font-mono uppercase block -mt-0.5">do Barbeiro</span>
+            <span className="font-normal text-sm tracking-widest uppercase block text-primary">Escritório</span>
+            <span className="text-[9px] text-primary/70 uppercase block -mt-0.5">do Barbeiro</span>
           </div>
         </div>
 
         <nav className="space-y-1.5 pt-2">
-          <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-[0.2em] px-3 mb-2 block font-mono">Menu do Negócio</div>
+          <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-[0.2em] px-3 mb-2 block">Menu do Negócio</div>
 
           <button
             onClick={() => setActiveTab('dashboard')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider font-mono cursor-pointer ${
+            className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${
               activeTab === 'dashboard'
                 ? 'bg-primary text-primary-foreground shadow-lg font-bold'
                 : 'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground'
@@ -65,7 +66,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <button
             onClick={() => setActiveTab('agenda')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider font-mono cursor-pointer ${
+            className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${
               activeTab === 'agenda'
                 ? 'bg-primary text-primary-foreground shadow-lg font-bold'
                 : 'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground'
@@ -76,7 +77,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <button
             onClick={() => setActiveTab('servicos')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider font-mono cursor-pointer ${
+            className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${
               activeTab === 'servicos'
                 ? 'bg-primary text-primary-foreground shadow-lg font-bold'
                 : 'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground'
@@ -87,7 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <button
             onClick={() => setActiveTab('produtos')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider font-mono cursor-pointer ${
+            className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${
               activeTab === 'produtos'
                 ? 'bg-primary text-primary-foreground shadow-lg font-bold'
                 : 'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground'
@@ -97,8 +98,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveTab('planos')}
+            className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${
+              activeTab === 'planos'
+                ? 'bg-primary text-primary-foreground shadow-lg font-bold'
+                : 'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground'
+            }`}
+          >
+            <Repeat className="w-4 h-4" /> Configurar Planos
+          </button>
+
+          <button
             onClick={() => setActiveTab('clientes')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider font-mono cursor-pointer ${
+            className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${
               activeTab === 'clientes'
                 ? 'bg-primary text-primary-foreground shadow-lg font-bold'
                 : 'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground'
@@ -109,7 +121,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <button
             onClick={() => setActiveTab('financeiro')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider font-mono cursor-pointer ${
+            className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${
               activeTab === 'financeiro'
                 ? 'bg-primary text-primary-foreground shadow-lg font-bold'
                 : 'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground'
@@ -119,10 +131,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
 
           <div className="border-t border-sidebar-border my-4 pt-4">
-            <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-[0.2em] px-3 mb-2 block font-mono">Administração Geral</div>
+            <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-[0.2em] px-3 mb-2 block">Administração Geral</div>
             <button
               onClick={() => setActiveTab('configuracoes')}
-              className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider font-mono cursor-pointer ${
+              className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${
                 activeTab === 'configuracoes'
                   ? 'bg-primary text-primary-foreground shadow-lg font-bold'
                   : 'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground'
@@ -135,17 +147,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Bottom Sidebar Action */}
-      <div className="p-6 border-t border-sidebar-border flex flex-col gap-3">
+      <div className="p-4 xl:p-6 border-t border-sidebar-border flex flex-col gap-3">
         {/* Plan Info Widget */}
         <div
           onClick={() => setIsPlanModalOpen(true)}
           className="p-3 bg-card border border-sidebar-border/60 hover:border-primary/40 rounded-sm transition-all duration-200 cursor-pointer group"
         >
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[9px] uppercase tracking-wider font-mono font-bold text-primary flex items-center gap-1">
+            <span className="text-[9px] uppercase tracking-wider font-bold text-primary flex items-center gap-1">
               <Sparkles className="w-3 h-3 animate-pulse text-primary" /> Plano 30 Dias
             </span>
-            <span className="text-[9px] font-mono font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
+            <span className="text-[9px] font-semibold text-muted-foreground group-hover:text-foreground transition-colors">
               {planStats.elapsedDays}/{planStats.totalDays} dias
             </span>
           </div>
@@ -158,7 +170,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             />
           </div>
 
-          <div className="flex justify-between items-center text-[9px] font-mono text-muted-foreground">
+          <div className="flex justify-between items-center text-[9px] text-muted-foreground">
             <span>Uso: {planStats.percent}%</span>
             <span>Até: {planStats.cycleEnd.substring(0, 5)}</span>
           </div>
@@ -166,7 +178,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         <button
           onClick={onLogout}
-          className="w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold hover:text-primary text-muted-foreground hover:bg-sidebar-accent/60 transition duration-150 flex items-center gap-2.5 font-mono uppercase tracking-wider cursor-pointer font-bold"
+          className="w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold hover:text-primary text-muted-foreground hover:bg-sidebar-accent/60 transition duration-150 flex items-center gap-2.5 uppercase tracking-wider cursor-pointer font-bold"
         >
           <LogOut className="w-4 h-4 text-muted-foreground" /> Sair do Painel
         </button>
@@ -199,7 +211,7 @@ export const Header: React.FC<HeaderProps> = ({
           <Menu className="w-5 h-5" />
         </button>
 
-        <h1 className="text-xs uppercase font-mono tracking-wider text-muted-foreground flex items-center gap-1.5 lg:gap-2">
+        <h1 className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 lg:gap-2">
           <span className="hidden sm:inline">Admin</span>
           <span className="hidden sm:inline">/</span>
           <span className="text-primary font-bold">
@@ -207,6 +219,7 @@ export const Header: React.FC<HeaderProps> = ({
             {activeTab === 'agenda' && 'Agenda & Status'}
             {activeTab === 'servicos' && 'Serviços CRUD'}
             {activeTab === 'produtos' && 'Produtos CRUD'}
+            {activeTab === 'planos' && 'Configurar Planos'}
             {activeTab === 'clientes' && 'Fichas de Clientes'}
             {activeTab === 'financeiro' && 'Fluxo de Caixa'}
             {activeTab === 'configuracoes' && 'Configurações de Escala'}

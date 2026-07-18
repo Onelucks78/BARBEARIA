@@ -521,11 +521,11 @@ export default function BookingWizard({
         {/* Header Info */}
         <div className="p-4 sm:p-6 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-4 shrink-0">
           <div className="text-left">
-            <h3 className="font-serif text-base sm:text-lg font-normal tracking-wide text-slate-900 italic">Agendar Horário Online</h3>
+            <h3 className="text-base sm:text-lg font-normal tracking-wide text-slate-900">Agendar Horário Online</h3>
             <p className="text-slate-500 text-xs sm:text-xs mt-0.5 sm:mt-1 leading-tight text-left">Escolha seus serviços, marque o melhor dia e defina o horário</p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <div className="hidden xs:flex items-center gap-1.5 bg-primary/10 text-primary px-3 py-1.5 rounded-full border border-primary/25 text-xs sm:text-xs font-mono uppercase tracking-wider shrink-0 font-bold">
+            <div className="hidden xs:flex items-center gap-1.5 bg-primary/10 text-primary px-3 py-1.5 rounded-full border border-primary/25 text-xs sm:text-xs uppercase tracking-wider shrink-0 font-bold">
               <span className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse"></span>
               {step === 5 ? 'Concluído' : `Etapa ${step} de 4`}
             </div>
@@ -575,7 +575,7 @@ export default function BookingWizard({
             >
               <div>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-slate-200 pb-3 mb-4">
-                  <p className="text-xs text-slate-500 font-serif italic text-left">Selecione seu corte</p>
+                  <p className="text-xs text-slate-500 text-left">Selecione seu corte</p>
                 </div>
                 
                 {/* Scrollable Container with Subtle Styled Native Scrollbar */}
@@ -596,11 +596,11 @@ export default function BookingWizard({
                         >
                           <div className="w-full">
                             <div className="flex items-start justify-between gap-2">
-                              <h4 className="font-serif font-semibold text-slate-900 text-sm flex items-center gap-2 group-hover/card:text-primary transition-colors">
+                              <h4 className="font-semibold text-slate-900 text-sm flex items-center gap-2 group-hover/card:text-primary transition-colors">
                                 <Scissors className="w-3.5 h-3.5 text-primary shrink-0" />
                                 {s.nome}
                               </h4>
-                              <span className="text-xs font-bold font-mono text-primary text-gold-glow">
+                              <span className="text-xs font-bold text-primary text-gold-glow">
                                 {getServicePrice(s) === 0 ? (
                                   <span className="text-xs uppercase bg-primary/10 text-primary border border-primary/30 px-2 py-0.5 rounded-sm font-bold tracking-wider animate-pulse">Grátis (VIP)</span>
                                 ) : (
@@ -613,14 +613,14 @@ export default function BookingWizard({
                             </p>
                           </div>
                           
-                          <div className="mt-3 pt-3 border-t border-slate-200 flex items-center justify-between text-xs uppercase font-mono tracking-wider text-slate-500 w-full">
+                          <div className="mt-3 pt-3 border-t border-slate-200 flex items-center justify-between text-xs uppercase tracking-wider text-slate-500 w-full">
                             <span className="flex items-center gap-1.5">
                               <Clock className="w-3.5 h-3.5 text-slate-400" />
                               {s.duracao_minutos} minutos
                             </span>
                             <div className="flex items-center gap-1.5">
                               {isSelected ? (
-                                <span className="bg-primary text-black rounded-md px-2 py-0.5 text-xs font-black flex items-center gap-0.5">
+                                <span className="bg-primary text-primary-foreground rounded-md px-2 py-0.5 text-xs font-black flex items-center gap-0.5">
                                   ✓ Selecionado
                                 </span>
                               ) : (
@@ -640,7 +640,7 @@ export default function BookingWizard({
               {/* Desktop-only Total Summary Footer inside selection step */}
               <div className="hidden md:block space-y-4 mt-6">
                 {selectedServices.length > 0 && (
-                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-md flex items-center justify-between text-xs font-mono text-slate-700">
+                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-md flex items-center justify-between text-xs text-slate-700">
                     <span className="text-slate-500 text-xs uppercase">Pacote Selecionado:</span>
                     <div className="flex items-center gap-3">
                       <span className="text-slate-500">{totalDuracao} min</span>
@@ -672,7 +672,7 @@ export default function BookingWizard({
               className="space-y-4"
             >
               <div>
-                <p className="text-xs text-slate-500 mb-3 font-serif italic text-left">Escolha seu dia</p>
+                <p className="text-xs text-slate-500 mb-3 text-left">Escolha seu dia</p>
                 {/* Dynamically expand to full-width of the wizard card with negative margin */}
                 <div className="bg-slate-50/80 border-y border-slate-200 -mx-3 xs:-mx-5 sm:-mx-6 px-3 xs:px-5 sm:px-6 py-4 md:py-6 space-y-4 shadow-inner w-auto">
                   {/* Calendar Month Selector Header */}
@@ -680,18 +680,18 @@ export default function BookingWizard({
                     <button
                       type="button"
                       onClick={handlePrevMonth}
-                      className="p-2 rounded-md hover:bg-accent border border-slate-200 hover:border-slate-200 hover:text-primary transition-all text-slate-500 cursor-pointer text-xs font-bold font-mono"
+                      className="p-2 rounded-md hover:bg-accent border border-slate-200 hover:border-slate-200 hover:text-primary transition-all text-slate-500 cursor-pointer text-xs font-bold"
                       title="Mês Anterior"
                     >
                       &larr;
                     </button>
-                    <span className="font-serif text-sm text-primary font-semibold tracking-wide text-gold-glow">
+                    <span className="text-sm text-primary font-semibold tracking-wide text-gold-glow">
                       {MONTHS_PT[currentCalendarMonth]} {currentCalendarYear}
                     </span>
                     <button
                       type="button"
                       onClick={handleNextMonth}
-                      className="p-2 rounded-md hover:bg-accent border border-slate-200 hover:border-slate-200 hover:text-primary transition-all text-slate-500 cursor-pointer text-xs font-bold font-mono"
+                      className="p-2 rounded-md hover:bg-accent border border-slate-200 hover:border-slate-200 hover:text-primary transition-all text-slate-500 cursor-pointer text-xs font-bold"
                       title="Próximo Mês"
                     >
                       &rarr;
@@ -754,8 +754,8 @@ export default function BookingWizard({
               <div className="hidden md:block space-y-4 mt-6">
                 {selectedServices.length > 0 && (
                   <div className="bg-slate-50 p-3.5 rounded-md border border-slate-200 text-xs flex flex-wrap items-center justify-between gap-1 text-slate-700 leading-normal">
-                    <span className="text-slate-500 font-mono text-xs uppercase">Serviços Escolhidos:</span>
-                    <span className="font-semibold text-slate-900 font-serif text-right ml-auto">
+                    <span className="text-slate-500 text-xs uppercase">Serviços Escolhidos:</span>
+                    <span className="font-semibold text-slate-900 text-right ml-auto">
                       {selectedServices.map(s => s.nome).join(' + ')} ({totalDuracao}min)
                     </span>
                   </div>
@@ -765,7 +765,7 @@ export default function BookingWizard({
                   <button
                     type="button"
                     onClick={handleBackStep}
-                    className="flex-1 md:flex-none border border-slate-200 text-slate-500 hover:bg-accent hover:text-slate-900 text-xs uppercase tracking-wider font-bold py-3.5 md:px-6 rounded-md flex items-center justify-center gap-1.5 transition cursor-pointer font-mono"
+                    className="flex-1 md:flex-none border border-slate-200 text-slate-500 hover:bg-accent hover:text-slate-900 text-xs uppercase tracking-wider font-bold py-3.5 md:px-6 rounded-md flex items-center justify-center gap-1.5 transition cursor-pointer"
                   >
                     <ArrowLeft className="w-3.5 h-3.5" /> Voltar
                   </button>
@@ -792,20 +792,20 @@ export default function BookingWizard({
               className="space-y-4"
             >
               <div>
-                <p className="text-xs text-slate-500 mb-3 font-serif italic text-left">Selecione o seu horário</p>
+                <p className="text-xs text-slate-500 mb-3 text-left">Selecione o seu horário</p>
 
                 {loadingSlots ? (
                   <div className="py-12 text-center space-y-3 bg-slate-50 rounded-sm border border-slate-200">
                     <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
-                    <p className="text-xs text-slate-500 font-mono uppercase tracking-wider">Buscando horários livres com o barbeiro...</p>
+                    <p className="text-xs text-slate-500 uppercase tracking-wider">Buscando horários livres com o barbeiro...</p>
                   </div>
                 ) : availableSlots.length === 0 ? (
                   <div className="py-8 bg-slate-100 border border-border/80 p-5 rounded-sm text-center">
-                    <p className="text-xs text-primary font-serif leading-relaxed">
+                    <p className="text-xs text-primary leading-relaxed">
                       Lamentamos, mas não há horários de expediente livres para esta data. <br />
                       Isso pode ocorrer devido ao domingo de folga, bloqueios (férias, cursos) ou agenda cheia desse dia.
                     </p>
-                    <p className="text-xs text-slate-500 font-mono uppercase tracking-wider mt-3">Dica: Tente escolher outro dia ou fale conosco.</p>
+                    <p className="text-xs text-slate-500 uppercase tracking-wider mt-3">Dica: Tente escolher outro dia ou fale conosco.</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -837,7 +837,7 @@ export default function BookingWizard({
                           >
                             <span className="font-semibold">{slotObj.horario}</span>
                             {!isFree && (
-                              <span className="text-xs tracking-tight uppercase font-sans mt-0.5 opacity-80 block truncate text-muted-foreground font-mono">
+                              <span className="text-xs tracking-tight uppercase font-sans mt-0.5 opacity-80 block truncate text-muted-foreground">
                                 {slotObj.motivo === 'ocupado' ? 'Reservado' : slotObj.motivo === 'intervalo' ? 'Intervalo' : 'Bloqueado'}
                               </span>
                             )}
@@ -856,11 +856,11 @@ export default function BookingWizard({
                 {selectedServices.length > 0 && selectedDate && (
                   <div className="bg-slate-50 p-3.5 rounded-sm border border-slate-200 text-xs space-y-1.5">
                     <div className="flex justify-between md:items-center flex-col md:flex-row gap-1">
-                      <span className="text-slate-500 font-mono text-xs uppercase">Serviços Selecionados:</span>
+                      <span className="text-slate-500 text-xs uppercase">Serviços Selecionados:</span>
                       <span className="font-semibold text-slate-900">{selectedServices.map(s => s.nome).join(' + ')}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-slate-500 font-mono text-xs uppercase">Data selecionada:</span>
+                      <span className="text-slate-500 text-xs uppercase">Data selecionada:</span>
                       <span className="font-semibold text-slate-900 capitalize">{getWeekDayName(selectedDate)} ({selectedDate.split('-').reverse().join('/')})</span>
                     </div>
                   </div>
@@ -870,7 +870,7 @@ export default function BookingWizard({
                   <button
                     type="button"
                     onClick={handleBackStep}
-                    className="flex-1 md:flex-none border border-border text-slate-500 hover:bg-accent hover:text-slate-900 text-xs uppercase tracking-wider font-bold py-3 md:px-5 rounded-sm flex items-center justify-center gap-1.5 transition cursor-pointer font-mono"
+                    className="flex-1 md:flex-none border border-border text-slate-500 hover:bg-accent hover:text-slate-900 text-xs uppercase tracking-wider font-bold py-3 md:px-5 rounded-sm flex items-center justify-center gap-1.5 transition cursor-pointer"
                   >
                     <ArrowLeft className="w-3.5 h-3.5" /> Voltar
                   </button>
@@ -897,7 +897,7 @@ export default function BookingWizard({
             >
               <form id="booking-wizard-form" onSubmit={handleBookNow} className="space-y-4">
                 <div>
-                  <p className="text-xs text-slate-500 mb-3 font-serif italic text-left">Preencha seus dados</p>
+                  <p className="text-xs text-slate-500 mb-3 text-left">Preencha seus dados</p>
                   
                   <div className="space-y-3.5">
                     <div className="relative">
@@ -938,10 +938,10 @@ export default function BookingWizard({
 
                 {/* Booking Summary Box */}
                 <div className="bg-slate-50 p-5 rounded-md border border-slate-200 text-xs space-y-3.5 shadow-md">
-                  <h5 className="font-mono font-bold text-primary text-xs tracking-widest uppercase">Resumo da Reserva:</h5>
+                  <h5 className="font-bold text-primary text-xs tracking-widest uppercase">Resumo da Reserva:</h5>
                   <div className="grid grid-cols-2 gap-y-2.5 text-slate-500">
                     <div>Serviços Selecionados:</div>
-                    <div className="font-semibold text-right text-slate-900 font-serif">{selectedServices.map(s => s.nome).join(' + ')}</div>
+                    <div className="font-semibold text-right text-slate-900">{selectedServices.map(s => s.nome).join(' + ')}</div>
                     
                     <div>Duração Total:</div>
                     <div className="font-semibold text-right text-slate-900">{totalDuracao} minutos</div>
@@ -950,10 +950,10 @@ export default function BookingWizard({
                     <div className="font-semibold text-right text-slate-900">{selectedDate.split('-').reverse().join('/')}</div>
 
                     <div>Horário:</div>
-                    <div className="font-semibold text-right font-mono text-primary text-sm">{selectedSlot}h</div>
+                    <div className="font-semibold text-right text-primary text-sm">{selectedSlot}h</div>
 
-                    <div className="pt-2.5 border-t border-slate-200 font-bold text-primary uppercase tracking-wider text-xs font-mono">Preço Total:</div>
-                    <div className="pt-2.5 border-t border-slate-200 text-right font-serif font-bold text-primary text-lg text-gold-glow">
+                    <div className="pt-2.5 border-t border-slate-200 font-bold text-primary uppercase tracking-wider text-xs">Preço Total:</div>
+                    <div className="pt-2.5 border-t border-slate-200 text-right font-bold text-primary text-lg text-gold-glow">
                       {formatBRL(totalPreco)}
                     </div>
                   </div>
@@ -965,14 +965,14 @@ export default function BookingWizard({
                       type="button"
                       onClick={handleBackStep}
                       disabled={submitting}
-                      className="flex-1 md:flex-none border border-slate-200 text-slate-500 hover:bg-accent hover:text-slate-900 text-xs uppercase tracking-wider font-bold py-3.5 md:px-6 rounded-md flex items-center justify-center gap-1.5 transition cursor-pointer font-mono"
+                      className="flex-1 md:flex-none border border-slate-200 text-slate-500 hover:bg-accent hover:text-slate-900 text-xs uppercase tracking-wider font-bold py-3.5 md:px-6 rounded-md flex items-center justify-center gap-1.5 transition cursor-pointer"
                     >
                       <ArrowLeft className="w-3.5 h-3.5" /> Voltar
                     </button>
                     <button
                       type="submit"
                       disabled={submitting}
-                      className="flex-1 md:flex-none bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-black disabled:opacity-50 text-xs uppercase tracking-widest font-black py-3.5 md:px-6 rounded-md flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-primary/10 transition-all duration-300 hover:scale-105 active:scale-95 font-mono"
+                      className="flex-1 md:flex-none bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-black disabled:opacity-50 text-xs uppercase tracking-widest font-black py-3.5 md:px-6 rounded-md flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-primary/10 transition-all duration-300 hover:scale-105 active:scale-95"
                     >
                       {submitting ? (
                         <>Reservando...</>
@@ -1001,35 +1001,35 @@ export default function BookingWizard({
               </div>
               
               <div className="space-y-1.5">
-                <h4 className="font-serif text-xl font-normal italic text-slate-900 tracking-wide text-gold-glow">Agendamento Confirmado!</h4>
+                <h4 className="text-xl font-normal text-slate-900 tracking-wide text-gold-glow">Agendamento Confirmado!</h4>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto">
                   Perfeito, {nomeCliente}! Seu compromisso com o barbeiro foi agendado de forma definitiva no sistema.
                 </p>
               </div>
 
               <div className="bg-slate-50 border border-slate-200 p-5 rounded-lg max-w-sm mx-auto text-xs space-y-2.5 text-left shadow-md">
-                <div className="text-xs uppercase tracking-widest text-primary font-mono font-bold mb-1.5">Detalhes do Voucher:</div>
-                <div className="flex justify-between border-b border-slate-200/40 pb-1.5"><span className="text-slate-500 font-mono">Código:</span> <span className="font-mono font-bold text-primary">{successBooking.id}</span></div>
+                <div className="text-xs uppercase tracking-widest text-primary font-bold mb-1.5">Detalhes do Voucher:</div>
+                <div className="flex justify-between border-b border-slate-200/40 pb-1.5"><span className="text-slate-500">Código:</span> <span className="font-bold text-primary">{successBooking.id}</span></div>
                 <div className="flex justify-between border-b border-slate-200/40 pb-1.5"><span className="text-slate-500">Cliente:</span> <span className="font-semibold text-slate-900">{nomeCliente}</span></div>
                 <div className="flex justify-between border-b border-slate-200/40 pb-1.5"><span className="text-slate-500">Profissional:</span> <span className="font-semibold text-slate-900">Emerson Santiago</span></div>
                 <div className="flex justify-between border-b border-slate-200/40 pb-1.5"><span className="text-slate-500">Serviços:</span> <span className="font-semibold text-slate-900 text-right max-w-[170px] break-words">{selectedServices.map(s => s.nome).join(' + ')}</span></div>
                 <div className="flex justify-between border-b border-slate-200/40 pb-1.5"><span className="text-slate-500">Quando:</span> <span className="font-bold text-primary">{selectedDate.split('-').reverse().join('/')} às {selectedSlot}h</span></div>
                 <div className="flex justify-between pb-0.5"><span className="text-slate-500">Duração Total:</span> <span className="font-semibold text-slate-900">{totalDuracao} minutos</span></div>
-                <div className="flex justify-between border-t border-slate-200 pt-2 font-bold"><span className="text-slate-500 font-mono text-xs">Valor fixado total:</span> <span className="font-serif font-bold text-primary text-base text-gold-glow">{formatBRL(totalPreco)}</span></div>
+                <div className="flex justify-between border-t border-slate-200 pt-2 font-bold"><span className="text-slate-500 text-xs">Valor fixado total:</span> <span className="font-bold text-primary text-base text-gold-glow">{formatBRL(totalPreco)}</span></div>
               </div>
 
               <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
                 <button
                   type="button"
                   onClick={handlePrintPDF}
-                  className="w-full sm:w-auto bg-background hover:bg-background text-primary border border-slate-200 hover:border-slate-200 text-xs uppercase tracking-wider font-bold px-6 py-3.5 rounded-md transition duration-200 cursor-pointer flex items-center justify-center gap-2 font-mono shadow-md"
+                  className="w-full sm:w-auto bg-background hover:bg-background text-primary border border-slate-200 hover:border-slate-200 text-xs uppercase tracking-wider font-bold px-6 py-3.5 rounded-md transition duration-200 cursor-pointer flex items-center justify-center gap-2 shadow-md"
                 >
                   <Printer className="w-4 h-4 text-primary" /> Imprimir PDF
                 </button>
                 <button
                   type="button"
                   onClick={resetWizard}
-                  className="w-full sm:w-auto bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-black text-xs uppercase tracking-widest font-black px-6 py-3.5 rounded-md transition-all duration-300 cursor-pointer flex items-center justify-center gap-1.5 font-mono shadow-lg shadow-primary/10 hover:scale-105 active:scale-95"
+                  className="w-full sm:w-auto bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-black text-xs uppercase tracking-widest font-black px-6 py-3.5 rounded-md transition-all duration-300 cursor-pointer flex items-center justify-center gap-1.5 shadow-lg shadow-primary/10 hover:scale-105 active:scale-95"
                 >
                   Fazer outro agendamento
                 </button>
@@ -1045,10 +1045,10 @@ export default function BookingWizard({
             {/* The Luxury Selected Services Banner */}
             {selectedServices.length > 0 && step < 4 && (
               <div className="p-4 bg-slate-50 border border-slate-200 text-slate-800 rounded-md">
-                <span className="text-slate-500 font-mono text-xs uppercase tracking-wider block text-left">
+                <span className="text-slate-500 text-xs uppercase tracking-wider block text-left">
                   SERVIÇOS ESCOLHIDOS:
                 </span>
-                <p className="font-serif text-primary text-xs sm:text-sm font-semibold tracking-wide text-left mt-1.5 leading-relaxed text-gold-glow">
+                <p className="text-primary text-xs sm:text-sm font-semibold tracking-wide text-left mt-1.5 leading-relaxed text-gold-glow">
                   {selectedServices.map(s => s.nome).join(' + ')} 
                   <span className="text-slate-500 font-sans text-xs ml-1.5">({totalDuracao}min)</span>
                   {selectedDate && (
@@ -1057,7 +1057,7 @@ export default function BookingWizard({
                     </span>
                   )}
                   {selectedSlot && (
-                    <span className="text-slate-700 font-mono text-xs ml-1.5 border-l border-slate-200/40 pl-1.5">
+                    <span className="text-slate-700 text-xs ml-1.5 border-l border-slate-200/40 pl-1.5">
                       às {selectedSlot}h
                     </span>
                   )}
@@ -1072,7 +1072,7 @@ export default function BookingWizard({
                   type="button"
                   onClick={handleBackStep}
                   disabled={step === 4 && submitting}
-                  className="flex-1 border border-slate-200 text-slate-500 hover:bg-accent hover:text-white text-xs uppercase tracking-widest font-bold py-3.5 px-5 rounded-md flex items-center justify-center gap-1.5 transition cursor-pointer font-mono"
+                  className="flex-1 border border-slate-200 text-slate-500 hover:bg-accent hover:text-white text-xs uppercase tracking-widest font-bold py-3.5 px-5 rounded-md flex items-center justify-center gap-1.5 transition cursor-pointer"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" /> Voltar
                 </button>
@@ -1087,7 +1087,7 @@ export default function BookingWizard({
                   (step === 3 && !selectedSlot) ||
                   (step === 4 && submitting)
                 }
-                className="flex-1 bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-black disabled:opacity-40 disabled:cursor-not-allowed text-xs uppercase tracking-widest font-black py-3.5 px-5 rounded-md flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-primary/10 transition duration-350 font-mono active:scale-95"
+                className="flex-1 bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-black disabled:opacity-40 disabled:cursor-not-allowed text-xs uppercase tracking-widest font-black py-3.5 px-5 rounded-md flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-primary/10 transition duration-350 active:scale-95"
               >
                 {step === 4 ? (
                   submitting ? 'Reservando...' : <>Confirmar & Agendar <CheckCircle className="w-3.5 h-3.5 text-black" /></>
@@ -1130,7 +1130,7 @@ export default function BookingWizard({
             </div>
 
             <div className="space-y-1.5">
-              <h4 className="font-serif text-lg font-semibold text-slate-900 ">Identificação de Cliente</h4>
+              <h4 className="text-lg font-semibold text-slate-900 ">Identificação de Cliente</h4>
               <p className="text-xs text-slate-500 leading-relaxed max-w-xs mx-auto">
                 Para selecionar o melhor dia e agendar seu horário, faça login com a sua conta do Google de forma simples e segura.
               </p>
@@ -1159,7 +1159,7 @@ export default function BookingWizard({
                     setIsGoogleLoading(false);
                   }
                 }}
-                className="w-full py-3 bg-slate-100 hover:bg-accent border border-slate-200 text-slate-900 text-xs font-bold uppercase tracking-widest rounded-sm transition cursor-pointer flex items-center justify-center font-mono gap-2 relative shadow-md"
+                className="w-full py-3 bg-slate-100 hover:bg-accent border border-slate-200 text-slate-900 text-xs font-bold uppercase tracking-widest rounded-sm transition cursor-pointer flex items-center justify-center gap-2 relative shadow-md"
               >
                 {isGoogleLoading ? (
                   <>
@@ -1183,7 +1183,7 @@ export default function BookingWizard({
                 type="button"
                 disabled={isGoogleLoading}
                 onClick={() => setShowGoogleLoginPopup(false)}
-                className="w-full py-2.5 text-xs uppercase font-bold tracking-wider text-muted-foreground hover:text-muted-foreground transition cursor-pointer font-mono"
+                className="w-full py-2.5 text-xs uppercase font-bold tracking-wider text-muted-foreground hover:text-muted-foreground transition cursor-pointer"
               >
                 Continuar sem login
               </button>

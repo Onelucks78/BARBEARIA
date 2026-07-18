@@ -26,6 +26,11 @@ import {
   X
 } from 'lucide-react';
 import { Sidebar, Header } from './Layout.tsx';
+import { Button } from '@/components/ui/button.tsx';
+import { Input } from '@/components/ui/input.tsx';
+import { Label } from '@/components/ui/label.tsx';
+import { Textarea } from '@/components/ui/textarea.tsx';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.tsx';
 import {
   Servico,
   Produto,
@@ -35,7 +40,8 @@ import {
   Bloqueio,
   LancamentoFinanceiro,
   DashboardStats,
-  CategoriaFinanceira
+  CategoriaFinanceira,
+  ClienteSubscription
 } from '../types.ts';
 import type { Session } from '@supabase/supabase-js';
 import { authedFetch } from '../lib/supabase.ts';
@@ -46,7 +52,7 @@ interface AdminLayoutProps {
 }
 
 export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'agenda' | 'servicos' | 'produtos' | 'clientes' | 'financeiro' | 'configuracoes'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'agenda' | 'servicos' | 'produtos' | 'planos' | 'clientes' | 'financeiro' | 'configuracoes'>('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Backend States
@@ -252,6 +258,8 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
       fetchServicos();
     } else if (activeTab === 'produtos') {
       fetchProdutos();
+    } else if (activeTab === 'planos') {
+      fetchClientes();
     } else if (activeTab === 'clientes') {
       fetchClientes();
     } else if (activeTab === 'financeiro') {
@@ -329,10 +337,15 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
       const url = isEditing ? `/api/admin/servicos/${editingServiceId}` : '/api/admin/servicos';
       const method = isEditing ? 'PATCH' : 'POST';
 
-      const res = await fetch(url, {
+      const res = await authedFetch(url, {
         method,
-
-        body: newService
+        body: {
+          nome: newService.nome,
+          descricao: newService.descricao,
+          preco: Number(newService.preco),
+          duracao_minutos: Number(newService.duracao_minutos),
+          ...(newService.imagem_url ? { imagem_url: newService.imagem_url } : {})
+        }
       });
 
       if (!res.ok) throw new Error('Erro ao salvar serviço.');
@@ -373,7 +386,6 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
     }
   };
 
-
   // CRUD Actions: PRODUCTS
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -383,10 +395,15 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
       const url = isEditing ? `/api/admin/produtos/${editingProductId}` : '/api/admin/produtos';
       const method = isEditing ? 'PATCH' : 'POST';
 
-      const res = await fetch(url, {
+      const res = await authedFetch(url, {
         method,
-
-        body: newProduct
+        body: {
+          nome: newProduct.nome,
+          descricao: newProduct.descricao,
+          preco: Number(newProduct.preco),
+          estoque: Number(newProduct.estoque),
+          ...(newProduct.imagem_url ? { imagem_url: newProduct.imagem_url } : {})
+        }
       });
 
       if (!res.ok) throw new Error('Erro ao criar ou atualizar produto.');
@@ -436,9 +453,8 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
       const url = isEditing ? `/api/admin/clientes/${editingClientId}` : '/api/admin/clientes';
       const method = isEditing ? 'PATCH' : 'POST';
 
-      const res = await fetch(url, {
+      const res = await authedFetch(url, {
         method,
-
         body: newClient
       });
 
@@ -501,10 +517,16 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const launchPayload = {
+      const fallbackCategoria = categoriasFinanceiras.find(c => c.tipo === newLaunch.tipo)?.nome || 'Geral';
+      const launchPayload: any = {
         ...newLaunch,
-        descricao: newLaunch.descricao.trim() || (newLaunch.tipo === 'entrada' ? 'entrada' : 'saída')
+        descricao: newLaunch.descricao.trim() || (newLaunch.tipo === 'entrada' ? 'entrada' : 'saída'),
+        valor: Number(newLaunch.valor),
+        categoria: newLaunch.categoria || fallbackCategoria
       };
+      if (!launchPayload.produto_id) {
+        delete launchPayload.produto_id;
+      }
       const res = await authedFetch('/api/admin/financeiro', {
         method: 'POST',
         body: launchPayload
@@ -759,6 +781,27 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
     return days[dayIdx];
   };
 
+  // Lê a assinatura empacotada como JSON dentro de Cliente.observacoes (mesmo formato usado no checkout do cliente)
+  const parseSubscription = (cliente: Cliente): ClienteSubscription | null => {
+    if (!cliente.observacoes) return null;
+    try {
+      if (cliente.observacoes.trim().startsWith('{')) {
+        const parsed = JSON.parse(cliente.observacoes);
+        if (parsed.subscription) return parsed.subscription as ClienteSubscription;
+      }
+    } catch {}
+    return null;
+  };
+
+  // Clientes com assinatura do Plano VIP, classificados por renovação em dia ou vencida
+  const assinantesVIP = clientes
+    .map(c => ({ cliente: c, subscription: parseSubscription(c) }))
+    .filter((x): x is { cliente: Cliente; subscription: ClienteSubscription } => x.subscription !== null)
+    .map(x => ({
+      ...x,
+      renovado: new Date(x.subscription.renews_at) >= new Date()
+    }));
+
   // Filtered list of agenda
   const filteredAgendamentos = [...agendamentos]
     .filter(a => {
@@ -824,8 +867,8 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                       <span className="-rotate-45">AI</span>
                     </div>
                     <div>
-                      <span className="font-serif font-normal text-sm tracking-widest uppercase block text-primary">Escritório</span>
-                      <span className="text-xs text-primary/70 font-mono uppercase block -mt-0.5">do Barbeiro</span>
+                      <span className="font-normal text-sm tracking-widest uppercase block text-primary">Escritório</span>
+                      <span className="text-xs text-primary/70 uppercase block -mt-0.5">do Barbeiro</span>
                     </div>
                   </div>
 
@@ -842,13 +885,13 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
 
                 <nav className="space-y-1.5 pt-2">
-                  <div className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em] px-3 mb-2 block font-mono">Menu do Negócio</div>
+                  <div className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em] px-3 mb-2 block">Menu do Negócio</div>
                   
                   <button
                     onClick={() => { setActiveTab('dashboard'); setIsMobileMenuOpen(false); }}
-                    className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider font-mono cursor-pointer ${
+                    className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${
                       activeTab === 'dashboard' 
-                        ? 'bg-primary text-black shadow-lg font-bold' 
+                        ? 'bg-primary text-primary-foreground shadow-lg font-bold' 
                         : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                     }`}
                   >
@@ -857,9 +900,9 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
                   <button
                     onClick={() => { setActiveTab('agenda'); setIsMobileMenuOpen(false); }}
-                    className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider font-mono cursor-pointer ${
+                    className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${
                       activeTab === 'agenda' 
-                        ? 'bg-primary text-black shadow-lg font-bold' 
+                        ? 'bg-primary text-primary-foreground shadow-lg font-bold' 
                         : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                     }`}
                   >
@@ -868,9 +911,9 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
                   <button
                     onClick={() => { setActiveTab('servicos'); setIsMobileMenuOpen(false); }}
-                    className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider font-mono cursor-pointer ${
+                    className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${
                       activeTab === 'servicos' 
-                        ? 'bg-primary text-black shadow-lg font-bold' 
+                        ? 'bg-primary text-primary-foreground shadow-lg font-bold' 
                         : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                     }`}
                   >
@@ -879,9 +922,9 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
                   <button
                     onClick={() => { setActiveTab('produtos'); setIsMobileMenuOpen(false); }}
-                    className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider font-mono cursor-pointer ${
+                    className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${
                       activeTab === 'produtos' 
-                        ? 'bg-primary text-black shadow-lg font-bold' 
+                        ? 'bg-primary text-primary-foreground shadow-lg font-bold' 
                         : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                     }`}
                   >
@@ -890,9 +933,9 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
                   <button
                     onClick={() => { setActiveTab('clientes'); setIsMobileMenuOpen(false); }}
-                    className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider font-mono cursor-pointer ${
+                    className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${
                       activeTab === 'clientes' 
-                        ? 'bg-primary text-black shadow-lg font-bold' 
+                        ? 'bg-primary text-primary-foreground shadow-lg font-bold' 
                         : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                     }`}
                   >
@@ -901,9 +944,9 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
                   <button
                     onClick={() => { setActiveTab('financeiro'); setIsMobileMenuOpen(false); }}
-                    className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider font-mono cursor-pointer ${
+                    className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${
                       activeTab === 'financeiro' 
-                        ? 'bg-primary text-black shadow-lg font-bold' 
+                        ? 'bg-primary text-primary-foreground shadow-lg font-bold' 
                         : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                     }`}
                   >
@@ -911,12 +954,12 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                   </button>
 
                   <div className="border-t border-border my-4 pt-4">
-                    <div className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em] px-3 mb-2 block font-mono">Administração Geral</div>
+                    <div className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em] px-3 mb-2 block">Administração Geral</div>
                     <button
                       onClick={() => { setActiveTab('configuracoes'); setIsMobileMenuOpen(false); }}
-                      className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider font-mono cursor-pointer ${
+                      className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${
                         activeTab === 'configuracoes' 
-                          ? 'bg-primary text-black shadow-lg font-bold' 
+                          ? 'bg-primary text-primary-foreground shadow-lg font-bold' 
                           : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                       }`}
                     >
@@ -934,10 +977,10 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                   className="p-3 bg-black/40 border border-border/60 hover:border-primary/40 rounded-sm transition-all duration-200 cursor-pointer group"
                 >
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs uppercase tracking-wider font-mono font-bold text-primary flex items-center gap-1">
+                    <span className="text-xs uppercase tracking-wider font-bold text-primary flex items-center gap-1">
                       <Sparkles className="w-3 h-3 animate-pulse text-primary" /> Plano 30 Dias
                     </span>
-                    <span className="text-xs font-mono font-semibold text-muted-foreground group-hover:text-muted-foreground transition-colors">
+                    <span className="text-xs font-semibold text-muted-foreground group-hover:text-muted-foreground transition-colors">
                       {planStats.elapsedDays}/{planStats.totalDays} dias
                     </span>
                   </div>
@@ -950,7 +993,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                     />
                   </div>
                   
-                  <div className="flex justify-between items-center text-xs font-mono text-muted-foreground">
+                  <div className="flex justify-between items-center text-xs text-muted-foreground">
                     <span>Uso: {planStats.percent}%</span>
                     <span>Até: {planStats.cycleEnd.substring(0, 5)}</span>
                   </div>
@@ -958,7 +1001,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
                 <button
                   onClick={() => { onLogout(); setIsMobileMenuOpen(false); }}
-                  className="w-full text-left px-3 py-2 rounded-sm text-xs font-semibold hover:text-primary text-muted-foreground hover:bg-accent/60 transition duration-150 flex items-center gap-2.5 font-mono uppercase tracking-wider cursor-pointer"
+                  className="w-full text-left px-3 py-2 rounded-sm text-xs font-semibold hover:text-primary text-muted-foreground hover:bg-accent/60 transition duration-150 flex items-center gap-2.5 uppercase tracking-wider cursor-pointer"
                 >
                   <LogOut className="w-4 h-4 text-muted-foreground" /> Sair do Painel
                 </button>
@@ -994,12 +1037,12 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
             <div className="space-y-8">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                  <h2 className="font-serif font-normal text-2xl text-foreground tracking-tight italic">Balanço e Indicadores</h2>
+                  <h2 className="font-normal text-2xl text-foreground tracking-tight">Balanço e Indicadores</h2>
                   <p className="text-muted-foreground text-xs mt-1">Visão financeira de faturamento concluído cruzado com despesas manuais</p>
                 </div>
 
                 {/* Period switcher */}
-                <div className="flex bg-card p-1 border border-border rounded-sm text-xs font-semibold font-mono">
+                <div className="flex bg-card p-1 border border-border rounded-sm text-xs font-semibold">
                   <button 
                     onClick={() => { setDashboardPeriod('today'); setDashboardCurrentPage(1); }}
                     className={`px-3 py-1.5 rounded-sm transition ${dashboardPeriod === 'today' ? 'bg-primary text-primary-foreground shadow-md' : 'text-muted-foreground hover:text-foreground'}`}
@@ -1036,11 +1079,11 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs uppercase tracking-wider font-mono font-bold text-muted-foreground">Cortes Feitos</span>
+                    <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Cortes Feitos</span>
                     <Scissors className="w-4 h-4 text-primary" />
                   </div>
-                  <h3 className="font-mono font-bold text-xl text-primary">{formatBRL(dashboardStats.faturamento)}</h3>
-                  <p className="text-xs text-muted-foreground font-mono ">{dashboardStats.concluidosCount} agendamentos finalizados</p>
+                  <h3 className="font-bold text-xl text-primary">{formatBRL(dashboardStats.faturamento)}</h3>
+                  <p className="text-xs text-muted-foreground ">{dashboardStats.concluidosCount} agendamentos finalizados</p>
                 </div>
 
                 <div 
@@ -1050,36 +1093,36 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs uppercase tracking-wider font-mono font-bold text-muted-foreground">Produtos Vendidos</span>
+                    <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Produtos Vendidos</span>
                     <TrendingUp className="w-4 h-4 text-primary" />
                   </div>
-                  <h3 className="font-mono font-bold text-xl text-primary">{formatBRL(dashboardStats.produtosVendidos || 0)}</h3>
-                  <p className="text-xs text-muted-foreground font-mono ">Vendas de produtos em estoque</p>
+                  <h3 className="font-bold text-xl text-primary">{formatBRL(dashboardStats.produtosVendidos || 0)}</h3>
+                  <p className="text-xs text-muted-foreground ">Vendas de produtos em estoque</p>
                 </div>
 
-                <div 
+                <div
+                  className="p-4 bg-card border border-border hover:border-primary/40 rounded-sm space-y-2 cursor-pointer transition-all duration-200 select-none hover:bg-accent"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Receita de Planos (Stripe)</span>
+                    <DollarSign className="w-4 h-4 text-primary" />
+                  </div>
+                  <h3 className="font-bold text-xl text-primary">{formatBRL(dashboardStats.outrasEntradas || 0)}</h3>
+                  <p className="text-xs text-muted-foreground">Assinaturas recorrentes</p>
+                </div>
+
+                <div
                   onClick={() => setDashboardCardFilter(prev => prev === 'despesas' ? null : 'despesas')}
                   className={`p-4 bg-card border rounded-sm space-y-2 cursor-pointer transition-all duration-200 select-none hover:bg-accent ${
                     dashboardCardFilter === 'despesas' ? 'ring-2 ring-red-500 border-red-500 bg-card' : 'border-border hover:border-primary/40'
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs uppercase tracking-wider font-mono font-bold text-muted-foreground">Despesas Totais</span>
+                    <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Despesas Totais</span>
                     <TrendingDown className="w-4 h-4 text-red-500" />
                   </div>
-                  <h3 className="font-mono font-bold text-xl text-red-600 dark:text-red-400">{formatBRL(dashboardStats.despesas)}</h3>
-                  <p className="text-xs text-muted-foreground font-mono">Aluguel, insumos e custos</p>
-                </div>
-
-                <div 
-                  className="p-4 bg-card border border-border hover:border-primary/40 rounded-sm space-y-2 cursor-pointer transition-all duration-200 select-none hover:bg-accent"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs uppercase tracking-wider font-mono font-bold text-muted-foreground">Receita de Planos (Stripe)</span>
-                    <DollarSign className="w-4 h-4 text-primary" />
-                  </div>
-                  <h3 className="font-mono font-bold text-xl text-primary">{formatBRL(dashboardStats.outrasEntradas || 0)}</h3>
-                  <p className="text-xs text-muted-foreground font-mono">Assinaturas recorrentes</p>
+                  <h3 className="font-bold text-xl text-red-600 dark:text-red-400">{formatBRL(dashboardStats.despesas)}</h3>
+                  <p className="text-xs text-muted-foreground">Aluguel, insumos e custos</p>
                 </div>
 
                 <div
@@ -1093,17 +1136,17 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs uppercase tracking-wider font-mono font-bold text-muted-foreground">Lucro Líquido</span>
+                    <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Lucro Líquido</span>
                     <DollarSign className="w-4 h-4 text-primary" />
                   </div>
-                  <h3 className="font-mono font-bold text-xl">{dashboardStats.lucro >= 0 ? '+' : ''}{formatBRL(dashboardStats.lucro)}</h3>
-                  <p className="text-xs text-muted-foreground font-mono">Saldo líquido final</p>
+                  <h3 className="font-bold text-xl">{dashboardStats.lucro >= 0 ? '+' : ''}{formatBRL(dashboardStats.lucro)}</h3>
+                  <p className="text-xs text-muted-foreground">Saldo líquido final</p>
                 </div>
               </div>
 
               {/* Graphic bars summary (Craftsmanship over Defaults: dynamic CSS pure widgets) */}
               <div className="space-y-4">
-                <h4 className="font-serif text-sm tracking-wide text-muted-foreground font-semibold">
+                <h4 className="text-sm tracking-wide text-foreground font-semibold">
                   {dashboardCardFilter === 'cortes' && "Evolução do Faturamento (Cortes Feitos)"}
                   {dashboardCardFilter === 'produtos' && "Evolução do Faturamento (Produtos Vendidos)"}
                   {dashboardCardFilter === 'despesas' && "Evolução de Despesas Totais"}
@@ -1111,7 +1154,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                 </h4>
                 {dashboardStats.dailyChartData.length === 0 ? (
                   <div className="py-12 text-center bg-card border border-dashed border-border rounded-sm">
-                    <p className="text-xs text-muted-foreground font-mono uppercase tracking-wider">Nenhum faturamento registrado no período de filtragem escolhendo esta data.</p>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider">Nenhum faturamento registrado no período de filtragem escolhendo esta data.</p>
                   </div>
                 ) : (
                   (() => {
@@ -1167,7 +1210,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                                     x="40" 
                                     y={yPos + 3} 
                                     textAnchor="end" 
-                                    className="fill-muted-foreground font-mono text-xs font-semibold"
+                                    className="fill-muted-foreground text-xs font-semibold"
                                   >
                                     {ratio === 0 ? 'R$ 0' : formatBRL(currentVal).split(',')[0]}
                                   </text>
@@ -1267,7 +1310,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                                           height="85"
                                           className="opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 overflow-visible"
                                         >
-                                          <div className="bg-background/95 border border-border text-muted-foreground text-xs font-mono p-1.5 rounded-sm shadow-2xl space-y-0.5 leading-tight select-none">
+                                          <div className="bg-background/95 border border-border text-muted-foreground text-xs p-1.5 rounded-sm shadow-2xl space-y-0.5 leading-tight select-none">
                                             <div className="font-bold text-foreground text-center border-b border-border pb-0.5 mb-1">
                                               {p.data.data.includes(':') ? `Hoje, às ${p.data.data}` : p.data.data.split('-').reverse().join('/')}
                                             </div>
@@ -1299,7 +1342,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                                           x={p.x} 
                                           y="185" 
                                           textAnchor="middle" 
-                                          className="fill-muted-foreground font-mono text-xs tracking-tighter"
+                                          className="fill-muted-foreground text-xs tracking-tighter"
                                         >
                                           {p.data.data.includes(':') ? p.data.data : p.data.data.split('-').slice(1).reverse().join('/')}
                                         </text>
@@ -1313,7 +1356,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                         </div>
 
                         {/* Compact descriptive chart legend */}
-                        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 pt-2 border-t border-border/60 text-xs font-mono text-muted-foreground select-none">
+                        <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 pt-2 border-t border-border/60 text-xs text-muted-foreground select-none">
                           {showYellow && (
                             <div className="flex items-center gap-1.5">
                               <span className="w-2.5 h-2.5 rounded-full bg-primary" />
@@ -1341,11 +1384,11 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
               {/* Recent activity history logs (shows auto insertion) */}
               <div className="space-y-4">
-                <h4 className="font-serif text-sm tracking-wide text-muted-foreground font-semibold">Últimas Transações Registradas</h4>
+                <h4 className="text-sm tracking-wide text-foreground font-semibold">Últimas Transações Registradas</h4>
                 <div className="overflow-x-auto rounded-sm border border-border bg-card">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
-                      <tr className="bg-background border-b border-border text-muted-foreground font-semibold font-mono text-xs uppercase tracking-wider">
+                      <tr className="bg-background border-b border-border text-muted-foreground font-semibold text-xs uppercase tracking-wider">
                         <th className="p-3">Data</th>
                         <th className="p-3">Tipo</th>
                         <th className="p-3">Descrição</th>
@@ -1378,7 +1421,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                         if (list.length === 0) {
                           return (
                             <tr>
-                              <td colSpan={7} className="p-8 text-center text-muted-foreground font-mono text-xs uppercase tracking-wider">
+                              <td colSpan={7} className="p-8 text-center text-muted-foreground text-xs uppercase tracking-wider">
                                 Nenhuma transação correspondente encontrada para este filtro.
                               </td>
                             </tr>
@@ -1394,9 +1437,9 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
                         return currentLogs.map((h, i) => (
                           <tr key={h.id} className="hover:bg-accent/30">
-                            <td className="p-3 font-mono text-xs">{h.data.split('-').reverse().join('/')}</td>
+                            <td className="p-3 text-xs">{h.data.split('-').reverse().join('/')}</td>
                             <td className="p-3">
-                              <span className={`inline-block px-2 py-0.5 rounded-sm text-xs uppercase font-mono tracking-wider font-semibold ${
+                              <span className={`inline-block px-2 py-0.5 rounded-sm text-xs uppercase tracking-wider font-semibold ${
                                 h.tipo === 'entrada' ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/40' : 'bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/45'
                               }`}>
                                 {h.tipo === 'entrada' ? 'entrada' : 'despesa'}
@@ -1404,8 +1447,8 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                             </td>
                             <td className="p-3 font-medium text-foreground">{h.descricao}</td>
                             <td className="p-3 text-muted-foreground">{h.categoria}</td>
-                            <td className="p-3 capitalize font-mono text-xs text-muted-foreground">{h.forma_pagamento}</td>
-                            <td className={`p-3 text-right font-bold font-mono ${
+                            <td className="p-3 capitalize text-xs text-muted-foreground">{h.forma_pagamento}</td>
+                            <td className={`p-3 text-right font-bold ${
                               h.tipo === 'entrada' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
                             }`}>
                               {h.tipo === 'entrada' ? '+' : '-'}{formatBRL(h.valor)}
@@ -1462,7 +1505,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                   if (totalPages <= 1) return null;
 
                   return (
-                    <div className="flex flex-col sm:flex-row items-center justify-between border-t border-border pt-4 text-xs font-mono text-muted-foreground gap-4">
+                    <div className="flex flex-col sm:flex-row items-center justify-between border-t border-border pt-4 text-xs text-muted-foreground gap-4">
                       <div>
                         Mostrando <span className="font-bold text-muted-foreground">{indexOfFirstLog + 1}</span> a{' '}
                         <span className="font-bold text-muted-foreground">{Math.min(indexOfLastLog, totalLogs)}</span> de{' '}
@@ -1478,7 +1521,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                           &larr; Anterior
                         </button>
                         <span className="text-muted-foreground font-sans text-xs">
-                          Página <span className="font-mono font-bold text-primary">{activePage}</span> de <span className="font-mono">{totalPages}</span>
+                          Página <span className="font-bold text-primary">{activePage}</span> de <span>{totalPages}</span>
                         </span>
                         <button
                           type="button"
@@ -1502,19 +1545,19 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
             <div className="space-y-6">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                  <h2 className="font-serif font-normal text-2xl text-foreground tracking-tight italic">Agenda de Compromissos</h2>
+                  <h2 className="font-normal text-2xl text-foreground tracking-tight">Agenda de Compromissos</h2>
                   <p className="text-muted-foreground text-xs mt-1">Mude o status de agendamentos e consulte relatórios de clientes</p>
                 </div>
 
                 {/* Agenda Mode & Date Selector */}
-                <div className="flex flex-wrap items-center gap-2 font-mono text-xs w-full md:w-auto">
+                <div className="flex flex-wrap items-center gap-2 text-xs w-full md:w-auto">
                   <div className="flex bg-card p-1 border border-border rounded-sm font-semibold w-full sm:w-auto">
                     <button
                       type="button"
                       onClick={() => setAgendaFilterMode('upcoming')}
                       className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-sm transition text-center cursor-pointer ${
                         agendaFilterMode === 'upcoming' 
-                          ? 'bg-primary text-black shadow-md font-bold' 
+                          ? 'bg-primary text-primary-foreground shadow-md font-bold' 
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
@@ -1525,7 +1568,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                       onClick={() => setAgendaFilterMode('day')}
                       className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-sm transition text-center cursor-pointer ${
                         agendaFilterMode === 'day' 
-                          ? 'bg-primary text-black shadow-md font-bold' 
+                          ? 'bg-primary text-primary-foreground shadow-md font-bold' 
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
@@ -1547,7 +1590,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
               {filteredAgendamentos.length === 0 ? (
                 <div className="py-16 text-center space-y-3 bg-card border border-dashed border-border rounded-sm">
                   <CalendarX className="w-8 h-8 text-muted-foreground mx-auto" />
-                  <p className="text-xs text-muted-foreground font-mono uppercase tracking-wider">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider">
                     {agendaFilterMode === 'upcoming' 
                       ? 'Nenhum compromisso agendado para hoje ou dias futuros.' 
                       : `Nenhum compromisso agendado para o dia ${agendaDateFilter.split('-').reverse().join('/')}.`}
@@ -1574,29 +1617,29 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                           <div className="space-y-2">
                             {/* Date, Time and service */}
                             <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-mono text-xs font-bold text-muted-foreground bg-card border border-border px-2.5 py-1 rounded-sm">
+                              <span className="text-xs font-bold text-muted-foreground bg-card border border-border px-2.5 py-1 rounded-sm">
                                 {b.inicio_em.split('T')[0].split('-').reverse().join('/')}
                               </span>
-                              <span className="font-mono font-bold text-primary text-sm bg-primary/10 px-2.5 py-1 rounded-sm border border-primary/20">
+                              <span className="font-bold text-primary text-sm bg-primary/10 px-2.5 py-1 rounded-sm border border-primary/20">
                                 {b.inicio_em.split('T')[1].substring(0, 5)}h
                               </span>
                               <span className="text-foreground">|</span>
                               <span className="font-sans font-semibold text-foreground text-xs sm:text-sm">{servLabel}</span>
                               <span className="text-foreground">|</span>
-                              <span className="font-mono text-primary text-xs font-bold">{formatBRL(b.preco_cobrado)}</span>
+                              <span className="text-primary text-xs font-bold">{formatBRL(b.preco_cobrado)}</span>
                             </div>
 
                             {/* Client particulars details */}
                             <div className="space-y-1">
-                              <h4 className="font-bold text-muted-foreground text-xs flex items-center gap-1.5">
+                              <h4 className="font-bold text-foreground text-xs flex items-center gap-1.5">
                                 Cliente: {b.nome_cliente}
                                 {b.cliente_id ? (
-                                  <span className="text-xs bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/30 px-1.5 py-0.5 rounded-sm font-mono font-bold">Fiel</span>
+                                  <span className="text-xs bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/30 px-1.5 py-0.5 rounded-sm font-bold">Fiel</span>
                                 ) : (
-                                  <span className="text-xs bg-card text-muted-foreground border border-border px-1.5 py-0.5 rounded-sm font-mono">Simples</span>
+                                  <span className="text-xs bg-card text-muted-foreground border border-border px-1.5 py-0.5 rounded-sm">Simples</span>
                                 )}
                               </h4>
-                              <p className="text-muted-foreground text-xs font-mono">Contato: {b.telefone_cliente}</p>
+                              <p className="text-muted-foreground text-xs">Contato: {b.telefone_cliente}</p>
                               {b.observacao && (
                                 <p className="text-primary text-xs bg-primary/5 p-2 rounded-sm border border-primary/10 ">
                                   "{b.observacao}"
@@ -1641,7 +1684,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                                   : b.status === 'agendado'
                                   ? 'bg-card text-muted-foreground border-border'
                                   : b.status === 'confirmado'
-                                  ? 'bg-primary text-black border-primary'
+                                  ? 'bg-primary text-primary-foreground border-primary'
                                   : 'bg-red-100 dark:bg-red-950 text-red-600 dark:text-red-400 border-red-200 dark:border-red-900/40'
                               }`}
                             >
@@ -1666,103 +1709,94 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
           {activeTab === 'servicos' && (
             <div className="space-y-8">
               <div>
-                <h2 className="font-serif font-normal text-2xl text-foreground tracking-tight italic">Catálogo de Serviços</h2>
+                <h2 className="font-normal text-2xl text-foreground tracking-tight">Catálogo de Serviços</h2>
                 <p className="text-muted-foreground text-xs mt-1">Crie e edite preços, descrições e durações dos serviços no site público</p>
               </div>
 
               {/* Service Form */}
-              <form onSubmit={handleSaveService} className="bg-card p-6 rounded-sm border border-border grid grid-cols-1 md:grid-cols-2 gap-4">
+              <form onSubmit={handleSaveService} className="bg-card p-6 rounded-lg border border-border grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="md:col-span-2">
-                  <h4 className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground mb-2">
+                  <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-foreground mb-2">
                     {editingServiceId ? 'Modificar Serviço Existente' : 'Cadastrar Novo Serviço'}
                   </h4>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono block">Nome do serviço:</label>
-                  <input
+                <div className="space-y-1.5">
+                  <Label>Nome do serviço</Label>
+                  <Input
                     type="text"
                     required
                     value={newService.nome}
                     onChange={(e) => setNewService({ ...newService, nome: e.target.value })}
                     placeholder="Ex: Alinhamento de Cavanhaque"
-                    className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs focus:outline-none focus:border-primary text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono block">Preço cobrado (R$):</label>
-                  <input
+                <div className="space-y-1.5">
+                  <Label>Preço cobrado (R$)</Label>
+                  <Input
                     type="number"
                     step="0.01"
                     required
                     value={newService.preco}
                     onChange={(e) => setNewService({ ...newService, preco: e.target.value })}
                     placeholder="Ex: 35.00"
-                    className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs focus:outline-none focus:border-primary text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono block">Duração (minutos):</label>
-                  <input
+                <div className="space-y-1.5">
+                  <Label>Duração (minutos)</Label>
+                  <Input
                     type="number"
                     required
                     value={newService.duracao_minutos}
                     onChange={(e) => setNewService({ ...newService, duracao_minutos: e.target.value })}
                     placeholder="Ex: 30"
-                    className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs focus:outline-none focus:border-primary text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono block">URL da Imagem decorativa:</label>
-                  <input
+                <div className="space-y-1.5">
+                  <Label>URL da imagem decorativa</Label>
+                  <Input
                     type="url"
                     value={newService.imagem_url}
                     onChange={(e) => setNewService({ ...newService, imagem_url: e.target.value })}
                     placeholder="Cole um link de imagem do Unsplash"
-                    className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs focus:outline-none focus:border-primary text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
 
-                <div className="md:col-span-2 space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono block">Descrição comercial do serviço:</label>
-                  <textarea
+                <div className="md:col-span-2 space-y-1.5">
+                  <Label>Descrição comercial do serviço</Label>
+                  <Textarea
                     rows={2}
                     value={newService.descricao}
                     onChange={(e) => setNewService({ ...newService, descricao: e.target.value })}
                     placeholder="Escreva detalhes adicionais sobre o atendimento, café incluso, etc..."
-                    className="w-full bg-background border border-border rounded-sm p-3 text-xs focus:outline-none focus:border-primary text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
 
                 <div className="md:col-span-2 flex justify-end gap-2 pt-2 border-t border-border">
                   {editingServiceId && (
-                    <button
+                    <Button
                       type="button"
+                      variant="outline"
                       onClick={() => {
                         setEditingServiceId(null);
                         setNewService({ nome: '', descricao: '', preco: '', duracao_minutos: '45', imagem_url: '' });
                       }}
-                      className="px-4 py-2 border border-border rounded-sm text-xs font-semibold text-muted-foreground hover:bg-accent font-mono"
                     >
                       Cancelar Edição
-                    </button>
+                    </Button>
                   )}
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="bg-primary border border-primary text-black px-5 py-2.5 rounded-sm text-xs font-bold transition flex items-center gap-1.5 hover:bg-primary/80 cursor-pointer"
-                  >
+                  <Button type="submit" disabled={submitting}>
                     <Save className="w-4 h-4" /> {editingServiceId ? 'Salvar Alteração' : 'Adicionar Serviço'}
-                  </button>
+                  </Button>
                 </div>
               </form>
 
               {/* Service list for admin control */}
               <div className="space-y-3">
-                <h4 className="font-serif text-sm tracking-wide text-muted-foreground font-semibold">Serviços Atuais no Site</h4>
+                <h4 className="text-sm tracking-wide text-foreground font-semibold">Serviços Atuais no Site</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {servicos.map(s => (
                     <div key={s.id} className={`p-4 rounded-sm border flex gap-3 justify-between items-center ${s.ativo ? 'border-border bg-card' : 'border-border bg-black opacity-50'}`}>
@@ -1772,7 +1806,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                         </div>
                         <div>
                           <h5 className="font-sans font-semibold text-foreground text-xs">{s.nome}</h5>
-                          <p className="text-xs text-primary font-mono font-bold mt-0.5">{formatBRL(s.preco)} • {s.duracao_minutos} min</p>
+                          <p className="text-xs text-primary font-bold mt-0.5">{formatBRL(s.preco)} • {s.duracao_minutos} min</p>
                         </div>
                       </div>
 
@@ -1780,7 +1814,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                         <button
                           type="button"
                           onClick={() => handleEditServiceSelect(s)}
-                          className="p-1 px-2.5 border border-border text-muted-foreground rounded-sm hover:bg-accent hover:text-foreground text-xs font-mono font-bold"
+                          className="p-1 px-2.5 border border-border text-muted-foreground rounded-sm hover:bg-accent hover:text-foreground text-xs font-bold"
                         >
                           Editar
                         </button>
@@ -1802,100 +1836,175 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
           )}
 
 
+          {/* TAB 3b: PLANOS (assinantes do plano VIP fixo) */}
+          {activeTab === 'planos' && (
+            <div className="space-y-8">
+              <div>
+                <h2 className="font-normal text-2xl text-foreground tracking-tight">Configurar Planos</h2>
+                <p className="text-muted-foreground text-xs mt-1">Acompanhe quem está assinado no plano recorrente e quem está com a renovação atrasada.</p>
+              </div>
+
+              {/* Plano fixo (por enquanto não editável) */}
+              <div className="bg-card p-5 rounded-sm border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-primary mb-1">Plano VIP</h4>
+                  <p className="text-sm text-foreground font-semibold">Corte de cabelo e barba à vontade durante todo o mês</p>
+                  <p className="text-xs text-muted-foreground mt-1">Cobrança recorrente no cartão via Stripe (integração pendente de configuração).</p>
+                </div>
+                <div className="text-2xl font-bold text-primary shrink-0">{formatBRL(120)}<span className="text-xs text-muted-foreground font-normal">/mês</span></div>
+              </div>
+
+              {/* Resumo de assinantes */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="p-4 bg-card border border-border rounded-sm space-y-1">
+                  <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Total de Assinantes</span>
+                  <h3 className="font-bold text-xl text-foreground">{assinantesVIP.length}</h3>
+                </div>
+                <div className="p-4 bg-card border border-border rounded-sm space-y-1">
+                  <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Renovados</span>
+                  <h3 className="font-bold text-xl text-emerald-600 dark:text-emerald-400">{assinantesVIP.filter(a => a.renovado).length}</h3>
+                </div>
+                <div className="p-4 bg-card border border-border rounded-sm space-y-1">
+                  <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Não Renovados</span>
+                  <h3 className="font-bold text-xl text-red-600 dark:text-red-400">{assinantesVIP.filter(a => !a.renovado).length}</h3>
+                </div>
+              </div>
+
+              {/* Lista de assinantes */}
+              <div className="space-y-3">
+                <h4 className="text-sm tracking-wide text-foreground font-semibold">Clientes Assinantes</h4>
+                {assinantesVIP.length === 0 ? (
+                  <div className="py-12 text-center bg-card border border-dashed border-border rounded-sm">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider">Nenhum cliente assinou o plano VIP ainda.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-sm border border-border bg-card">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-background border-b border-border text-muted-foreground font-semibold text-xs uppercase tracking-wider">
+                          <th className="p-3">Cliente</th>
+                          <th className="p-3">Telefone</th>
+                          <th className="p-3">Cartão</th>
+                          <th className="p-3">Renova em</th>
+                          <th className="p-3 text-right">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {assinantesVIP.map(({ cliente, subscription, renovado }) => (
+                          <tr key={cliente.id} className="border-b border-border last:border-b-0">
+                            <td className="p-3 font-semibold text-foreground">{cliente.nome}</td>
+                            <td className="p-3 text-muted-foreground">{cliente.telefone}</td>
+                            <td className="p-3 text-muted-foreground">
+                              {subscription.card_brand ? `${subscription.card_brand} •••• ${subscription.card_last4}` : '—'}
+                            </td>
+                            <td className="p-3 text-muted-foreground">
+                              {new Date(subscription.renews_at).toLocaleDateString('pt-BR')}
+                            </td>
+                            <td className="p-3 text-right">
+                              <span className={`px-2 py-0.5 rounded-sm text-xs font-bold uppercase tracking-wider border ${
+                                renovado
+                                  ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/40'
+                                  : 'bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 border-red-200 dark:border-red-900/40'
+                              }`}>
+                                {renovado ? 'Renovado' : 'Não Renovado'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* TAB 4: PRODUCTS CRUD */}
           {activeTab === 'produtos' && (
             <div className="space-y-8">
               <div>
-                <h2 className="font-serif font-normal text-2xl text-foreground tracking-tight italic">Gestão de Produtos / Estoque</h2>
+                <h2 className="font-normal text-2xl text-foreground tracking-tight">Gestão de Produtos / Estoque</h2>
                 <p className="text-muted-foreground text-xs mt-1">Exponha pomadas e shampoos na vitrine e modifique as unidades de estoque</p>
               </div>
 
               {/* Product Form */}
-              <form onSubmit={handleSaveProduct} className="bg-card p-6 rounded-sm border border-border grid grid-cols-1 md:grid-cols-2 gap-4">
+              <form onSubmit={handleSaveProduct} className="bg-card p-6 rounded-lg border border-border grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="md:col-span-2">
-                  <h4 className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground mb-2">
+                  <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-foreground mb-2">
                     {editingProductId ? 'Modificar Estoque / Descrição' : 'Cadastrar Novo Item'}
                   </h4>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono block">Nome do cosmético:</label>
-                  <input
+                <div className="space-y-1.5">
+                  <Label>Nome do cosmético</Label>
+                  <Input
                     type="text"
                     required
                     value={newProduct.nome}
                     onChange={(e) => setNewProduct({ ...newProduct, nome: e.target.value })}
                     placeholder="Ex: Cera Modeladora Molhada"
-                    className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs focus:outline-none focus:border-primary text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono block">Preço de venda (R$):</label>
-                  <input
+                <div className="space-y-1.5">
+                  <Label>Preço de venda (R$)</Label>
+                  <Input
                     type="number"
                     step="0.01"
                     required
                     value={newProduct.preco}
                     onChange={(e) => setNewProduct({ ...newProduct, preco: e.target.value })}
                     placeholder="Ex: 40.00"
-                    className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs focus:outline-none focus:border-primary text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono block">Unidades em estoque:</label>
-                  <input
+                <div className="space-y-1.5">
+                  <Label>Unidades em estoque</Label>
+                  <Input
                     type="number"
                     required
                     value={newProduct.estoque}
                     onChange={(e) => setNewProduct({ ...newProduct, estoque: e.target.value })}
                     placeholder="Ex: 10"
-                    className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs focus:outline-none focus:border-primary text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono block">URL imagem ilustrativa:</label>
-                  <input
+                <div className="space-y-1.5">
+                  <Label>URL imagem ilustrativa</Label>
+                  <Input
                     type="url"
                     value={newProduct.imagem_url}
                     onChange={(e) => setNewProduct({ ...newProduct, imagem_url: e.target.value })}
-                    className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs focus:outline-none focus:border-primary text-foreground placeholder:text-muted-foreground"
+                    placeholder="Cole um link de imagem do Unsplash"
                   />
                 </div>
 
-                <div className="md:col-span-2 space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono block">Especificações e volumetria:</label>
-                  <textarea
+                <div className="md:col-span-2 space-y-1.5">
+                  <Label>Especificações e volumetria</Label>
+                  <Textarea
                     rows={2}
                     value={newProduct.descricao}
                     onChange={(e) => setNewProduct({ ...newProduct, descricao: e.target.value })}
                     placeholder="Ex: Efeito molhado, brilho intenso com óleo de coco protetor. 150g."
-                    className="w-full bg-background border border-border rounded-sm p-3 text-xs focus:outline-none focus:border-primary text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
 
                 <div className="md:col-span-2 flex justify-end gap-2 pt-2 border-t border-border">
                   {editingProductId && (
-                    <button
+                    <Button
                       type="button"
+                      variant="outline"
                       onClick={() => {
                         setEditingProductId(null);
                         setNewProduct({ nome: '', descricao: '', preco: '', estoque: '10', imagem_url: '' });
                       }}
-                      className="px-4 py-2 border border-border rounded-sm text-xs font-semibold text-muted-foreground hover:bg-accent font-mono"
                     >
                       Cancelar
-                    </button>
+                    </Button>
                   )}
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="bg-primary border border-primary text-black px-5 py-2.5 rounded-sm text-xs font-bold transition flex items-center gap-1.5 hover:bg-primary/80 cursor-pointer"
-                  >
+                  <Button type="submit" disabled={submitting}>
                     <Save className="w-4 h-4" /> {editingProductId ? 'Atualizar Cosmos' : 'Adicionar Cosmético'}
-                  </button>
+                  </Button>
                 </div>
               </form>
 
@@ -1903,7 +2012,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
               <div className="border border-border rounded-sm overflow-hidden bg-card shadow-2xl">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="bg-background border-b border-border text-muted-foreground font-semibold font-mono text-xs uppercase tracking-[0.1em]">
+                    <tr className="bg-background border-b border-border text-muted-foreground font-semibold text-xs uppercase tracking-[0.1em]">
                       <th className="p-3.5">Nome</th>
                       <th className="p-3.5">Preço</th>
                       <th className="p-3.5">Estoque Disponível</th>
@@ -1915,16 +2024,16 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                     {produtos.map(p => (
                       <tr key={p.id} className="hover:bg-accent/30">
                         <td className="p-3.5 font-bold text-foreground">{p.nome}</td>
-                        <td className="p-3.5 font-mono text-primary font-bold">{formatBRL(p.preco)}</td>
+                        <td className="p-3.5 text-primary font-bold">{formatBRL(p.preco)}</td>
                         <td className="p-3.5">
-                          <span className={`px-2 py-0.5 rounded-sm font-mono text-xs font-bold border ${
+                          <span className={`px-2 py-0.5 rounded-sm text-xs font-bold border ${
                             p.estoque <= 2 ? 'bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 border-red-200 dark:border-red-900/40' : 'bg-card text-muted-foreground border-border'
                           }`}>
                             {p.estoque} unidades
                           </span>
                         </td>
                         <td className="p-3.5">
-                          <span className={`text-xs uppercase font-bold font-mono tracking-wider ${p.ativo ? 'text-primary' : 'text-muted-foreground'}`}>
+                          <span className={`text-xs uppercase font-bold tracking-wider ${p.ativo ? 'text-primary' : 'text-muted-foreground'}`}>
                             {p.ativo ? 'Exibido' : 'Oculto'}
                           </span>
                         </td>
@@ -1932,7 +2041,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                           <button
                             type="button"
                             onClick={() => handleEditProductSelect(p)}
-                            className="bg-background hover:bg-accent border border-border text-muted-foreground hover:text-foreground px-2.5 py-1 rounded-sm text-xs font-mono font-bold"
+                            className="bg-background hover:bg-accent border border-border text-muted-foreground hover:text-foreground px-2.5 py-1 rounded-sm text-xs font-bold"
                           >
                             Modificar R$
                           </button>
@@ -1959,90 +2068,82 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
           {activeTab === 'clientes' && (
             <div className="space-y-8">
               <div>
-                <h2 className="font-serif font-normal text-2xl text-foreground tracking-tight italic">Cadastro de Clientes</h2>
+                <h2 className="font-normal text-2xl text-foreground tracking-tight">Cadastro de Clientes</h2>
                 <p className="text-muted-foreground text-xs mt-1">Crie prontuários, registre limitações térmicas, químicas ou de preferência de cada cliente</p>
               </div>
 
               {/* Client Form */}
-              <form onSubmit={handleSaveClient} className="bg-card p-6 rounded-sm border border-border grid grid-cols-1 md:grid-cols-2 gap-4" id="client-form-anchor">
+              <form onSubmit={handleSaveClient} className="bg-card p-6 rounded-lg border border-border grid grid-cols-1 md:grid-cols-2 gap-5" id="client-form-anchor">
                 <div className="md:col-span-2">
-                  <h4 className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground mb-2">
+                  <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-foreground mb-2">
                     {editingClientId ? 'Atualizar Observações Técnicas' : 'Inserir Nova Ficha ao prontuário'}
                   </h4>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono block">Nome:</label>
-                  <input
+                <div className="space-y-1.5">
+                  <Label>Nome</Label>
+                  <Input
                     type="text"
                     required
                     value={newClient.nome}
                     onChange={(e) => setNewClient({ ...newClient, nome: e.target.value })}
                     placeholder="Nome completo do cliente"
-                    className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs focus:outline-none focus:border-primary text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono block">Telefone / Celular:</label>
-                  <input
+                <div className="space-y-1.5">
+                  <Label>Telefone / Celular</Label>
+                  <Input
                     type="tel"
                     required
                     value={newClient.telefone}
                     onChange={(e) => setNewClient({ ...newClient, telefone: e.target.value })}
                     placeholder="Ex: (11) 98765-1234"
-                    className="w-full bg-background border border-[#2d2d2d] rounded-sm px-3 py-2 text-xs focus:outline-none focus:border-primary text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono block">E-mail (opcional):</label>
-                  <input
+                <div className="space-y-1.5">
+                  <Label>E-mail (opcional)</Label>
+                  <Input
                     type="email"
                     value={newClient.email}
                     onChange={(e) => setNewClient({ ...newClient, email: e.target.value })}
                     placeholder="cliente@exemplo.com"
-                    className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs focus:outline-none focus:border-primary text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono block">Observações técnicas do Barbeiro:</label>
-                  <textarea
+                <div className="space-y-1.5">
+                  <Label>Observações técnicas do Barbeiro</Label>
+                  <Textarea
                     rows={1}
                     value={newClient.observacoes}
                     onChange={(e) => setNewClient({ ...newClient, observacoes: e.target.value })}
                     placeholder="Preferências, pomadas, degradê, etc..."
-                    className="w-full bg-background border border-border rounded-sm p-3 text-xs focus:outline-none focus:border-primary text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
 
                 <div className="md:col-span-2 flex justify-end gap-2 pt-2 border-t border-border">
                   {editingClientId && (
-                    <button
+                    <Button
                       type="button"
+                      variant="outline"
                       onClick={() => {
                         setEditingClientId(null);
                         setNewClient({ nome: '', telefone: '', email: '', data_nascimento: '', observacoes: '' });
                       }}
-                      className="px-4 py-2 border border-border rounded-sm text-xs font-semibold text-muted-foreground hover:bg-accent font-mono cursor-pointer"
                     >
                       Cancelar
-                    </button>
+                    </Button>
                   )}
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="bg-primary border border-primary text-black px-5 py-2.5 rounded-sm text-xs font-bold transition flex items-center gap-1.5 hover:bg-primary/80 cursor-pointer"
-                  >
+                  <Button type="submit" disabled={submitting}>
                     <Save className="w-4 h-4" /> {editingClientId ? 'Salvar Alterações' : 'Cadastrar Cliente'}
-                  </button>
+                  </Button>
                 </div>
               </form>
 
               {/* Clients database list */}
               <div className="space-y-3">
-                <h4 className="font-serif text-sm tracking-wide text-muted-foreground font-semibold">Histórico de Prontuários ({clientes.length})</h4>
+                <h4 className="text-sm tracking-wide text-foreground font-semibold">Histórico de Prontuários ({clientes.length})</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {clientes.map(c => (
                     <div 
@@ -2064,22 +2165,22 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                               {c.foto_url ? (
                                 <img src={c.foto_url} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                               ) : (
-                                <span className="font-mono text-xs text-muted-foreground group-hover:text-primary font-bold">
+                                <span className="text-xs text-muted-foreground group-hover:text-primary font-bold">
                                   {c.nome ? c.nome.charAt(0).toUpperCase() : 'C'}
                                 </span>
                               )}
                             </div>
                             <div>
                               <h5 className="font-sans font-bold text-foreground text-sm group-hover:text-primary transition">{c.nome}</h5>
-                              <p className="text-xs text-muted-foreground font-mono uppercase tracking-wider">{c.email || 'Sem e-mail'}</p>
+                              <p className="text-xs text-muted-foreground uppercase tracking-wider">{c.email || 'Sem e-mail'}</p>
                             </div>
                           </div>
-                          <span className="text-xs bg-background text-primary border border-border px-2 py-0.5 rounded-sm font-mono uppercase tracking-[0.05em]">
+                          <span className="text-xs bg-background text-primary border border-border px-2 py-0.5 rounded-sm uppercase tracking-[0.05em]">
                             Cadastro: {c.created_at ? new Date(c.created_at).toLocaleDateString('pt-BR') : new Date().toLocaleDateString('pt-BR')}
                           </span>
                         </div>
 
-                        <div className="text-xs text-muted-foreground font-mono space-y-1 pl-1 border-l-2 border-border">
+                        <div className="text-xs text-muted-foreground space-y-1 pl-1 border-l-2 border-border">
                           <p className="flex items-center gap-1.5">
                             <span className="text-muted-foreground">WhatsApp:</span> 
                             <span className="text-muted-foreground">{c.telefone}</span>
@@ -2093,7 +2194,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                         </div>
 
                         {c.observacoes && (
-                          <div className="text-xs text-muted-foreground bg-[#070707] border border-border p-2.5 rounded-sm  whitespace-pre-line leading-relaxed">
+                          <div className="text-xs text-muted-foreground bg-muted border border-border p-2.5 rounded-sm whitespace-pre-line leading-relaxed">
                             "{c.observacoes}"
                           </div>
                         )}
@@ -2109,21 +2210,21 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                               formAnchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
                             }
                           }}
-                          className="bg-background hover:bg-primary text-muted-foreground hover:text-black px-3 py-1 border border-border hover:border-transparent rounded-sm text-xs font-mono font-bold transition cursor-pointer"
+                          className="bg-background hover:bg-primary text-muted-foreground hover:text-black px-3 py-1 border border-border hover:border-transparent rounded-sm text-xs font-bold transition cursor-pointer"
                         >
                           Editar
                         </button>
                         <button
                           type="button"
                           onClick={() => handleToggleClientActive(c)}
-                          className="bg-background hover:bg-accent text-muted-foreground hover:text-orange-400 px-2.5 py-1 border border-border rounded-sm text-xs font-mono font-bold transition cursor-pointer"
+                          className="bg-background hover:bg-accent text-muted-foreground hover:text-orange-400 px-2.5 py-1 border border-border rounded-sm text-xs font-bold transition cursor-pointer"
                         >
                           Arquivar
                         </button>
                         <button
                           type="button"
                           onClick={() => handleDeleteClient(c)}
-                          className="bg-background hover:bg-red-100 dark:bg-red-950/40 text-muted-foreground hover:text-red-600 dark:text-red-400 px-2.5 py-1 border border-border hover:border-red-200 dark:border-red-900/30 rounded-sm text-xs font-mono font-bold transition cursor-pointer"
+                          className="bg-background hover:bg-red-100 dark:bg-red-950/40 text-muted-foreground hover:text-red-600 dark:text-red-400 px-2.5 py-1 border border-border hover:border-red-200 dark:border-red-900/30 rounded-sm text-xs font-bold transition cursor-pointer"
                         >
                           Deletar
                         </button>
@@ -2140,149 +2241,145 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
           {activeTab === 'financeiro' && (
             <div className="space-y-8 animate-fade-in">
               <div>
-                <h2 className="font-serif font-normal text-2xl text-foreground tracking-tight italic">Fluxo de Caixa</h2>
+                <h2 className="font-normal text-2xl text-foreground tracking-tight">Fluxo de Caixa</h2>
                 <p className="text-muted-foreground text-xs mt-1 font-sans">Lançamentos independentes (aluguel, água, compras manuais de insumos) que alteram os balanços gerais no painel principal</p>
               </div>
  
               {/* Lançamento manual form */}
-              <form onSubmit={handleSaveFinanceLaunch} className="bg-card p-6 rounded-sm border border-border grid grid-cols-1 md:grid-cols-2 gap-4">
+              <form onSubmit={handleSaveFinanceLaunch} className="bg-card p-6 rounded-lg border border-border grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="md:col-span-2">
-                  <h4 className="font-mono text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground mb-2">
+                  <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-foreground mb-2">
                     Registrar Movimentação Manual
                   </h4>
                 </div>
- 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono block">Tipo de Fluxo:</label>
-                  <select
-                    id="finance-type-select"
-                    value={newLaunch.tipo}
-                    onChange={(e) => setNewLaunch({ ...newLaunch, tipo: e.target.value })}
-                    className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs focus:outline-none text-foreground focus:border-primary"
-                  >
-                    <option value="entrada">Entrada (Ganho Financeiro / Venda)</option>
-                    <option value="saida">Saída (Despesa / Custo / Fornecedor)</option>
-                  </select>
+
+                <div className="space-y-1.5">
+                  <Label>Tipo de Fluxo</Label>
+                  <Select value={newLaunch.tipo} onValueChange={(v) => v && setNewLaunch({ ...newLaunch, tipo: v as string })}>
+                    <SelectTrigger id="finance-type-select" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="entrada">Entrada (Ganho Financeiro / Venda)</SelectItem>
+                      <SelectItem value="saida">Saída (Despesa / Custo / Fornecedor)</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
- 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono block">Descrição operacional (opcional):</label>
-                  <input
+
+                <div className="space-y-1.5">
+                  <Label>Descrição operacional (opcional)</Label>
+                  <Input
                     type="text"
                     value={newLaunch.descricao}
                     onChange={(e) => setNewLaunch({ ...newLaunch, descricao: e.target.value })}
                     placeholder="Ex: Compra de golas higiênicas"
-                    className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs focus:outline-none focus:border-primary text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
- 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono block">Valor absoluto (Mantenha positivo, R$):</label>
-                  <input
+
+                <div className="space-y-1.5">
+                  <Label>Valor absoluto (mantenha positivo, R$)</Label>
+                  <Input
                     type="number"
                     step="0.01"
                     required
                     value={newLaunch.valor}
                     onChange={(e) => setNewLaunch({ ...newLaunch, valor: e.target.value })}
                     placeholder="Ex: 120.00"
-                    className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs focus:outline-none focus:border-primary text-foreground placeholder:text-muted-foreground"
                   />
                 </div>
- 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono block">Categoria do lançamento:</label>
-                  <select
-                    value={newLaunch.categoria}
-                    onChange={(e) => setNewLaunch({ ...newLaunch, categoria: e.target.value })}
-                    className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs focus:outline-none text-foreground focus:border-primary"
-                  >
-                    {categoriasFinanceiras.filter(c => c.tipo === newLaunch.tipo).map(cat => (
-                      <option key={cat.id} value={cat.nome}>{cat.nome}</option>
-                    ))}
-                    {categoriasFinanceiras.filter(c => c.tipo === newLaunch.tipo).length === 0 && (
-                      <option value="Serviços">Serviços</option>
-                    )}
-                  </select>
+
+                <div className="space-y-1.5">
+                  <Label>Categoria do lançamento</Label>
+                  <Select value={newLaunch.categoria} onValueChange={(v) => v && setNewLaunch({ ...newLaunch, categoria: v as string })}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categoriasFinanceiras.filter(c => c.tipo === newLaunch.tipo).map(cat => (
+                        <SelectItem key={cat.id} value={cat.nome}>{cat.nome}</SelectItem>
+                      ))}
+                      {categoriasFinanceiras.filter(c => c.tipo === newLaunch.tipo).length === 0 && (
+                        <SelectItem value="Serviços">Serviços</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
                   <button
                     type="button"
                     onClick={() => {
                       setNewCategoryType(newLaunch.tipo as 'entrada' | 'saida');
                       setIsCategoryModalOpen(true);
                     }}
-                    className="mt-1 text-primary hover:text-primary/80 text-xs uppercase font-mono flex items-center gap-1 cursor-pointer"
+                    className="text-primary hover:text-primary/80 text-xs uppercase flex items-center gap-1 cursor-pointer"
                   >
                     <Settings className="w-3 h-3" /> Configurar Categorias
                   </button>
                 </div>
- 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-primary/80 font-mono block">Forma de pagamento:</label>
-                  <select
-                    value={newLaunch.forma_pagamento}
-                    onChange={(e) => setNewLaunch({ ...newLaunch, forma_pagamento: e.target.value as any })}
-                    className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs focus:outline-none text-foreground focus:border-primary"
-                  >
-                    <option value="dinheiro">dinheiro</option>
-                    <option value="pix">pix</option>
-                    <option value="cartao">cartão de débito/crédito</option>
-                    <option value="outro">outro método</option>
-                  </select>
+
+                <div className="space-y-1.5">
+                  <Label>Forma de pagamento</Label>
+                  <Select value={newLaunch.forma_pagamento} onValueChange={(v) => v && setNewLaunch({ ...newLaunch, forma_pagamento: v as any })}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                      <SelectItem value="pix">Pix</SelectItem>
+                      <SelectItem value="cartao">Cartão de débito/crédito</SelectItem>
+                      <SelectItem value="outro">Outro método</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
- 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono block">Data de registro:</label>
-                  <input
+
+                <div className="space-y-1.5">
+                  <Label>Data de registro</Label>
+                  <Input
                     type="date"
                     required
                     value={newLaunch.data}
                     onChange={(e) => setNewLaunch({ ...newLaunch, data: e.target.value })}
-                    className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs focus:outline-none focus:border-primary text-muted-foreground focus:text-foreground"
                   />
                 </div>
- 
+
                 {/* Optional linked product selection */}
                 {newLaunch.tipo === 'entrada' && (
-                  <div className="space-y-1 md:col-span-2">
-                    <label className="text-xs font-bold uppercase tracking-wider text-primary/80 font-mono block">Abater 1 unidade do estoque deste produto? (Opcional):</label>
-                    <select
-                      value={newLaunch.produto_id}
-                      onChange={(e) => setNewLaunch({ ...newLaunch, produto_id: e.target.value })}
-                      className="w-full bg-background border border-border rounded-sm px-3 py-2 text-xs focus:outline-none text-foreground focus:border-primary"
-                    >
-                      <option value="">Não descontar venda de estoque</option>
-                      {produtos.map(p => (
-                        <option key={p.id} value={p.id}>{p.nome} (Estoque: {p.estoque} uni)</option>
-                      ))}
-                    </select>
+                  <div className="space-y-1.5 md:col-span-2">
+                    <Label>Abater 1 unidade do estoque deste produto? (opcional)</Label>
+                    <Select value={newLaunch.produto_id || 'none'} onValueChange={(v) => setNewLaunch({ ...newLaunch, produto_id: (!v || v === 'none') ? '' : (v as string) })}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Não descontar venda de estoque</SelectItem>
+                        {produtos.map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.nome} (Estoque: {p.estoque} uni)</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 )}
- 
+
                 <div className="md:col-span-2 flex justify-end pt-2 border-t border-border">
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="bg-primary border border-primary text-black px-5 py-2.5 rounded-sm text-xs font-bold transition flex items-center gap-1.5 hover:bg-primary/80 cursor-pointer"
-                  >
+                  <Button type="submit" disabled={submitting}>
                     <Plus className="w-4 h-4" /> Registrar no Fluxo de Caixa
-                  </button>
+                  </Button>
                 </div>
               </form>
  
               {/* Logs history complete */}
               <div className="space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <h4 className="font-serif text-sm tracking-wide text-muted-foreground font-semibold">Logs do Fluxo de Caixa (Histórico Completo)</h4>
+                  <h4 className="text-sm tracking-wide text-foreground font-semibold">Logs do Fluxo de Caixa (Histórico Completo)</h4>
                   <button
                     type="button"
                     onClick={() => setIsCategoryModalOpen(true)}
-                    className="text-muted-foreground hover:text-primary hover:border-primary border border-border bg-background px-3 py-1.5 rounded-sm text-xs font-mono flex items-center gap-1.5 cursor-pointer self-start sm:self-auto transition"
+                    className="text-muted-foreground hover:text-primary hover:border-primary border border-border bg-background px-3 py-1.5 rounded-sm text-xs flex items-center gap-1.5 cursor-pointer self-start sm:self-auto transition"
                   >
                     <Settings className="w-3.5 h-3.5" /> Ajustar Categorias
                   </button>
                 </div>
 
                 {/* Search Filters Row */}
-                <div className="bg-background border border-border p-4 rounded-sm grid grid-cols-1 sm:grid-cols-3 gap-4 items-end text-xs font-mono text-muted-foreground shadow-inner">
+                <div className="bg-background border border-border p-4 rounded-sm grid grid-cols-1 sm:grid-cols-3 gap-4 items-end text-xs text-muted-foreground shadow-inner">
                   <div className="space-y-1">
                     <span className="text-xs uppercase tracking-wider text-muted-foreground font-bold block">De (Data Inicial):</span>
                     <input
@@ -2337,7 +2434,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                 <div className="overflow-x-auto rounded-sm border border-border bg-card">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
-                      <tr className="bg-background border-b border-border text-muted-foreground font-semibold font-mono text-xs uppercase tracking-[0.1em]">
+                      <tr className="bg-background border-b border-border text-muted-foreground font-semibold text-xs uppercase tracking-[0.1em]">
                         <th className="p-3">Data</th>
                         <th className="p-3">Natureza</th>
                         <th className="p-3">Descrição Operacional</th>
@@ -2364,7 +2461,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                         if (currentLogs.length === 0) {
                           return (
                             <tr>
-                              <td colSpan={6} className="p-12 text-center text-muted-foreground font-mono text-xs uppercase tracking-wider">
+                              <td colSpan={6} className="p-12 text-center text-muted-foreground text-xs uppercase tracking-wider">
                                 Nenhuma movimentação financeira encontrada para os critérios de pesquisa
                               </td>
                             </tr>
@@ -2373,15 +2470,15 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
                         return currentLogs.map(f => (
                           <tr key={f.id} className={`transition duration-150 ${f.excluido ? 'opacity-30 line-through select-none bg-card/10' : 'hover:bg-accent/30'}`}>
-                            <td className="p-3 font-mono text-xs">{f.data.split('-').reverse().join('/')}</td>
+                            <td className="p-3 text-xs">{f.data.split('-').reverse().join('/')}</td>
                             <td className="p-3 flex items-center gap-2">
-                              <span className={`inline-block px-2 py-0.5 rounded-sm text-xs font-bold uppercase font-mono tracking-wider ${
+                              <span className={`inline-block px-2 py-0.5 rounded-sm text-xs font-bold uppercase tracking-wider ${
                                 f.tipo === 'entrada' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20'
                               }`}>
                                 {f.tipo === 'entrada' ? 'Entrada' : 'Despesa'}
                               </span>
                               {f.excluido && (
-                                <span className="bg-red-100 dark:bg-red-950/50 text-red-500 border border-red-200 dark:border-red-900/30 px-1.5 py-0.5 rounded-sm text-xs uppercase tracking-wider font-extrabold font-mono">
+                                <span className="bg-red-100 dark:bg-red-950/50 text-red-500 border border-red-200 dark:border-red-900/30 px-1.5 py-0.5 rounded-sm text-xs uppercase tracking-wider font-extrabold">
                                   Excluído (Histórico)
                                 </span>
                               )}
@@ -2389,9 +2486,9 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                             <td className="p-3 font-medium text-foreground">
                               {f.excluido ? `[Registro Excluído] ${f.descricao}` : f.descricao}
                             </td>
-                            <td className="p-3 text-muted-foreground font-mono text-xs">{f.categoria}</td>
-                            <td className="p-3 font-mono text-xs uppercase text-muted-foreground">{f.forma_pagamento}</td>
-                            <td className={`p-3 text-right font-bold font-mono ${
+                            <td className="p-3 text-muted-foreground text-xs">{f.categoria}</td>
+                            <td className="p-3 text-xs uppercase text-muted-foreground">{f.forma_pagamento}</td>
+                            <td className={`p-3 text-right font-bold ${
                               f.tipo === 'entrada' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
                             }`}>
                               {f.tipo === 'entrada' ? '+' : '-'}{formatBRL(f.valor)}
@@ -2420,7 +2517,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                   if (totalPages <= 1) return null;
 
                   return (
-                    <div className="flex flex-col sm:flex-row items-center justify-between border-t border-border pt-4 text-xs font-mono text-muted-foreground gap-4">
+                    <div className="flex flex-col sm:flex-row items-center justify-between border-t border-border pt-4 text-xs text-muted-foreground gap-4">
                       <div>
                         Mostrando <span className="font-bold text-muted-foreground">{indexOfFirstLog + 1}</span> a{' '}
                         <span className="font-bold text-muted-foreground">{Math.min(indexOfLastLog, totalLogs)}</span> de{' '}
@@ -2436,7 +2533,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                           &larr; Anterior
                         </button>
                         <span className="text-muted-foreground font-sans text-xs">
-                          Página <span className="font-mono font-bold text-primary">{activePage}</span> de <span className="font-mono">{totalPages}</span>
+                          Página <span className="font-bold text-primary">{activePage}</span> de <span>{totalPages}</span>
                         </span>
                         <button
                           type="button"
@@ -2460,14 +2557,14 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
           {activeTab === 'configuracoes' && configuracoes && (
             <div className="space-y-8">
               <div>
-                <h2 className="font-serif font-normal text-2xl text-foreground tracking-tight italic">Configuração de Horários & Expediente</h2>
+                <h2 className="font-normal text-2xl text-foreground tracking-tight">Configuração de Horários & Expediente</h2>
                 <p className="text-muted-foreground text-xs mt-1">Ajuste expediente diário, configure horários de almoço, impeça marcações em feriados ou janelas privadas</p>
               </div>
 
                {/* Card - Definir Intervalo Padrão de Almoço */}
               <div className="p-4 bg-card border border-border rounded-sm space-y-3.5">
                 <div className="space-y-1">
-                  <h4 className="font-serif text-sm tracking-wide text-muted-foreground font-semibold flex items-center gap-2">
+                  <h4 className="text-sm tracking-wide text-foreground font-semibold flex items-center gap-2">
                     <Clock className="w-4 h-4 text-primary" /> Definir Almoço Padrão (Em Lote)
                   </h4>
                   <p className="text-muted-foreground text-xs text-left">Ajuste o intervalo de almoço padrão e aplique instantaneamente a todos os dias da semana de uma só vez:</p>
@@ -2475,30 +2572,30 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
                 <div className="flex flex-wrap items-end gap-4 text-xs">
                   <div className="space-y-1 w-28 text-left">
-                    <span className="text-xs text-muted-foreground block font-bold font-mono uppercase tracking-wider">Início Almoço:</span>
+                    <span className="text-xs text-muted-foreground block font-bold uppercase tracking-wider">Início Almoço:</span>
                     <input 
                       type="text" 
                       placeholder="Ex: 12:00"
                       value={defaultIntervalStart}
                       onChange={(e) => setDefaultIntervalStart(e.target.value)}
-                      className="bg-background border border-border p-2 px-3 rounded-sm w-full font-mono text-xs text-muted-foreground focus:border-primary focus:outline-none placeholder-stone-700"
+                      className="bg-background border border-border p-2 px-3 rounded-sm w-full text-xs text-muted-foreground focus:border-primary focus:outline-none placeholder-stone-700"
                     />
                   </div>
                   <div className="space-y-1 w-28 text-left">
-                    <span className="text-xs text-muted-foreground block font-bold font-mono uppercase tracking-wider">Fim Almoço:</span>
+                    <span className="text-xs text-muted-foreground block font-bold uppercase tracking-wider">Fim Almoço:</span>
                     <input 
                       type="text" 
                       placeholder="Ex: 13:00"
                       value={defaultIntervalEnd}
                       onChange={(e) => setDefaultIntervalEnd(e.target.value)}
-                      className="bg-background border border-border p-2 px-3 rounded-sm w-full font-mono text-xs text-muted-foreground focus:border-primary focus:outline-none placeholder-stone-700"
+                      className="bg-background border border-border p-2 px-3 rounded-sm w-full text-xs text-muted-foreground focus:border-primary focus:outline-none placeholder-stone-700"
                     />
                   </div>
 
                   <button
                     type="button"
                     onClick={handleApplyDefaultInterval}
-                    className="bg-primary text-black hover:bg-primary/80 px-4 py-2.5 rounded-sm text-xs font-bold font-mono uppercase tracking-wider shadow-md transition shrink-0 cursor-pointer"
+                    className="bg-primary text-primary-foreground hover:bg-primary/80 px-4 py-2.5 rounded-sm text-xs font-bold uppercase tracking-wider shadow-md transition shrink-0 cursor-pointer"
                   >
                     Aplicar em Todos os Dias
                   </button>
@@ -2507,7 +2604,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
               {/* Expedientes grid configuration */}
               <div className="space-y-4">
-                <h4 className="font-serif text-sm tracking-wide text-muted-foreground font-semibold">Acordo de Turno Semanal (Expediente)</h4>
+                <h4 className="text-sm tracking-wide text-foreground font-semibold">Acordo de Turno Semanal (Expediente)</h4>
                 
                 <div className="grid grid-cols-1 gap-3.5">
                   {configuracoes.expedientes.map((ex) => (
@@ -2526,9 +2623,9 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                         <button
                           type="button"
                           onClick={() => handleUpdateExpediente(ex.id, { ativo: !ex.ativo })}
-                          className={`mt-1.5 p-1 px-2.5 rounded-sm text-xs font-bold font-mono uppercase tracking-wider border transition ${
+                          className={`mt-1.5 p-1 px-2.5 rounded-sm text-xs font-bold uppercase tracking-wider border transition ${
                             ex.ativo 
-                              ? 'bg-primary border-primary text-black hover:bg-primary/80' 
+                              ? 'bg-primary border-primary text-primary-foreground hover:bg-primary/80' 
                               : 'bg-card border-border text-muted-foreground hover:text-muted-foreground'
                           }`}
                         >
@@ -2540,42 +2637,42 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                       {ex.ativo && (
                         <div className="flex-1 max-w-lg grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                           <div className="space-y-1">
-                            <span className="text-xs text-muted-foreground block font-bold font-mono uppercase tracking-wider">Hora Início:</span>
+                            <span className="text-xs text-muted-foreground block font-bold uppercase tracking-wider">Hora Início:</span>
                             <input 
                               type="text" 
                               defaultValue={ex.hora_inicio} 
                               onBlur={(e) => handleUpdateExpediente(ex.id, { hora_inicio: e.target.value })}
-                              className="bg-background border border-border p-1 px-2 rounded-sm w-full font-mono font-bold text-foreground focus:border-primary focus:outline-none"
+                              className="bg-background border border-border p-1 px-2 rounded-sm w-full font-bold text-foreground focus:border-primary focus:outline-none"
                             />
                           </div>
 
                           <div className="space-y-1">
-                            <span className="text-xs text-muted-foreground block font-bold font-mono uppercase tracking-wider">Hora Fim:</span>
+                            <span className="text-xs text-muted-foreground block font-bold uppercase tracking-wider">Hora Fim:</span>
                             <input 
                               type="text" 
                               defaultValue={ex.hora_fim} 
                               onBlur={(e) => handleUpdateExpediente(ex.id, { hora_fim: e.target.value })}
-                              className="bg-background border border-border p-1 px-2 rounded-sm w-full font-mono font-bold text-foreground focus:border-primary focus:outline-none"
+                              className="bg-background border border-border p-1 px-2 rounded-sm w-full font-bold text-foreground focus:border-primary focus:outline-none"
                             />
                           </div>
 
                           <div className="space-y-1">
-                            <span className="text-xs text-muted-foreground block font-bold font-mono uppercase tracking-wider">Almoço Início:</span>
+                            <span className="text-xs text-muted-foreground block font-bold uppercase tracking-wider">Almoço Início:</span>
                             <input 
                               type="text" 
                               defaultValue={ex.intervalo_inicio || ''} 
                               onBlur={(e) => handleUpdateExpediente(ex.id, { intervalo_inicio: e.target.value || null })}
-                              className="bg-background border border-border p-1 px-2 rounded-sm w-full font-mono font-bold text-foreground focus:border-primary focus:outline-none"
+                              className="bg-background border border-border p-1 px-2 rounded-sm w-full font-bold text-foreground focus:border-primary focus:outline-none"
                             />
                           </div>
 
                           <div className="space-y-1">
-                            <span className="text-xs text-muted-foreground block font-bold font-mono uppercase tracking-wider">Almoço Fim:</span>
+                            <span className="text-xs text-muted-foreground block font-bold uppercase tracking-wider">Almoço Fim:</span>
                             <input 
                               type="text" 
                               defaultValue={ex.intervalo_fim || ''} 
                               onBlur={(e) => handleUpdateExpediente(ex.id, { intervalo_fim: e.target.value || null })}
-                              className="bg-background border border-border p-1 px-2 rounded-sm w-full font-mono font-bold text-foreground focus:border-primary focus:outline-none"
+                              className="bg-background border border-border p-1 px-2 rounded-sm w-full font-bold text-foreground focus:border-primary focus:outline-none"
                             />
                           </div>
                         </div>
@@ -2592,11 +2689,11 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                   
                   {/* Block Creator Form */}
                   <div className="space-y-4">
-                    <h4 className="font-serif text-sm tracking-wide text-muted-foreground font-semibold">Novo Bloqueio de Grade</h4>
+                    <h4 className="text-sm tracking-wide text-foreground font-semibold">Novo Bloqueio de Grade</h4>
                      
                     <form onSubmit={handleSaveBlock} className="bg-card p-5 border border-border rounded-sm text-xs space-y-3.5">
                       <div className="space-y-1">
-                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono block">Qual Data de bloqueio?</label>
+                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Qual Data de bloqueio?</label>
                         <input
                           type="date"
                           required
@@ -2608,30 +2705,30 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
                       <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1">
-                          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono block">Hora Início:</label>
+                          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Hora Início:</label>
                           <input
                             type="text"
                             placeholder="Ex: 14:00"
                             value={newBlock.hora_inicio}
                             onChange={(e) => setNewBlock({ ...newBlock, hora_inicio: e.target.value })}
-                            className="w-full bg-background border border-border rounded-sm p-2 font-mono text-center text-foreground focus:border-primary"
+                            className="w-full bg-background border border-border rounded-sm p-2 text-center text-foreground focus:border-primary"
                           />
                         </div>
 
                         <div className="space-y-1">
-                          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono block">Hora Fim:</label>
+                          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Hora Fim:</label>
                           <input
                             type="text"
                             placeholder="Ex: 17:00"
                             value={newBlock.hora_fim}
                             onChange={(e) => setNewBlock({ ...newBlock, hora_fim: e.target.value })}
-                            className="w-full bg-background border border-border rounded-sm p-2 font-mono text-center text-foreground focus:border-primary"
+                            className="w-full bg-background border border-border rounded-sm p-2 text-center text-foreground focus:border-primary"
                           />
                         </div>
                       </div>
 
                       <div className="space-y-1">
-                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground font-mono block">Motivo do bloqueio:</label>
+                        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">Motivo do bloqueio:</label>
                         <input
                           type="text"
                           required
@@ -2646,7 +2743,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                         <button
                           type="submit"
                           disabled={submitting}
-                          className="w-full bg-primary border border-primary text-black font-semibold font-mono uppercase tracking-wider py-2.5 rounded-sm transition font-bold text-xs cursor-pointer"
+                          className="w-full bg-primary border border-primary text-black font-semibold uppercase tracking-wider py-2.5 rounded-sm transition font-bold text-xs cursor-pointer"
                         >
                           Confirmar Bloqueio
                         </button>
@@ -2656,18 +2753,18 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
                   {/* Block list active details */}
                   <div className="space-y-4">
-                    <h4 className="font-serif text-sm tracking-wide text-muted-foreground font-semibold">Bloqueios Cadastrados</h4>
+                    <h4 className="text-sm tracking-wide text-foreground font-semibold">Bloqueios Cadastrados</h4>
                     
                     {configuracoes.bloqueios.length === 0 ? (
                       <div className="p-8 text-center bg-card rounded-sm border border-border">
-                        <p className="text-muted-foreground font-mono uppercase tracking-wider text-xs">Nenhum bloqueio programado na agenda.</p>
+                        <p className="text-muted-foreground uppercase tracking-wider text-xs">Nenhum bloqueio programado na agenda.</p>
                       </div>
                     ) : (
                       <div className="space-y-2 max-h-[350px] overflow-y-auto pr-1">
                         {configuracoes.bloqueios.map(b => (
                           <div key={b.id} className="p-3 border border-border rounded-sm bg-card flex justify-between items-center gap-3">
                             <div>
-                              <p className="font-bold text-foreground text-xs font-mono">
+                              <p className="font-bold text-foreground text-xs">
                                 {b.data.split('-').reverse().join('/')} {b.hora_inicio && b.hora_fim ? `• ${b.hora_inicio}h às ${b.hora_fim}h` : '• Integral'}
                               </p>
                               <p className="text-primary font-medium text-[10.5px] mt-0.5">Motivo: {b.motivo}</p>
@@ -2699,9 +2796,9 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
       {editingFinanceId && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-card border border-border p-6 rounded-md w-full max-w-md shadow-2xl relative space-y-4">
-            <h3 className="font-serif text-lg tracking-wide text-primary font-bold">Editar Movimentação Financeira</h3>
+            <h3 className="text-lg tracking-wide text-primary font-bold">Editar Movimentação Financeira</h3>
             
-            <form onSubmit={handleSaveEditFinance} className="space-y-4 font-mono text-xs">
+            <form onSubmit={handleSaveEditFinance} className="space-y-4 text-xs">
               <div className="space-y-1">
                 <label className="text-muted-foreground block">Tipo</label>
                 <select
@@ -2791,7 +2888,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-4 py-2 bg-primary text-black font-bold rounded-sm hover:bg-primary/80 transition disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-2 bg-primary text-primary-foreground font-bold rounded-sm hover:bg-primary/80 transition disabled:opacity-50 cursor-pointer"
                 >
                   {submitting ? 'Salvando...' : 'Salvar Alterações'}
                 </button>
@@ -2806,7 +2903,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
         <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[101] flex items-center justify-center p-4">
           <div className="bg-card border border-border p-6 rounded-md w-full max-w-lg shadow-2xl relative space-y-5 animate-fade-in text-foreground">
             <div className="flex justify-between items-center border-b border-border pb-3">
-              <h3 className="font-serif text-lg tracking-wide text-primary font-bold">Ajustes de Categorias Financeiras</h3>
+              <h3 className="text-lg tracking-wide text-primary font-bold">Ajustes de Categorias Financeiras</h3>
               <button
                 type="button"
                 onClick={() => setIsCategoryModalOpen(false)}
@@ -2818,10 +2915,10 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
             {/* Form to create/add a category */}
             <form onSubmit={handleCreateCategory} className="bg-background p-4 border border-border rounded-sm space-y-3">
-              <h4 className="font-mono text-xs font-bold uppercase tracking-wider text-muted-foreground">Nova Categoria</h4>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">Nova Categoria</h4>
               <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
                 <div className="sm:col-span-6 space-y-1">
-                  <span className="text-xs text-muted-foreground block font-mono">Nome da Categoria:</span>
+                  <span className="text-xs text-muted-foreground block">Nome da Categoria:</span>
                   <input
                     type="text"
                     required
@@ -2832,7 +2929,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                   />
                 </div>
                 <div className="sm:col-span-4 space-y-1">
-                  <span className="text-xs text-muted-foreground block font-mono">Natureza:</span>
+                  <span className="text-xs text-muted-foreground block">Natureza:</span>
                   <select
                     value={newCategoryType}
                     onChange={(e) => setNewCategoryType(e.target.value as any)}
@@ -2855,9 +2952,9 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
             </form>
 
             <div className="space-y-2">
-              <h4 className="font-mono text-xs font-bold uppercase tracking-wider text-muted-foreground">Categorias Cadastradas</h4>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">Categorias Cadastradas</h4>
               
-              <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1 font-mono text-xs">
+              <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1 text-xs">
                 {categoriasFinanceiras.map(c => (
                   <div key={c.id} className="p-2 border border-border bg-card rounded-sm flex items-center justify-between gap-3">
                     {editingCategoryId === c.id ? (
@@ -2958,8 +3055,8 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                     <Sparkles className="w-4 h-4 text-primary" />
                   </div>
                   <div>
-                    <h3 className="font-serif  font-normal text-base text-foreground tracking-wide">Status da Assinatura</h3>
-                    <p className="text-xs text-muted-foreground font-mono uppercase tracking-wider -mt-0.5">Plano Ativo: Profissional 30 Dias</p>
+                    <h3 className="font-normal text-base text-foreground tracking-wide">Status da Assinatura</h3>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider -mt-0.5">Plano Ativo: Profissional 30 Dias</p>
                   </div>
                 </div>
                 <button
@@ -2976,8 +3073,8 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                 {/* Giant Progress representation */}
                 <div className="bg-black/60 border border-border p-4 rounded-sm space-y-3">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-mono font-medium text-muted-foreground">Tempo Decorrido</span>
-                    <span className="text-sm font-mono font-bold text-primary">{planStats.elapsedDays} de {planStats.totalDays} dias</span>
+                    <span className="text-xs font-medium text-muted-foreground">Tempo Decorrido</span>
+                    <span className="text-sm font-bold text-primary">{planStats.elapsedDays} de {planStats.totalDays} dias</span>
                   </div>
 
                   {/* Main Progress Bar */}
@@ -2988,14 +3085,14 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                     />
                   </div>
 
-                  <div className="flex justify-between items-center text-xs font-mono text-muted-foreground">
+                  <div className="flex justify-between items-center text-xs text-muted-foreground">
                     <span>Início do Ciclo: {planStats.cycleStart}</span>
                     <span>Próximo Fechamento: {planStats.cycleEnd}</span>
                   </div>
                 </div>
 
                 {/* Progress Detail Info */}
-                <div className="grid grid-cols-2 gap-3 font-mono">
+                <div className="grid grid-cols-2 gap-3">
                   <div className="bg-black/40 border border-border/60 p-3 rounded-sm space-y-1">
                     <span className="text-xs uppercase text-muted-foreground font-bold block">Uso Consumido</span>
                     <span className="text-base font-bold text-primary">{planStats.percent}%</span>
@@ -3010,7 +3107,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                 </div>
 
                 {/* Feature checklist */}
-                <div className="space-y-2.5 font-mono text-xs text-muted-foreground border-t border-border pt-5">
+                <div className="space-y-2.5 text-xs text-muted-foreground border-t border-border pt-5">
                   <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider block mb-1">Recursos Ativos no seu Plano</span>
                   
                   <div className="flex items-center gap-2">
@@ -3040,7 +3137,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                 <button
                   type="button"
                   onClick={() => setIsPlanModalOpen(false)}
-                  className="px-4 py-2 bg-card hover:bg-accent border border-border hover:border-primary/40 text-muted-foreground rounded-sm text-xs font-bold transition font-mono uppercase tracking-wider cursor-pointer font-sans"
+                  className="px-4 py-2 bg-card hover:bg-accent border border-border hover:border-primary/40 text-muted-foreground rounded-sm text-xs font-bold transition uppercase tracking-wider cursor-pointer font-sans"
                 >
                   Voltar ao Painel
                 </button>

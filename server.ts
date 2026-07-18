@@ -11,15 +11,15 @@ import {
   calculateAvailableSlots,
   calculateAllSlotsWithAvailability
 } from './server/database.ts';
-import { 
-  Agendamento, 
-  Cliente, 
-  Produto, 
-  Servico, 
-  Bloqueio, 
+import {
+  Agendamento,
+  Cliente,
+  Produto,
+  Servico,
+  Bloqueio,
   Expediente,
   LancamentoFinanceiro,
-  DashboardStats 
+  DashboardStats
 } from './src/types.ts';
 import { attachUser, requireAdmin, AuthRequest } from './server/auth.ts';
 import { isSupabaseConfigured, serviceClient, anonClient, setSupabaseOffline } from './server/supabase.ts';
@@ -443,7 +443,7 @@ async function startServer() {
     try {
       const { start_date, end_date, is_today } = req.query as { start_date?: string; end_date?: string; is_today?: string };
 
-      if (isSupabaseConfigured && req.barbeiroId) {
+      if (isSupabaseConfigured() && req.barbeiroId) {
         const stats = await storage.getDashboardStats(
           req.barbeiroId,
           start_date,
@@ -758,7 +758,6 @@ async function startServer() {
     }
   });
 
-
   // 4. PRODUCTS CRUD (Prevent actual deleting, just flip active flag / deativar)
   app.get('/api/admin/produtos', requireAdmin, (req, res) => {
     const db = loadDB();
@@ -901,13 +900,22 @@ async function startServer() {
 
 
   // 6. FINANCE CRUD
-  app.get('/api/admin/financeiro', requireAdmin, (req, res) => {
-    const db = loadDB();
-    // Return sorted by date decending
-    res.json(db.lancamentos_financeiros.sort((a,b) => b.data.localeCompare(a.data)));
+  app.get('/api/admin/financeiro', requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        const list = await storage.listLancamentos(req.barbeiroId);
+        if (list) return res.json(list);
+      }
+      const db = loadDB();
+      // Return sorted by date decending
+      res.json(db.lancamentos_financeiros.sort((a,b) => b.data.localeCompare(a.data)));
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'Erro ao carregar lançamentos.' });
+    }
   });
 
-  app.post('/api/admin/financeiro', requireAdmin, validate(schemas.createLancamento), (req, res) => {
+  app.post('/api/admin/financeiro', requireAdmin, validate(schemas.createLancamento), async (req: AuthRequest, res) => {
     try {
       let { tipo, descricao, valor, categoria, forma_pagamento, data, produto_id } = req.body;
       if (!tipo || !valor || !forma_pagamento || !data) {
@@ -920,6 +928,13 @@ async function startServer() {
 
       if (Number(valor) < 0) {
         return res.status(400).json({ error: 'O valor do lançamento deve ser positivo. O tipo (entrada/saida) ditará a operação.' });
+      }
+
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        const novo = await storage.createLancamento(req.barbeiroId, {
+          tipo, descricao, valor: Number(valor), categoria, forma_pagamento, data, produto_id
+        });
+        if (novo) return res.status(201).json(novo);
       }
 
       const db = loadDB();
@@ -957,9 +972,15 @@ async function startServer() {
   });
 
   // Soft-delete/Exclude financial transaction
-  app.delete('/api/admin/financeiro/:id', requireAdmin, (req, res) => {
+  app.delete('/api/admin/financeiro/:id', requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
+
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        const item = await storage.excluirLancamento(req.barbeiroId, id);
+        if (item) return res.json({ success: true, message: 'Lançamento marcado como excluído.', item });
+      }
+
       const db = loadDB();
       const index = db.lancamentos_financeiros.findIndex(l => l.id === id);
       if (index === -1) {
@@ -976,10 +997,18 @@ async function startServer() {
   });
 
   // Update financial transaction
-  app.patch('/api/admin/financeiro/:id', requireAdmin, validate(schemas.patchLancamento), (req, res) => {
+  app.patch('/api/admin/financeiro/:id', requireAdmin, validate(schemas.patchLancamento), async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
       const { tipo, descricao, valor, categoria, forma_pagamento, data } = req.body;
+
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        const item = await storage.patchLancamento(req.barbeiroId, id, {
+          tipo, descricao, valor: valor !== undefined ? Number(valor) : undefined, categoria, forma_pagamento, data
+        });
+        if (item) return res.json(item);
+      }
+
       const db = loadDB();
       const index = db.lancamentos_financeiros.findIndex(l => l.id === id);
       if (index === -1) {

@@ -466,6 +466,100 @@ export async function upsertClientProfile(input: {
   }
 }
 
+// ---------- FINANCEIRO (Fluxo de Caixa) ----------
+export async function listLancamentos(barbeiroId: string): Promise<LancamentoFinanceiro[] | null> {
+  const client = sb();
+  if (!client) return null;
+  const { data, error } = await client.from('lancamentos_financeiros').select('*')
+    .eq('barbeiro_id', barbeiroId).eq('excluido', false)
+    .order('data', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as LancamentoFinanceiro[];
+}
+
+export async function createLancamento(barbeiroId: string, input: {
+  tipo: 'entrada' | 'saida';
+  descricao?: string;
+  valor: number;
+  categoria?: string;
+  forma_pagamento: 'dinheiro' | 'pix' | 'cartao' | 'outro';
+  data: string;
+  produto_id?: string | null;
+}): Promise<LancamentoFinanceiro | null> {
+  const client = sb();
+  if (!client) return null;
+
+  const descricao = input.descricao?.trim() || (input.tipo === 'entrada' ? 'entrada' : 'saída');
+
+  const { data, error } = await client.from('lancamentos_financeiros').insert({
+    barbeiro_id: barbeiroId,
+    tipo: input.tipo,
+    descricao,
+    valor: input.valor,
+    categoria: input.categoria || 'Serviços',
+    forma_pagamento: input.forma_pagamento,
+    agendamento_id: null,
+    produto_id: input.produto_id || null,
+    data: input.data
+  }).select('*').single();
+  if (error) throw error;
+
+  // Venda manual de produto: baixa 1 unidade do estoque
+  if (input.tipo === 'entrada' && input.produto_id) {
+    const { data: prod } = await client.from('produtos').select('estoque').eq('id', input.produto_id).maybeSingle();
+    if (prod && prod.estoque > 0) {
+      await client.from('produtos').update({ estoque: prod.estoque - 1 }).eq('id', input.produto_id);
+    }
+  }
+
+  return data as LancamentoFinanceiro;
+}
+
+export async function excluirLancamento(barbeiroId: string, id: string): Promise<LancamentoFinanceiro | null> {
+  const client = sb();
+  if (!client) return null;
+  const { data, error } = await client.from('lancamentos_financeiros')
+    .update({ excluido: true, updated_at: new Date().toISOString() })
+    .eq('id', id).eq('barbeiro_id', barbeiroId)
+    .select('*').single();
+  if (error || !data) return null;
+  return data as LancamentoFinanceiro;
+}
+
+export async function patchLancamento(barbeiroId: string, id: string, patch: {
+  tipo?: 'entrada' | 'saida';
+  descricao?: string;
+  valor?: number;
+  categoria?: string;
+  forma_pagamento?: 'dinheiro' | 'pix' | 'cartao' | 'outro';
+  data?: string;
+}): Promise<LancamentoFinanceiro | null> {
+  const client = sb();
+  if (!client) return null;
+
+  const { data: existing, error: findErr } = await client.from('lancamentos_financeiros')
+    .select('*').eq('id', id).eq('barbeiro_id', barbeiroId).maybeSingle();
+  if (findErr) throw findErr;
+  if (!existing) return null;
+
+  const updatePayload: any = { updated_at: new Date().toISOString() };
+  if (patch.tipo !== undefined) updatePayload.tipo = patch.tipo;
+  if (patch.descricao !== undefined) {
+    const tipo = patch.tipo ?? existing.tipo;
+    updatePayload.descricao = patch.descricao.trim() || (tipo === 'entrada' ? 'entrada' : 'saída');
+  }
+  if (patch.valor !== undefined) updatePayload.valor = patch.valor;
+  if (patch.categoria !== undefined) updatePayload.categoria = patch.categoria;
+  if (patch.forma_pagamento !== undefined) updatePayload.forma_pagamento = patch.forma_pagamento;
+  if (patch.data !== undefined) updatePayload.data = patch.data;
+
+  const { data, error } = await client.from('lancamentos_financeiros')
+    .update(updatePayload).eq('id', id)
+    .select('*').single();
+  if (error || !data) return null;
+  return data as LancamentoFinanceiro;
+}
+
 // ---------- DASHBOARD ----------
 export async function getDashboardStats(
   barbeiroId: string,

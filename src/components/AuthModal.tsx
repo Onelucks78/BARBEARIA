@@ -101,7 +101,7 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
               <Lock className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-serif font-bold text-sm tracking-wide text-foreground">Escritório do Barbeiro</h3>
+              <h3 className="font-bold text-sm tracking-wide text-foreground">Escritório do Barbeiro</h3>
               <p className="text-[10px] text-muted-foreground">Entrada autorizada apenas para profissionais.</p>
             </div>
           </div>
@@ -139,7 +139,7 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
                 type="button"
                 onClick={handleGoogleLogin}
                 disabled={loading || googleLoading}
-                className="w-full py-3 bg-white text-black hover:bg-stone-200 disabled:opacity-50 text-[11px] font-bold uppercase tracking-widest rounded-sm transition duration-150 cursor-pointer flex items-center justify-center font-mono shadow-lg"
+                className="w-full py-3 bg-white text-black hover:bg-stone-200 disabled:opacity-50 text-[11px] font-bold uppercase tracking-widest rounded-sm transition duration-150 cursor-pointer flex items-center justify-center shadow-lg"
               >
                 {googleLoading ? (
                   <span className="text-stone-600">Conectando...</span>
@@ -159,7 +159,7 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
               <button
                 type="button"
                 onClick={() => setShowEmailForm(true)}
-                className="w-full py-3 bg-transparent border border-primary text-primary hover:bg-primary/10 text-[11px] font-bold uppercase tracking-widest rounded-sm transition duration-150 cursor-pointer flex items-center justify-center font-mono"
+                className="w-full py-3 bg-transparent border border-primary text-primary hover:bg-primary/10 text-[11px] font-bold uppercase tracking-widest rounded-sm transition duration-150 cursor-pointer flex items-center justify-center"
               >
                 Entrar com E-mail e Senha
               </button>
@@ -171,7 +171,7 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
                     localStorage.setItem('mock_admin_session', 'true');
                     window.location.reload();
                   }}
-                  className="w-full mt-4 py-3 bg-gradient-to-r from-primary to-primary/80 hover:brightness-110 text-primary-foreground text-[10px] font-black uppercase tracking-widest rounded-md transition duration-150 cursor-pointer text-center font-mono shadow-md hover:scale-[1.02] active:scale-[0.98]"
+                  className="w-full mt-4 py-3 bg-gradient-to-r from-primary to-primary/80 hover:brightness-110 text-primary-foreground text-[10px] font-black uppercase tracking-widest rounded-md transition duration-150 cursor-pointer text-center shadow-md hover:scale-[1.02] active:scale-[0.98]"
                 >
                   ⚠️ Entrar no Modo de Teste Offline
                 </button>
@@ -182,13 +182,13 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
               <button
                 type="button"
                 onClick={() => setShowEmailForm(false)}
-                className="text-primary hover:text-primary/80 text-[11px] font-bold uppercase tracking-wider font-mono flex items-center gap-1 pb-2"
+                className="text-primary hover:text-primary/80 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1 pb-2"
               >
                 ◀ Voltar
               </button>
               <form onSubmit={handleAdminEmailLogin} className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground font-mono block">E-mail Administrativo:</label>
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground block">E-mail Administrativo:</label>
                   <div className="relative">
                     <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-primary/70" />
                     <input
@@ -204,7 +204,7 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
 
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground font-mono block">Senha Secreta:</label>
+                    <label className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground block">Senha Secreta:</label>
                   </div>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-primary/70" />
@@ -213,7 +213,7 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Sua senha secreta"
-                      className="w-full pl-10 pr-10 py-3 bg-background border border-input rounded-sm text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 font-mono"
+                      className="w-full pl-10 pr-10 py-3 bg-background border border-input rounded-sm text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                     />
                     <button
                       type="button"
@@ -228,7 +228,7 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
                     <a
                       href="#esqueceu-senha"
                       onClick={handleForgotPassword}
-                      className="text-[10px] font-mono text-primary hover:text-primary/80 transition-colors hover:underline"
+                      className="text-[10px] text-primary hover:text-primary/80 transition-colors hover:underline"
                     >
                       Esqueceu sua senha?
                     </a>
@@ -249,7 +249,7 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
           )}
 
           <div className="pt-3 border-t border-border text-center">
-            <p className="text-[10px] text-muted-foreground font-mono">
+            <p className="text-[10px] text-muted-foreground">
               Login via Supabase Auth · Google OAuth + E-mail/Senha
             </p>
           </div>
