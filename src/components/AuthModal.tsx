@@ -93,22 +93,22 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
-        className="relative bg-[#161616] border border-stone-800 rounded-sm w-full max-w-md shadow-2xl overflow-hidden z-10"
+        className="relative bg-card border border-border rounded-sm w-full max-w-md shadow-2xl overflow-hidden z-10"
       >
-        <div className="p-6 bg-[#0d0d0d] text-stone-200 flex items-center justify-between border-b border-stone-800">
+        <div className="p-6 bg-sidebar text-foreground flex items-center justify-between border-b border-border">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-sm bg-[#c5a059]/10 border border-[#c5a059]/20 flex items-center justify-center text-[#c5a059]">
+            <div className="w-8 h-8 rounded-sm bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
               <Lock className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-serif font-bold text-sm tracking-wide text-white">Escritório do Barbeiro</h3>
-              <p className="text-[10px] text-stone-500">Entrada autorizada apenas para profissionais.</p>
+              <h3 className="font-serif font-bold text-sm tracking-wide text-foreground">Escritório do Barbeiro</h3>
+              <p className="text-[10px] text-muted-foreground">Entrada autorizada apenas para profissionais.</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-stone-500 hover:text-stone-200 p-1 rounded-sm hover:bg-stone-900 transition"
+            className="text-muted-foreground hover:text-foreground p-1 rounded-sm hover:bg-accent transition"
           >
             <X className="w-4.5 h-4.5" />
           </button>
@@ -125,10 +125,10 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
           )}
 
           {errorMsg && (
-            <div className="p-3.5 bg-red-950/40 border border-red-900 text-red-400 rounded-sm text-xs flex gap-2 items-start leading-relaxed animate-shake">
-              <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
+            <div className="p-3.5 bg-destructive/10 border border-destructive/40 text-destructive rounded-sm text-xs flex gap-2 items-start leading-relaxed animate-shake">
+              <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5 text-destructive" />
               <div>
-                <span className="font-bold uppercase text-[9px] tracking-wider bg-red-900/30 px-1 py-0.5 mr-1 rounded-sm">Aviso:</span> {errorMsg}
+                <span className="font-bold uppercase text-[9px] tracking-wider bg-destructive/20 px-1 py-0.5 mr-1 rounded-sm">Aviso:</span> {errorMsg}
               </div>
             </div>
           )}
@@ -159,11 +159,11 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
               <button
                 type="button"
                 onClick={() => setShowEmailForm(true)}
-                className="w-full py-3 bg-transparent border border-[#c5a059] text-[#c5a059] hover:bg-[#c5a059]/10 text-[11px] font-bold uppercase tracking-widest rounded-sm transition duration-150 cursor-pointer flex items-center justify-center font-mono"
+                className="w-full py-3 bg-transparent border border-primary text-primary hover:bg-primary/10 text-[11px] font-bold uppercase tracking-widest rounded-sm transition duration-150 cursor-pointer flex items-center justify-center font-mono"
               >
                 Entrar com E-mail e Senha
               </button>
-              
+
               {localStorage.getItem('supabase_offline') === 'true' && (
                 <button
                   type="button"
@@ -171,7 +171,7 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
                     localStorage.setItem('mock_admin_session', 'true');
                     window.location.reload();
                   }}
-                  className="w-full mt-4 py-3 bg-gradient-to-r from-[#c5a059] to-[#b38e46] hover:from-[#d6b472] hover:to-[#c5a059] text-black text-[10px] font-black uppercase tracking-widest rounded-md transition duration-150 cursor-pointer text-center font-mono shadow-md hover:scale-[1.02] active:scale-[0.98]"
+                  className="w-full mt-4 py-3 bg-gradient-to-r from-primary to-primary/80 hover:brightness-110 text-primary-foreground text-[10px] font-black uppercase tracking-widest rounded-md transition duration-150 cursor-pointer text-center font-mono shadow-md hover:scale-[1.02] active:scale-[0.98]"
                 >
                   ⚠️ Entrar no Modo de Teste Offline
                 </button>
@@ -179,46 +179,46 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
             </div>
           ) : (
             <div className="space-y-4">
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setShowEmailForm(false)}
-                className="text-[#c5a059] hover:text-[#d6b472] text-[11px] font-bold uppercase tracking-wider font-mono flex items-center gap-1 pb-2"
+                className="text-primary hover:text-primary/80 text-[11px] font-bold uppercase tracking-wider font-mono flex items-center gap-1 pb-2"
               >
                 ◀ Voltar
               </button>
               <form onSubmit={handleAdminEmailLogin} className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-wider font-bold text-stone-500 font-mono block">E-mail Administrativo:</label>
+                  <label className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground font-mono block">E-mail Administrativo:</label>
                   <div className="relative">
-                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#c5a059]/70" />
+                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-primary/70" />
                     <input
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="barbeiro@imperial.com"
                       required
-                      className="w-full pl-10 pr-4 py-3 bg-stone-950 border border-stone-850 rounded-sm text-xs text-stone-100 placeholder:text-stone-700 focus:outline-none focus:border-[#c5a059] focus:ring-1 focus:ring-[#c5a059]/20"
+                      className="w-full pl-10 pr-4 py-3 bg-background border border-input rounded-sm text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <label className="text-[10px] uppercase tracking-wider font-bold text-stone-500 font-mono block">Senha Secreta:</label>
+                    <label className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground font-mono block">Senha Secreta:</label>
                   </div>
                   <div className="relative">
-                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#c5a059]/70" />
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-primary/70" />
                     <input
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Sua senha secreta"
-                      className="w-full pl-10 pr-10 py-3 bg-stone-950 border border-stone-850 rounded-sm text-xs text-stone-100 placeholder:text-stone-700 focus:outline-none focus:border-[#c5a059] focus:ring-1 focus:ring-[#c5a059]/20 font-mono"
+                      className="w-full pl-10 pr-10 py-3 bg-background border border-input rounded-sm text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 font-mono"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-500 hover:text-stone-300"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                     >
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -228,7 +228,7 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
                     <a
                       href="#esqueceu-senha"
                       onClick={handleForgotPassword}
-                      className="text-[10px] font-mono text-[#c5a059] hover:text-[#d6b472] transition-colors hover:underline"
+                      className="text-[10px] font-mono text-primary hover:text-primary/80 transition-colors hover:underline"
                     >
                       Esqueceu sua senha?
                     </a>
@@ -239,7 +239,7 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
                   <button
                     type="submit"
                     disabled={loading || googleLoading}
-                    className="w-full py-3 bg-[#c5a059] hover:bg-[#d6b472] disabled:opacity-50 text-black text-[10px] font-bold uppercase tracking-widest rounded-sm transition duration-150 cursor-pointer text-center"
+                    className="w-full py-3 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground text-[10px] font-bold uppercase tracking-widest rounded-sm transition duration-150 cursor-pointer text-center"
                   >
                     {loading ? 'Acessando credenciais...' : 'Entrar no Escritório'}
                   </button>
@@ -248,8 +248,8 @@ export default function AuthModal({ onClose, onLoginSuccess }: AuthModalProps) {
             </div>
           )}
 
-          <div className="pt-3 border-t border-stone-900 text-center">
-            <p className="text-[10px] text-stone-600 font-mono">
+          <div className="pt-3 border-t border-border text-center">
+            <p className="text-[10px] text-muted-foreground font-mono">
               Login via Supabase Auth · Google OAuth + E-mail/Senha
             </p>
           </div>

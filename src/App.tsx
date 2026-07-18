@@ -128,13 +128,13 @@ export default function App() {
 
   if (loading || adminSession.loading) {
     return (
-      <div className="min-h-screen bg-[#0c0a09] flex flex-col items-center justify-center text-white/95 space-y-4">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center text-white/95 space-y-4">
         <div className="w-12 h-12 bg-amber-600 rounded-2xl flex items-center justify-center text-white border border-amber-500/20 animate-spin">
           <Scissors className="w-6 h-6" />
         </div>
         <div className="text-center space-y-1">
           <h2 className="font-display font-black text-xl tracking-tight uppercase text-white">Detalhe Barbearia</h2>
-          <p className="text-[11px] font-mono text-stone-500 uppercase tracking-wider">Carregando poltronas e navalhas...</p>
+          <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Carregando poltronas e navalhas...</p>
         </div>
       </div>
     );
