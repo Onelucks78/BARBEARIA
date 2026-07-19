@@ -22,12 +22,19 @@ import {
   Camera,
   Check,
   Calendar,
-  Upload
+  Upload,
+  Crown
 } from 'lucide-react';
 import { Servico, Produto } from '../types.ts';
 import BookingWizard from './BookingWizard.tsx';
 import { signInWithGoogle } from '../lib/useAdminSession.ts';
 import { ThemeToggle } from './ThemeToggle.tsx';
+import { Button } from '@/components/ui/button.tsx';
+import { Input } from '@/components/ui/input.tsx';
+import { Label } from '@/components/ui/label.tsx';
+import { Badge } from '@/components/ui/badge.tsx';
+import { Card } from '@/components/ui/card.tsx';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog.tsx';
 
 interface VisitorLayoutProps {
   services: Servico[];
@@ -55,6 +62,10 @@ export default function VisitorLayout({
 }: VisitorLayoutProps) {
   const [showProfilePop, setShowProfilePop] = React.useState(false);
   const [showBookingsModal, setShowBookingsModal] = React.useState(false);
+
+  // Booking popup modal state
+  const [showBookingPopup, setShowBookingPopup] = React.useState(false);
+  const [preselectedService, setPreselectedService] = React.useState<Servico | null>(null);
   
   // Tabs for user profile popover
   const [activeProfileTab, setActiveProfileTab] = React.useState<'perfil' | 'agendamentos'>('perfil');
@@ -63,6 +74,17 @@ export default function VisitorLayout({
   
   // Drag and drop states for photo upload
   const [isDragging, setIsDragging] = React.useState(false);
+
+  // Register global service selector for direct service card clicks
+  React.useEffect(() => {
+    (window as any).selectBarberService = (s: Servico) => {
+      setPreselectedService(s);
+      setShowBookingPopup(true);
+    };
+    return () => {
+      delete (window as any).selectBarberService;
+    };
+  }, []);
 
   const [isGoogleLoading, setIsGoogleLoading] = React.useState(false);
 
@@ -297,7 +319,7 @@ export default function VisitorLayout({
       </div>
 
       <div className="sm:text-right w-full sm:w-auto pt-4 sm:pt-0 border-t sm:border-t-0 border-border flex sm:flex-col items-center sm:items-end justify-between gap-3 shrink-0">
-        <span className="font-semibold text-primary text-2xl text-gold-glow">
+        <span className="font-semibold text-foreground text-2xl">
           {formatBRL(s.preco)}
         </span>
         <a 
@@ -351,12 +373,9 @@ export default function VisitorLayout({
           <div className="flex items-center gap-2.5 md:gap-4 relative shrink-0">
             <ThemeToggle className="hidden sm:inline-flex" />
 
-            <a
-              href="#agendar-sessao"
-              className="hidden md:inline-flex bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-primary-foreground text-xs tracking-widest uppercase font-black px-5.5 py-3 rounded-md transition-all duration-300 shadow-lg shadow-primary/10 hover:shadow-primary/20 hover:scale-105 active:scale-95 shrink-0"
-            >
+            <Button onClick={() => { setPreselectedService(null); setShowBookingPopup(true); }} className="hidden md:inline-flex">
               Agende Já
-            </a>
+            </Button>
 
             {/* Profile configuration popover (bolinha simples) */}
             <div className="relative shrink-0">
@@ -520,8 +539,8 @@ export default function VisitorLayout({
       </header>
 
       {/* Hero Banner Section */}
-      <section className="relative bg-zinc-950 text-muted-foreground overflow-hidden py-24 sm:py-32">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(197,160,89,0.08),transparent_55%)] animate-pulse-slow" />
+      <section className="relative overflow-hidden py-24 sm:py-32 text-muted-foreground bg-gradient-to-b from-[#f7f2e8] via-[#faf8f4] to-background dark:from-zinc-950 dark:via-zinc-950 dark:to-zinc-950">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(197,160,89,0.10),transparent_55%)] dark:bg-[radial-gradient(circle_at_30%_30%,rgba(197,160,89,0.08),transparent_55%)] animate-pulse-slow pointer-events-none" />
         
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center relative z-10">
           <div className="lg:col-span-7 space-y-6 text-left animate-fade-in">
@@ -529,27 +548,28 @@ export default function VisitorLayout({
               <Flame className="w-3.5 h-3.5 text-primary" /> Estilo Premium, Navalha & Tradição
             </div>
             
-            <h1 className="font-normal text-4xl sm:text-5xl lg:text-6.5xl tracking-wide leading-[1.1] text-white">
+            <h1 className="font-normal text-4xl sm:text-5xl lg:text-7xl tracking-tight leading-[1.05] text-foreground">
               Corte Perfeito <br />
-              <span className="text-primary not-text-gold-glow">Sem Cadastro</span> e Sem Burocracia
+              <span className="text-primary">Sem Cadastro</span> e Sem Burocracia
             </h1>
             
             <p className="text-muted-foreground text-sm sm:text-base leading-relaxed max-w-lg font-sans font-light">
-              Bem-vindo à <strong className="text-foreground not-font-bold">Detalhe Barbearia</strong>. Conforto de alto nível, massagem capilar, toalha quente aromática e café premium inclusos. Seu horário assegurado em menos de 1 minuto!
+              Bem-vindo à <strong className="text-foreground">Detalhe Barbearia</strong>. Conforto de alto nível, massagem capilar, toalha quente aromática e café premium inclusos. Seu horário assegurado em menos de 1 minuto!
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 pt-4">
-              <a 
-                href="#agendar-sessao"
+              <button
+                type="button"
+                onClick={() => { setPreselectedService(null); setShowBookingPopup(true); }}
                 className="bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-black text-xs uppercase tracking-[0.2em] font-black px-7 py-4.5 rounded-md text-center shadow-lg shadow-primary/10 hover:shadow-primary/20 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center gap-2.5 cursor-pointer"
               >
                 Escolher Horário Imperial <ArrowDown className="w-4 h-4 text-black animate-bounce" />
-              </a>
-              <a 
-                href="#servicos"
+              </button>
+              <a
+                href="#vip"
                 className="bg-background/60 hover:bg-card text-foreground border border-border hover:border-primary/40 text-xs uppercase tracking-[0.18em] font-bold px-7 py-4.5 rounded-md text-center transition-all duration-300 flex items-center justify-center gap-2 shadow-md hover:scale-105"
               >
-                Ver Serviços <Scissors className="w-4 h-4 text-primary" />
+                Ver Plano VIP <Sparkles className="w-4 h-4 text-primary" />
               </a>
             </div>
 
@@ -581,7 +601,7 @@ export default function VisitorLayout({
                   className="w-16 h-16 rounded-md border border-primary/40 object-cover shrink-0 shadow-md shadow-primary/5"
                 />
                 <div>
-                  <h3 className="font-bold text-lg text-white">Emerson Santiago</h3>
+                  <h3 className="font-bold text-lg text-foreground">Emerson Santiago</h3>
                   <p className="text-primary text-xs">Dono & Master Barber</p>
                   <p className="text-xs text-muted-foreground mt-0.5">12 anos de experiência</p>
                 </div>
@@ -594,30 +614,96 @@ export default function VisitorLayout({
         </div>
       </section>
 
-      {/* Booking Section - full width blue background */}
-      <section id="agendar-sessao-section" className="relative bg-zinc-950 py-16 sm:py-20 scroll-mt-20">
+      {/* Booking Section - full width blue background with popup trigger */}
+      <section id="agendar-sessao-section" className="relative bg-background py-16 sm:py-20 scroll-mt-20">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_50%,rgba(59,130,246,0.07),transparent_65%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_80%_20%,rgba(197,160,89,0.04),transparent_50%)]" />
         <div className="max-w-7xl mx-auto px-2.5 xs:px-4 sm:px-6 lg:px-8 relative z-10 space-y-6">
           <div className="text-center max-w-2xl mx-auto space-y-3 mb-8">
-            <h2 className="font-normal text-3xl sm:text-4xl text-white tracking-tight">
+            <h2 className="font-normal text-3xl sm:text-4xl text-foreground tracking-tight">
               Agendar Horário Online
             </h2>
-            <p className="text-blue-200/70 text-xs font-sans max-w-lg mx-auto leading-relaxed">
+            <p className="text-muted-foreground text-xs font-sans max-w-lg mx-auto leading-relaxed">
               Escolha seu serviço favorito, selecione o melhor dia e consulte os horários livres atualizados em tempo real para formalizar o atendimento.
             </p>
           </div>
           
-          <div className="max-w-5xl mx-auto">
-            <BookingWizard 
-              services={services} 
-              onBookingSuccess={() => {
-                onBookingSuccess();
-                fetchClientBookings();
-              }} 
-              loggedClient={loggedClient}
-              onClientLogin={onClientLogin}
-            />
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={() => { setPreselectedService(null); setShowBookingPopup(true); }}
+              className="bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-black text-sm uppercase tracking-[0.2em] font-black px-10 py-5 rounded-md text-center shadow-lg shadow-primary/10 hover:shadow-primary/20 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center gap-2.5 cursor-pointer mx-auto"
+            >
+              <Calendar className="w-5 h-5 text-black" /> Abrir Agendamento Online
+            </button>
+            <p className="text-muted-foreground/70 text-[10px] uppercase tracking-widest mt-3">Clique para agendar em segundos</p>
+          </div>
+        </div>
+      </section>
+
+      {/* Plano VIP — full-bleed */}
+      <section
+        id="vip"
+        className="relative scroll-mt-20 overflow-hidden bg-zinc-950 text-zinc-100 border-y border-primary/25"
+      >
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(197,160,89,0.16),transparent_55%)] pointer-events-none" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_80%_80%,rgba(197,160,89,0.08),transparent_50%)] pointer-events-none" />
+
+        <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-10">
+            <div className="space-y-5 max-w-xl">
+              <span className="inline-flex items-center gap-2 bg-primary/15 text-primary border border-primary/30 px-3.5 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.22em]">
+                <Crown className="w-3.5 h-3.5" /> VIP Imperial
+              </span>
+
+              <h2 className="font-normal text-3xl sm:text-4xl lg:text-5xl tracking-tight text-white leading-[1.1]">
+                Plano VIP com cortes, barba e sobrancelha{' '}
+                <span className="text-primary">ilimitados</span>
+              </h2>
+
+              <p className="text-zinc-400 text-sm leading-relaxed max-w-lg">
+                Assine o Plano VIP da Detalhe Barbearia e tenha atendimento recorrente sem taxas extras nos serviços elegíveis.
+              </p>
+
+              <ul className="space-y-2.5 text-sm text-zinc-300">
+                <li className="flex items-center gap-2.5">
+                  <Check className="w-4 h-4 text-primary shrink-0" /> Cortes de cabelo ilimitados
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <Check className="w-4 h-4 text-primary shrink-0" /> Barba ilimitada
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <Check className="w-4 h-4 text-primary shrink-0" /> Sobrancelhas ilimitadas
+                </li>
+                <li className="flex items-center gap-2.5">
+                  <Check className="w-4 h-4 text-primary shrink-0" /> Sem taxas extras nos serviços do plano
+                </li>
+              </ul>
+            </div>
+
+            <div className="w-full lg:w-auto lg:min-w-[280px]">
+              <div className="relative rounded-xl border border-primary/35 bg-zinc-900/80 p-7 shadow-2xl shadow-primary/10 backdrop-blur-sm">
+                <div className="absolute -inset-px rounded-xl bg-gradient-to-br from-primary/20 via-transparent to-primary/5 pointer-events-none" />
+                <div className="relative space-y-5">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold mb-1">Mensalidade</p>
+                    <p className="text-4xl sm:text-5xl font-semibold text-white tracking-tight">
+                      R$&nbsp;120<span className="text-lg text-zinc-400 font-normal">/mês</span>
+                    </p>
+                  </div>
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    Entre na sua conta para assinar. A confirmação da assinatura acontece no painel do cliente.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={onAdminLoginClick}
+                    className="w-full bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-black text-xs uppercase tracking-[0.2em] font-black px-6 py-4 rounded-md shadow-lg shadow-primary/15 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <Crown className="w-4 h-4" /> Assinar Plano VIP
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -747,7 +833,7 @@ export default function VisitorLayout({
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
-                      <span className="font-semibold text-primary text-base text-gold-glow">
+                      <span className="font-semibold text-foreground text-base">
                         {formatBRL(p.preco)}
                       </span>
                       <span className="text-xs text-muted-foreground">
@@ -763,19 +849,19 @@ export default function VisitorLayout({
       </main>
 
       {/* Bottom Footer block */}
-      <footer className="bg-card text-muted-foreground py-12 border-t border-border mt-20 text-xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-6">
+      <footer className="border-t border-border bg-card py-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-card rounded-sm flex items-center justify-center text-primary/60 border border-border">
-              ✂
+            <div className="w-6 h-6 rounded-sm bg-primary/20 border border-primary/40 flex items-center justify-center font-bold text-[10px] text-primary">
+              DB
             </div>
             <div>
-              <p className="text-foreground text-sm tracking-wide">Detalhe Barbearia</p>
+              <p className="font-semibold text-foreground">Detalhe Barbearia</p>
               <p className="text-xs text-muted-foreground">© 2026 Emerson Santiago. Todos os direitos reservados.</p>
             </div>
           </div>
           
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4 text-xs">
             <a href="#servicos" className="hover:text-primary transition">Serviços</a>
             <a href="#produtos" className="hover:text-primary transition">Vitrine</a>
           </div>
@@ -1014,6 +1100,48 @@ export default function VisitorLayout({
                   <X className="w-3.5 h-3.5" /> Fechar Janela
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Booking Popup Modal */}
+      <AnimatePresence>
+        {showBookingPopup && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => {
+                setShowBookingPopup(false);
+                setPreselectedService(null);
+              }}
+              className="fixed inset-0 bg-black/85 backdrop-blur-md cursor-pointer"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative z-10 w-full h-full md:w-[95vw] md:max-w-4xl md:h-auto md:max-h-[92vh] md:rounded-xl overflow-hidden shadow-2xl"
+            >
+              <BookingWizard
+                services={services}
+                onBookingSuccess={() => {
+                  onBookingSuccess();
+                  fetchClientBookings();
+                  setShowBookingPopup(false);
+                  setPreselectedService(null);
+                }}
+                loggedClient={loggedClient}
+                onClientLogin={onClientLogin}
+                popupMode
+                onClosePopup={() => {
+                  setShowBookingPopup(false);
+                  setPreselectedService(null);
+                }}
+                preselectedService={preselectedService}
+              />
             </motion.div>
           </div>
         )}

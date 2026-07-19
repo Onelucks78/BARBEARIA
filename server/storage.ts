@@ -574,15 +574,16 @@ export async function getDashboardStats(
   let agQ = client.from('agendamentos').select('id, codigo, servico_id, inicio_em, status, preco_cobrado')
     .eq('barbeiro_id', barbeiroId).eq('status', 'concluido');
   if (startDate) agQ = agQ.gte('inicio_em', startDate);
-  if (endDate) agQ = agQ.lte('inicio_em', endDate + 'T23:59:59');
+  if (endDate) agQ = agQ.lte('inicio_em', endDate); // endDate já vem com hora do frontend (ex: 2026-07-19T23:59:59.999Z)
   const { data: concluidos, error: agErr } = await agQ;
   if (agErr) throw agErr;
 
-  // Lançamentos no intervalo
+  // Lançamentos no intervalo (coluna 'data' é YYYY-MM-DD, comparar só com a parte da data)
+  const endDateOnly = endDate ? endDate.split('T')[0] : undefined;
   let lfQ = client.from('lancamentos_financeiros').select('*')
     .eq('barbeiro_id', barbeiroId).eq('excluido', false);
-  if (startDate) lfQ = lfQ.gte('data', startDate);
-  if (endDate) lfQ = lfQ.lte('data', endDate);
+  if (startDate) lfQ = lfQ.gte('data', startDate.split('T')[0]);
+  if (endDateOnly) lfQ = lfQ.lte('data', endDateOnly);
   const { data: lancamentos, error: lfErr } = await lfQ;
   if (lfErr) throw lfErr;
 
@@ -620,6 +621,67 @@ export async function getDashboardStats(
     .eq('barbeiro_id', barbeiroId)
     .eq('status', 'concluido');
 
+  // --- Build dailyChartData (same logic as db.json path in server.ts) ---
+  const hourlyKeys = ['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00'];
+  const dailyDetails: Record<string, { cortes: number; produtos: number; outras: number; despesas: number }> = {};
+
+  if (isToday) {
+    hourlyKeys.forEach(h => { dailyDetails[h] = { cortes: 0, produtos: 0, outras: 0, despesas: 0 }; });
+  }
+
+  const getHourKey = (iso: string) => {
+    if (!iso) return '12:00';
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return '12:00';
+      // Converte para o fuso horário local (Brasil UTC-3)
+      const localHour = new Date(d.getTime() - d.getTimezoneOffset() * 60000).getUTCHours();
+      return `${String(localHour).padStart(2, '0')}:00`;
+    } catch {
+      return '12:00';
+    }
+  };
+
+  for (const a of completed) {
+    const dateKey = isToday ? getHourKey(a.inicio_em) : (a.inicio_em ?? '').split('T')[0];
+    if (!dateKey) continue;
+    if (!dailyDetails[dateKey]) dailyDetails[dateKey] = { cortes: 0, produtos: 0, outras: 0, despesas: 0 };
+    dailyDetails[dateKey].cortes += Number(a.preco_cobrado);
+  }
+
+  for (const l of lista) {
+    const dateKey = isToday
+      ? (l.created_at ? getHourKey(l.created_at) : '12:00')
+      : (l.data ?? '').split('T')[0];
+    if (!dateKey) continue;
+    if (!dailyDetails[dateKey]) dailyDetails[dateKey] = { cortes: 0, produtos: 0, outras: 0, despesas: 0 };
+    if (l.tipo === 'saida') {
+      dailyDetails[dateKey].despesas += Number(l.valor);
+    } else if (l.tipo === 'entrada' && l.agendamento_id === null) {
+      const isProduct = l.produto_id !== null ||
+        (l.categoria ?? '').toLowerCase().includes('produto') ||
+        (l.descricao ?? '').toLowerCase().includes('produto');
+      if (isProduct) dailyDetails[dateKey].produtos += Number(l.valor);
+      else dailyDetails[dateKey].cortes += Number(l.valor);
+    }
+  }
+
+  const dailyChartData = Object.keys(dailyDetails)
+    .sort()
+    .slice(isToday ? -100 : -20)
+    .map(date => {
+      const d = dailyDetails[date];
+      const totalReceitas = d.cortes + d.produtos;
+      const totalLucro = totalReceitas - d.despesas;
+      return {
+        data: date,
+        total: Number(totalLucro.toFixed(2)),
+        receitas: Number(totalReceitas.toFixed(2)),
+        despesas: Number(d.despesas.toFixed(2)),
+        lucro: Number(totalLucro.toFixed(2))
+      };
+    });
+
   return {
     faturamento,
     outrasEntradas,
@@ -628,7 +690,182 @@ export async function getDashboardStats(
     lucro,
     agendadosCount: agendadosCount ?? 0,
     concluidosCount: concluidosCount ?? 0,
-    dailyChartData: [], // simplificado nesta migration; calculado em rota dedicada se precisar
+    dailyChartData,
     history: lista.sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? '')) as LancamentoFinanceiro[]
   };
+}
+// ---------- ADMIN: AGENDAMENTOS ----------
+export async function listAgendamentosAdmin(barbeiroId: string): Promise<Agendamento[]> {
+  const client = sb();
+  if (!client) {
+    const db = loadDB();
+    return [...db.agendamentos].sort((a, b) => a.inicio_em.localeCompare(b.inicio_em));
+  }
+  const { data, error } = await client
+    .from('agendamentos')
+    .select('*')
+    .eq('barbeiro_id', barbeiroId)
+    .order('inicio_em', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(rowToAgendamento);
+}
+
+// ---------- ADMIN: SERVIÇOS CRUD ----------
+export async function listAllServicosAdmin(barbeiroId: string): Promise<Servico[]> {
+  const client = sb();
+  if (!client) {
+    const db = loadDB();
+    return db.servicos.filter(s => s.barbeiro_id === barbeiroId).sort((a, b) => a.ordem - b.ordem);
+  }
+  const { data, error } = await client
+    .from('servicos').select('*').eq('barbeiro_id', barbeiroId).order('ordem', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(rowToServico);
+}
+
+export async function createServico(barbeiroId: string, payload: {
+  nome: string; descricao?: string; preco: number; duracao_minutos: number; imagem_url?: string;
+}): Promise<Servico> {
+  const client = sb();
+  if (!client) throw new Error('Supabase not configured');
+  const maxOrdem = await client.from('servicos').select('ordem').eq('barbeiro_id', barbeiroId).order('ordem', { ascending: false }).limit(1);
+  const nextOrdem = ((maxOrdem.data?.[0]?.ordem ?? 0) as number) + 1;
+  const { data, error } = await client.from('servicos').insert({
+    barbeiro_id: barbeiroId,
+    nome: payload.nome,
+    descricao: payload.descricao ?? '',
+    preco: payload.preco,
+    duracao_minutos: payload.duracao_minutos,
+    imagem_url: payload.imagem_url ?? 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=500&auto=format&fit=crop&q=80',
+    ativo: true,
+    ordem: nextOrdem
+  }).select('*').single();
+  if (error || !data) throw error ?? new Error('Erro ao criar serviço');
+  return rowToServico(data);
+}
+
+export async function updateServico(id: string, barbeiroId: string, patch: Partial<{
+  nome: string; descricao: string; preco: number; duracao_minutos: number; imagem_url: string; ativo: boolean; ordem: number;
+}>): Promise<Servico | null> {
+  const client = sb();
+  if (!client) return null;
+  const { data, error } = await client.from('servicos')
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq('id', id).eq('barbeiro_id', barbeiroId).select('*').single();
+  if (error || !data) return null;
+  return rowToServico(data);
+}
+
+// ---------- ADMIN: PRODUTOS CRUD ----------
+export async function listAllProdutosAdmin(barbeiroId: string): Promise<Produto[]> {
+  const client = sb();
+  if (!client) {
+    const db = loadDB();
+    return db.produtos.filter(p => p.barbeiro_id === barbeiroId).sort((a, b) => a.ordem - b.ordem);
+  }
+  const { data, error } = await client
+    .from('produtos').select('*').eq('barbeiro_id', barbeiroId).order('ordem', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(rowToProduto);
+}
+
+export async function createProduto(barbeiroId: string, payload: {
+  nome: string; descricao?: string; preco: number; estoque: number; imagem_url?: string;
+}): Promise<Produto> {
+  const client = sb();
+  if (!client) throw new Error('Supabase not configured');
+  const maxOrdem = await client.from('produtos').select('ordem').eq('barbeiro_id', barbeiroId).order('ordem', { ascending: false }).limit(1);
+  const nextOrdem = ((maxOrdem.data?.[0]?.ordem ?? 0) as number) + 1;
+  const { data, error } = await client.from('produtos').insert({
+    barbeiro_id: barbeiroId,
+    nome: payload.nome,
+    descricao: payload.descricao ?? '',
+    preco: payload.preco,
+    estoque: payload.estoque,
+    imagem_url: payload.imagem_url ?? 'https://images.unsplash.com/photo-1608248597279-f99d160bfcbc?w=500&auto=format&fit=crop&q=80',
+    ativo: true,
+    ordem: nextOrdem
+  }).select('*').single();
+  if (error || !data) throw error ?? new Error('Erro ao criar produto');
+  return rowToProduto(data);
+}
+
+export async function updateProduto(id: string, barbeiroId: string, patch: Partial<{
+  nome: string; descricao: string; preco: number; estoque: number; imagem_url: string; ativo: boolean; ordem: number;
+}>): Promise<Produto | null> {
+  const client = sb();
+  if (!client) return null;
+  const { data, error } = await client.from('produtos')
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq('id', id).eq('barbeiro_id', barbeiroId).select('*').single();
+  if (error || !data) return null;
+  return rowToProduto(data);
+}
+
+// ---------- ADMIN: CLIENTES CRUD ----------
+function rowToCliente(r: any): Cliente {
+  return {
+    id: r.id,
+    barbeiro_id: r.barbeiro_id,
+    nome: r.nome,
+    telefone: r.telefone ?? '',
+    email: r.email ?? '',
+    data_nascimento: r.data_nascimento ?? null,
+    observacoes: r.observacoes ?? '',
+    ativo: r.ativo,
+    created_at: r.created_at,
+    updated_at: r.updated_at
+  };
+}
+
+export async function listClientesAdmin(barbeiroId: string): Promise<Cliente[]> {
+  const client = sb();
+  if (!client) {
+    const db = loadDB();
+    return db.clientes.filter(c => c.ativo && c.barbeiro_id === barbeiroId);
+  }
+  const { data, error } = await client
+    .from('clientes').select('*').eq('barbeiro_id', barbeiroId).eq('ativo', true).order('nome', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(rowToCliente);
+}
+
+export async function createCliente(barbeiroId: string, payload: {
+  nome: string; telefone: string; email?: string; data_nascimento?: string | null; observacoes?: string;
+}): Promise<Cliente> {
+  const client = sb();
+  if (!client) throw new Error('Supabase not configured');
+  const { data, error } = await client.from('clientes').insert({
+    barbeiro_id: barbeiroId,
+    nome: payload.nome,
+    telefone: payload.telefone,
+    email: payload.email ?? '',
+    data_nascimento: payload.data_nascimento ?? null,
+    observacoes: payload.observacoes ?? '',
+    ativo: true
+  }).select('*').single();
+  if (error || !data) throw error ?? new Error('Erro ao criar cliente');
+  return rowToCliente(data);
+}
+
+export async function updateCliente(id: string, barbeiroId: string, patch: Partial<{
+  nome: string; telefone: string; email: string; data_nascimento: string | null; observacoes: string; ativo: boolean;
+}>): Promise<Cliente | null> {
+  const client = sb();
+  if (!client) return null;
+  const { data, error } = await client.from('clientes')
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq('id', id).eq('barbeiro_id', barbeiroId).select('*').single();
+  if (error || !data) return null;
+  return rowToCliente(data);
+}
+
+export async function deleteCliente(id: string, barbeiroId: string): Promise<boolean> {
+  const client = sb();
+  if (!client) return false;
+  // Soft delete: ativo = false
+  const { error } = await client.from('clientes')
+    .update({ ativo: false, updated_at: new Date().toISOString() })
+    .eq('id', id).eq('barbeiro_id', barbeiroId);
+  return !error;
 }

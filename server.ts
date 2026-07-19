@@ -534,12 +534,14 @@ async function startServer() {
 
       const getHourKey = (isoOrTimeText: string) => {
         if (!isoOrTimeText) return '12:00';
-        const parts = isoOrTimeText.split('T');
-        if (parts.length > 1) {
-          const hourPart = parts[1].split(':')[0];
-          return `${hourPart.padStart(2, '0')}:00`;
+        try {
+          const d = new Date(isoOrTimeText);
+          if (isNaN(d.getTime())) return '12:00';
+          const localHour = new Date(d.getTime() - d.getTimezoneOffset() * 60000).getUTCHours();
+          return `${String(localHour).padStart(2, '0')}:00`;
+        } catch {
+          return '12:00';
         }
-        return '12:00';
       };
 
       completedAgendamentos.forEach(a => {
@@ -617,10 +619,13 @@ async function startServer() {
   });
 
   // 2. Agenda List with Status Controls
-  app.get('/api/admin/agendamentos', requireAdmin, (req, res) => {
+  app.get('/api/admin/agendamentos', requireAdmin, async (req: AuthRequest, res) => {
     try {
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        const list = await storage.listAgendamentosAdmin(req.barbeiroId);
+        return res.json(list);
+      }
       const db = loadDB();
-      // Returns all sorted by start time
       const list = [...db.agendamentos].sort((a,b) => a.inicio_em.localeCompare(b.inicio_em));
       res.json(list);
     } catch (error) {
@@ -696,16 +701,30 @@ async function startServer() {
 
 
   // 3. SERVICES CRUD (Prevent actual deleting, just flip active flag / deativar)
-  app.get('/api/admin/servicos', requireAdmin, (req, res) => {
-    const db = loadDB();
-    res.json(db.servicos.sort((a,b) => a.ordem - b.ordem));
+  app.get('/api/admin/servicos', requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        const list = await storage.listAllServicosAdmin(req.barbeiroId);
+        return res.json(list);
+      }
+      const db = loadDB();
+      res.json(db.servicos.sort((a,b) => a.ordem - b.ordem));
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'Erro ao listar serviços.' });
+    }
   });
 
-  app.post('/api/admin/servicos', requireAdmin, validate(schemas.createService), (req, res) => {
+  app.post('/api/admin/servicos', requireAdmin, validate(schemas.createService), async (req: AuthRequest, res) => {
     try {
       const { nome, descricao, preco, duracao_minutos, imagem_url } = req.body;
       if (!nome || !preco || !duracao_minutos) {
         return res.status(400).json({ error: 'Nome, preço e duração são obrigatórios.' });
+      }
+
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        const novo = await storage.createServico(req.barbeiroId, { nome, descricao, preco: Number(preco), duracao_minutos: Number(duracao_minutos), imagem_url });
+        return res.status(201).json(novo);
       }
 
       const db = loadDB();
@@ -722,7 +741,6 @@ async function startServer() {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
-
       db.servicos.push(novoServico);
       saveDB(db);
       res.status(201).json(novoServico);
@@ -732,15 +750,28 @@ async function startServer() {
     }
   });
 
-  app.patch('/api/admin/servicos/:id', requireAdmin, validate(schemas.patchService), (req, res) => {
+  app.patch('/api/admin/servicos/:id', requireAdmin, validate(schemas.patchService), async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
       const { nome, descricao, preco, duracao_minutos, imagem_url, ativo, ordem } = req.body;
-      const db = loadDB();
 
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        const updated = await storage.updateServico(id, req.barbeiroId, {
+          ...(nome !== undefined && { nome }),
+          ...(descricao !== undefined && { descricao }),
+          ...(preco !== undefined && { preco: Number(preco) }),
+          ...(duracao_minutos !== undefined && { duracao_minutos: Number(duracao_minutos) }),
+          ...(imagem_url !== undefined && { imagem_url }),
+          ...(ativo !== undefined && { ativo: Boolean(ativo) }),
+          ...(ordem !== undefined && { ordem: Number(ordem) })
+        });
+        if (!updated) return res.status(404).json({ error: 'Serviço não encontrado.' });
+        return res.json(updated);
+      }
+
+      const db = loadDB();
       const item = db.servicos.find(s => s.id === id);
       if (!item) return res.status(404).json({ error: 'Serviço não encontrado.' });
-
       if (nome !== undefined) item.nome = nome;
       if (descricao !== undefined) item.descricao = descricao;
       if (preco !== undefined) item.preco = Number(preco);
@@ -749,7 +780,6 @@ async function startServer() {
       if (ativo !== undefined) item.ativo = Boolean(ativo);
       if (ordem !== undefined) item.ordem = Number(ordem);
       item.updated_at = new Date().toISOString();
-
       saveDB(db);
       res.json(item);
     } catch (error) {
@@ -758,17 +788,31 @@ async function startServer() {
     }
   });
 
-  // 4. PRODUCTS CRUD (Prevent actual deleting, just flip active flag / deativar)
-  app.get('/api/admin/produtos', requireAdmin, (req, res) => {
-    const db = loadDB();
-    res.json(db.produtos.sort((a,b) => a.ordem - b.ordem));
+  // 4. PRODUCTS CRUD
+  app.get('/api/admin/produtos', requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        const list = await storage.listAllProdutosAdmin(req.barbeiroId);
+        return res.json(list);
+      }
+      const db = loadDB();
+      res.json(db.produtos.sort((a,b) => a.ordem - b.ordem));
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'Erro ao listar produtos.' });
+    }
   });
 
-  app.post('/api/admin/produtos', requireAdmin, validate(schemas.createProduct), (req, res) => {
+  app.post('/api/admin/produtos', requireAdmin, validate(schemas.createProduct), async (req: AuthRequest, res) => {
     try {
       const { nome, descricao, preco, estoque, imagem_url } = req.body;
       if (!nome || !preco || estoque === undefined) {
         return res.status(400).json({ error: 'Nome, preço e estoque são obrigatórios.' });
+      }
+
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        const novo = await storage.createProduto(req.barbeiroId, { nome, descricao, preco: Number(preco), estoque: Number(estoque), imagem_url });
+        return res.status(201).json(novo);
       }
 
       const db = loadDB();
@@ -785,7 +829,6 @@ async function startServer() {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
-
       db.produtos.push(novo);
       saveDB(db);
       res.status(201).json(novo);
@@ -795,15 +838,28 @@ async function startServer() {
     }
   });
 
-  app.patch('/api/admin/produtos/:id', requireAdmin, validate(schemas.patchProduct), (req, res) => {
+  app.patch('/api/admin/produtos/:id', requireAdmin, validate(schemas.patchProduct), async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
       const { nome, descricao, preco, estoque, imagem_url, ativo, ordem } = req.body;
-      const db = loadDB();
 
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        const updated = await storage.updateProduto(id, req.barbeiroId, {
+          ...(nome !== undefined && { nome }),
+          ...(descricao !== undefined && { descricao }),
+          ...(preco !== undefined && { preco: Number(preco) }),
+          ...(estoque !== undefined && { estoque: Number(estoque) }),
+          ...(imagem_url !== undefined && { imagem_url }),
+          ...(ativo !== undefined && { ativo: Boolean(ativo) }),
+          ...(ordem !== undefined && { ordem: Number(ordem) })
+        });
+        if (!updated) return res.status(404).json({ error: 'Produto não encontrado.' });
+        return res.json(updated);
+      }
+
+      const db = loadDB();
       const item = db.produtos.find(p => p.id === id);
       if (!item) return res.status(404).json({ error: 'Produto não encontrado.' });
-
       if (nome !== undefined) item.nome = nome;
       if (descricao !== undefined) item.descricao = descricao;
       if (preco !== undefined) item.preco = Number(preco);
@@ -812,7 +868,6 @@ async function startServer() {
       if (ativo !== undefined) item.ativo = Boolean(ativo);
       if (ordem !== undefined) item.ordem = Number(ordem);
       item.updated_at = new Date().toISOString();
-
       saveDB(db);
       res.json(item);
     } catch (error) {
@@ -823,24 +878,37 @@ async function startServer() {
 
 
   // 5. CLIENTS CRUD (Manual insert and details observations)
-  app.get('/api/admin/clientes', requireAdmin, (req, res) => {
-    const db = loadDB();
-    res.json(db.clientes.filter(c => c.ativo));
+  app.get('/api/admin/clientes', requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        const list = await storage.listClientesAdmin(req.barbeiroId);
+        return res.json(list);
+      }
+      const db = loadDB();
+      res.json(db.clientes.filter(c => c.ativo));
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'Erro ao listar clientes.' });
+    }
   });
 
-  app.post('/api/admin/clientes', requireAdmin, validate(schemas.createClient), (req, res) => {
+  app.post('/api/admin/clientes', requireAdmin, validate(schemas.createClient), async (req: AuthRequest, res) => {
     try {
       const { nome, telefone, email, data_nascimento, observacoes } = req.body;
       if (!nome || !telefone) {
         return res.status(400).json({ error: 'Nome e telefone são obrigatórios.' });
       }
 
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        const novo = await storage.createCliente(req.barbeiroId, { nome, telefone, email, data_nascimento, observacoes });
+        return res.status(201).json(novo);
+      }
+
       const db = loadDB();
       const novo: Cliente = {
         id: `c-${Date.now()}`,
         barbeiro_id: 'b-1',
-        nome,
-        telefone,
+        nome, telefone,
         email: email || '',
         data_nascimento: data_nascimento || null,
         observacoes: observacoes || '',
@@ -848,7 +916,6 @@ async function startServer() {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
-
       db.clientes.push(novo);
       saveDB(db);
       res.status(201).json(novo);
@@ -858,15 +925,27 @@ async function startServer() {
     }
   });
 
-  app.patch('/api/admin/clientes/:id', requireAdmin, validate(schemas.patchClient), (req, res) => {
+  app.patch('/api/admin/clientes/:id', requireAdmin, validate(schemas.patchClient), async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
       const { nome, telefone, email, data_nascimento, observacoes, ativo } = req.body;
-      const db = loadDB();
 
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        const updated = await storage.updateCliente(id, req.barbeiroId, {
+          ...(nome !== undefined && { nome }),
+          ...(telefone !== undefined && { telefone }),
+          ...(email !== undefined && { email }),
+          ...(data_nascimento !== undefined && { data_nascimento }),
+          ...(observacoes !== undefined && { observacoes }),
+          ...(ativo !== undefined && { ativo: Boolean(ativo) })
+        });
+        if (!updated) return res.status(404).json({ error: 'Cliente não encontrado.' });
+        return res.json(updated);
+      }
+
+      const db = loadDB();
       const item = db.clientes.find(c => c.id === id);
       if (!item) return res.status(404).json({ error: 'Cliente não encontrado.' });
-
       if (nome !== undefined) item.nome = nome;
       if (telefone !== undefined) item.telefone = telefone;
       if (email !== undefined) item.email = email;
@@ -874,7 +953,6 @@ async function startServer() {
       if (observacoes !== undefined) item.observacoes = observacoes;
       if (ativo !== undefined) item.ativo = Boolean(ativo);
       item.updated_at = new Date().toISOString();
-
       saveDB(db);
       res.json(item);
     } catch (error) {
@@ -883,9 +961,16 @@ async function startServer() {
     }
   });
 
-  app.delete('/api/admin/clientes/:id', requireAdmin, (req, res) => {
+  app.delete('/api/admin/clientes/:id', requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
+
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        const ok = await storage.deleteCliente(id, req.barbeiroId);
+        if (!ok) return res.status(404).json({ error: 'Cliente não encontrado.' });
+        return res.json({ success: true, message: 'Cliente arquivado com sucesso.' });
+      }
+
       const db = loadDB();
       const index = db.clientes.findIndex(c => c.id === id);
       if (index === -1) return res.status(404).json({ error: 'Cliente não encontrado.' });

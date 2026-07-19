@@ -15,6 +15,9 @@ interface BookingWizardProps {
     observacoes?: string;
   } | null;
   onClientLogin: (client: any) => void;
+  popupMode?: boolean;
+  onClosePopup?: () => void;
+  preselectedService?: Servico | null;
 }
 
 interface SlotState {
@@ -27,7 +30,10 @@ export default function BookingWizard({
   services, 
   onBookingSuccess,
   loggedClient,
-  onClientLogin
+  onClientLogin,
+  popupMode = false,
+  onClosePopup,
+  preselectedService = null
 }: BookingWizardProps) {
   const isVip = React.useMemo(() => {
     if (loggedClient?.observacoes) {
@@ -198,8 +204,25 @@ export default function BookingWizard({
     }
   }, [loggedClient]);
 
+  // Auto-open mobile wizard on mount (popupMode)
+  useEffect(() => {
+    if (popupMode && window.innerWidth < 768) {
+      setIsMobileOpen(true);
+    }
+  }, [popupMode]);
+
+  // Auto-select preselectedService
+  useEffect(() => {
+    if (preselectedService) {
+      setSelectedServices([preselectedService]);
+      setStep(1);
+    }
+  }, [preselectedService]);
+
   // Listen to hashchange to open mobile full-screen wizard and register selectBarberService helper
   useEffect(() => {
+    if (popupMode) return;
+
     const handleHashChange = () => {
       const hash = window.location.hash;
       if (hash === '#agendar-sessao' || hash === '#agendar-sessao-teaser') {
@@ -234,7 +257,7 @@ export default function BookingWizard({
       window.removeEventListener('hashchange', handleHashChange);
       delete (window as any).selectBarberService;
     };
-  }, [services]);
+  }, [services, popupMode]);
 
   // Scroll to top of content of active step when step changes
   useEffect(() => {
@@ -245,6 +268,11 @@ export default function BookingWizard({
 
   const handleCloseMobileWizard = () => {
     setIsMobileOpen(false);
+    if (popupMode && onClosePopup) {
+      resetWizard();
+      onClosePopup();
+      return;
+    }
     if (window.location.hash === '#agendar-sessao' || window.location.hash === '#agendar-sessao-teaser') {
       window.history.pushState("", document.title, window.location.pathname + window.location.search);
     }
@@ -253,11 +281,6 @@ export default function BookingWizard({
   const handleNextStep = () => {
     if (step === 1 && selectedServices.length === 0) {
       setErrorMsg('Por favor, selecione pelo menos um serviço para continuar.');
-      return;
-    }
-    // Intercept with google login popup if guest is booking and not signed in
-    if (step === 1 && !loggedClient) {
-      setShowGoogleLoginPopup(true);
       return;
     }
     if (step === 2 && !selectedDate) {
@@ -291,13 +314,7 @@ export default function BookingWizard({
     setErrorMsg('');
   };
 
-  const handleBookNow = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!nomeCliente || !telefoneCliente) {
-      setErrorMsg('Nome e telefone são campos fundamentais para o agendamento.');
-      return;
-    }
-
+  const submitBooking = async (email?: string) => {
     setSubmitting(true);
     setErrorMsg('');
 
@@ -313,7 +330,7 @@ export default function BookingWizard({
           nome_cliente: nomeCliente,
           telefone_cliente: telefoneCliente,
           observacao,
-          cliente_email: loggedClient?.email || undefined
+          cliente_email: email || undefined
         })
       });
 
@@ -330,6 +347,33 @@ export default function BookingWizard({
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleBookNow = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nomeCliente || !telefoneCliente) {
+      setErrorMsg('Nome e telefone são campos fundamentais para o agendamento.');
+      return;
+    }
+
+    if (loggedClient) {
+      await submitBooking(loggedClient.email);
+      return;
+    }
+
+    const servicesIdParam = selectedServices.map(s => s.id).join(',');
+    localStorage.setItem('pending_booking', JSON.stringify({
+      servico_id: servicesIdParam,
+      data: selectedDate,
+      horario: selectedSlot,
+      nome_cliente: nomeCliente,
+      telefone_cliente: telefoneCliente,
+      observacao,
+      servicesNames: selectedServices.map(s => s.nome),
+      totalPreco,
+      totalDuracao
+    }));
+    setShowGoogleLoginPopup(true);
   };
 
   const resetWizard = () => {
@@ -495,8 +539,8 @@ export default function BookingWizard({
 
   return (
     <>
-      {/* 1. TEASER BANNER FOR MOBILE ONLY when wizard is closed */}
-      {!isMobileOpen && (
+      {/* 1. TEASER BANNER FOR MOBILE ONLY when wizard is closed - skip in popup mode */}
+      {!popupMode && !isMobileOpen && (
         <div className="md:hidden text-center max-w-sm mx-auto px-4" id="agendar-sessao-teaser">
           <button
             type="button"
@@ -512,10 +556,12 @@ export default function BookingWizard({
       <div
         id="agendar-sessao"
         style={{ scrollMarginTop: '120px' }}
-        className={`text-slate-900 transition-all duration-300 md:relative md:inset-auto md:z-0 md:flex md:flex-col md:h-auto md:w-full bg-white border border-primary/20 md:rounded-xl md:shadow-2xl md:overflow-hidden ${
-          isMobileOpen
-            ? 'max-md:fixed max-md:inset-0 max-md:z-[100] max-md:bg-white max-md:flex max-md:flex-col md:h-auto md:w-screen md:overflow-hidden'
-            : 'max-md:hidden md:flex flex-col'
+        className={`text-slate-900 transition-all duration-300 bg-white border border-primary/20 md:rounded-xl md:shadow-2xl md:overflow-hidden ${
+          popupMode
+            ? 'flex flex-col h-full w-full overflow-hidden rounded-xl'
+            : isMobileOpen
+              ? 'max-md:fixed max-md:inset-0 max-md:z-[100] max-md:bg-white max-md:flex max-md:flex-col md:relative md:inset-auto md:z-0 md:flex md:flex-col md:h-auto md:w-full'
+              : 'max-md:hidden md:flex flex-col md:relative md:inset-auto md:z-0 md:w-full'
         }`}
       >
         {/* Header Info */}
@@ -530,12 +576,12 @@ export default function BookingWizard({
               {step === 5 ? 'Concluído' : `Etapa ${step} de 4`}
             </div>
             
-            {/* Close Button on Mobile Full Screen */}
-            {isMobileOpen && (
+            {/* Close Button on Mobile Full Screen or Popup Mode */}
+            {(isMobileOpen || popupMode) && (
               <button
                 type="button"
                 onClick={handleCloseMobileWizard}
-                className="md:hidden w-8 h-8 rounded-md border border-slate-200 bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-900 transition cursor-pointer shrink-0"
+                className={`${popupMode ? '' : 'md:hidden'} w-8 h-8 rounded-md border border-slate-200 bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-900 transition cursor-pointer shrink-0`}
                 title="Fechar agendamento"
               >
                 <X className="w-4 h-4" />
@@ -1130,9 +1176,9 @@ export default function BookingWizard({
             </div>
 
             <div className="space-y-1.5">
-              <h4 className="text-lg font-semibold text-slate-900 ">Identificação de Cliente</h4>
+              <h4 className="text-lg font-semibold text-slate-900 ">Salvar seu Agendamento</h4>
               <p className="text-xs text-slate-500 leading-relaxed max-w-xs mx-auto">
-                Para selecionar o melhor dia e agendar seu horário, faça login com a sua conta do Google de forma simples e segura.
+                Para confirmar seu horário e salvar na sua conta, faça login rápido com o Google de forma simples e segura.
               </p>
             </div>
 
@@ -1143,16 +1189,10 @@ export default function BookingWizard({
                 onClick={async () => {
                   setIsGoogleLoading(true);
                   try {
-                    // Login Google real via Supabase Auth
                     const { error } = await signInWithGoogle();
                     if (error) {
                       setErrorMsg(error.message || 'Falha no login com Google.');
-                      return;
                     }
-                    // signInWithOAuth redireciona — após o retorno,
-                    // App.tsx atualiza loggedClient via onAuthStateChange.
-                    setShowGoogleLoginPopup(false);
-                    setStep(2);
                   } catch (err: any) {
                     setErrorMsg(err.message || 'Erro no login.');
                   } finally {
@@ -1182,7 +1222,11 @@ export default function BookingWizard({
               <button
                 type="button"
                 disabled={isGoogleLoading}
-                onClick={() => setShowGoogleLoginPopup(false)}
+                onClick={() => {
+                  setShowGoogleLoginPopup(false);
+                  localStorage.removeItem('pending_booking');
+                  submitBooking();
+                }}
                 className="w-full py-2.5 text-xs uppercase font-bold tracking-wider text-muted-foreground hover:text-muted-foreground transition cursor-pointer"
               >
                 Continuar sem login

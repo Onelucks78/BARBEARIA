@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   TrendingUp,
@@ -23,14 +23,19 @@ import {
   BookOpen,
   Edit,
   Menu,
-  X
+  X,
+  Search,
+  Minus,
+  CheckCircle2
 } from 'lucide-react';
+import { FaWhatsapp } from 'react-icons/fa';
 import { Sidebar, Header } from './Layout.tsx';
 import { Button } from '@/components/ui/button.tsx';
 import { Input } from '@/components/ui/input.tsx';
 import { Label } from '@/components/ui/label.tsx';
 import { Textarea } from '@/components/ui/textarea.tsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.tsx';
+import { Badge } from '@/components/ui/badge.tsx';
 import {
   Servico,
   Produto,
@@ -76,6 +81,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
   }, [dashboardCardFilter, dashboardPeriod]);
   const [agendaDateFilter, setAgendaDateFilter] = useState<string>('');
   const [agendaFilterMode, setAgendaFilterMode] = useState<'upcoming' | 'day'>('upcoming');
+  const [clientSearchQuery, setClientSearchQuery] = useState('');
 
   // UI action states (Modals or quick add forms toggles)
   const [submitting, setSubmitting] = useState(false);
@@ -170,19 +176,23 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
   // authedFetch injeta automaticamente o header Authorization com JWT do Supabase.
 
   const fetchDashboard = () => {
-    // Generate dates according to periods
+    // Helper: returns YYYY-MM-DD in local timezone (avoids UTC shift at night)
+    const localDate = (d = new Date()) => {
+      return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+    };
+
     let url = '/api/admin/dashboard';
     if (dashboardPeriod === 'today') {
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = localDate();
       url += `?start_date=${todayStr}&end_date=${todayStr}T23:59:59.999Z&is_today=true`;
     } else if (dashboardPeriod === '30') {
       const start = new Date();
       start.setDate(start.getDate() - 30);
-      url += `?start_date=${start.toISOString().split('T')[0]}`;
+      url += `?start_date=${localDate(start)}&end_date=${localDate()}T23:59:59.999Z`;
     } else if (dashboardPeriod === '7') {
       const start = new Date();
       start.setDate(start.getDate() - 7);
-      url += `?start_date=${start.toISOString().split('T')[0]}`;
+      url += `?start_date=${localDate(start)}&end_date=${localDate()}T23:59:59.999Z`;
     }
 
     authedFetch(url)
@@ -193,6 +203,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
       .then(data => setDashboardStats(data))
       .catch(err => console.error('Dashboard:', err));
   };
+
 
   const fetchAgendamentos = () => {
     authedFetch('/api/admin/agendamentos')
@@ -443,6 +454,20 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
     }
   };
 
+  const handleAdjustStock = async (p: Produto, delta: number) => {
+    const newStock = Math.max(0, p.estoque + delta);
+    try {
+      const res = await authedFetch(`/api/admin/produtos/${p.id}`, {
+        method: 'PATCH',
+        body: { estoque: newStock }
+      });
+      if (!res.ok) throw new Error('Erro ao ajustar estoque.');
+      fetchProdutos();
+    } catch (err: any) {
+      setErrorMsg(err.message);
+    }
+  };
+
 
   // CRUD Actions: CLIENTES
   const handleSaveClient = async (e: React.FormEvent) => {
@@ -518,10 +543,11 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
     setSubmitting(true);
     try {
       const fallbackCategoria = categoriasFinanceiras.find(c => c.tipo === newLaunch.tipo)?.nome || 'Geral';
+      const numericValor = Number(String(newLaunch.valor).replace(',', '.'));
       const launchPayload: any = {
         ...newLaunch,
         descricao: newLaunch.descricao.trim() || (newLaunch.tipo === 'entrada' ? 'entrada' : 'saída'),
-        valor: Number(newLaunch.valor),
+        valor: isNaN(numericValor) ? 0 : numericValor,
         categoria: newLaunch.categoria || fallbackCategoria
       };
       if (!launchPayload.produto_id) {
@@ -781,6 +807,12 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
     return days[dayIdx];
   };
 
+  const getWhatsAppLink = (telefone: string) => {
+    const digits = (telefone || '').replace(/\D/g, '');
+    const withCountry = digits.startsWith('55') ? digits : `55${digits}`;
+    return `https://wa.me/${withCountry}`;
+  };
+
   // Lê a assinatura empacotada como JSON dentro de Cliente.observacoes (mesmo formato usado no checkout do cliente)
   const parseSubscription = (cliente: Cliente): ClienteSubscription | null => {
     if (!cliente.observacoes) return null;
@@ -974,7 +1006,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                 {/* Plan Info Widget */}
                 <div 
                   onClick={() => { setIsPlanModalOpen(true); setIsMobileMenuOpen(false); }}
-                  className="p-3 bg-black/40 border border-border/60 hover:border-primary/40 rounded-sm transition-all duration-200 cursor-pointer group"
+                  className="p-3 bg-card border border-border/60 hover:border-primary/40 rounded-sm transition-all duration-200 cursor-pointer group"
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-xs uppercase tracking-wider font-bold text-primary flex items-center gap-1">
@@ -1071,40 +1103,37 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
               </div>
 
               {/* Stats bento cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Card unificado: Cortes + Produtos = Faturamento Total */}
                 <div 
-                  onClick={() => setDashboardCardFilter(prev => prev === 'cortes' ? null : 'cortes')}
+                  onClick={() => setDashboardCardFilter(prev => prev === 'receitas' ? null : 'receitas')}
                   className={`p-4 bg-card border rounded-sm space-y-2 cursor-pointer transition-all duration-200 select-none hover:bg-accent ${
-                    dashboardCardFilter === 'cortes' ? 'ring-2 ring-primary border-primary bg-card' : 'border-border hover:border-primary/40'
+                    dashboardCardFilter === 'receitas' ? 'ring-2 ring-primary border-primary bg-card' : 'border-border hover:border-primary/40'
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Cortes Feitos</span>
+                    <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Faturamento Total</span>
                     <Scissors className="w-4 h-4 text-primary" />
                   </div>
-                  <h3 className="font-bold text-xl text-primary">{formatBRL(dashboardStats.faturamento)}</h3>
-                  <p className="text-xs text-muted-foreground ">{dashboardStats.concluidosCount} agendamentos finalizados</p>
-                </div>
-
-                <div 
-                  onClick={() => setDashboardCardFilter(prev => prev === 'produtos' ? null : 'produtos')}
-                  className={`p-4 bg-card border rounded-sm space-y-2 cursor-pointer transition-all duration-200 select-none hover:bg-accent ${
-                    dashboardCardFilter === 'produtos' ? 'ring-2 ring-primary border-primary bg-card' : 'border-border hover:border-primary/40'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Produtos Vendidos</span>
-                    <TrendingUp className="w-4 h-4 text-primary" />
+                  <h3 className="font-bold text-xl text-primary">{formatBRL(dashboardStats.faturamento + (dashboardStats.produtosVendidos || 0))}</h3>
+                  <div className="flex items-center gap-3 pt-0.5">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Scissors className="w-3 h-3" />
+                      {formatBRL(dashboardStats.faturamento)}
+                    </p>
+                    <span className="text-xs text-muted-foreground/40">|</span>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <TrendingUp className="w-3 h-3" />
+                      {formatBRL(dashboardStats.produtosVendidos || 0)}
+                    </p>
                   </div>
-                  <h3 className="font-bold text-xl text-primary">{formatBRL(dashboardStats.produtosVendidos || 0)}</h3>
-                  <p className="text-xs text-muted-foreground ">Vendas de produtos em estoque</p>
                 </div>
 
                 <div
                   className="p-4 bg-card border border-border hover:border-primary/40 rounded-sm space-y-2 cursor-pointer transition-all duration-200 select-none hover:bg-accent"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Receita de Planos (Stripe)</span>
+                    <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Receita de Planos</span>
                     <DollarSign className="w-4 h-4 text-primary" />
                   </div>
                   <h3 className="font-bold text-xl text-primary">{formatBRL(dashboardStats.outrasEntradas || 0)}</h3>
@@ -1147,8 +1176,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
               {/* Graphic bars summary (Craftsmanship over Defaults: dynamic CSS pure widgets) */}
               <div className="space-y-4">
                 <h4 className="text-sm tracking-wide text-foreground font-semibold">
-                  {dashboardCardFilter === 'cortes' && "Evolução do Faturamento (Cortes Feitos)"}
-                  {dashboardCardFilter === 'produtos' && "Evolução do Faturamento (Produtos Vendidos)"}
+                  {dashboardCardFilter === 'receitas' && "Evolução do Faturamento Total (Cortes + Produtos)"}
                   {dashboardCardFilter === 'despesas' && "Evolução de Despesas Totais"}
                   {(dashboardCardFilter === null || dashboardCardFilter === 'lucro') && "Evolução de Lucro Líquido"}
                 </h4>
@@ -1158,8 +1186,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                   </div>
                 ) : (
                   (() => {
-                    const showYellow = dashboardCardFilter === 'cortes' || 
-                                       dashboardCardFilter === 'produtos';
+                    const showYellow = dashboardCardFilter === 'receitas';
                     const showRed = dashboardCardFilter === 'despesas';
                     const showGreen = dashboardCardFilter === null || 
                                       dashboardCardFilter === 'lucro';
@@ -1174,185 +1201,197 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
                     return (
                       <div className="border border-border p-6 rounded-sm bg-background space-y-4">
-                        <div className="relative w-full h-56">
-                          <svg viewBox="0 0 600 220" className="w-full h-full overflow-visible" preserveAspectRatio="none">
-                            <defs>
-                              <linearGradient id="yellow-glow" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#c5a059" stopOpacity="0.25" />
-                                <stop offset="100%" stopColor="#c5a059" stopOpacity="0.0" />
-                              </linearGradient>
-                              <linearGradient id="red-glow" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#ef4444" stopOpacity="0.15" />
-                                <stop offset="100%" stopColor="#ef4444" stopOpacity="0.0" />
-                              </linearGradient>
-                              <linearGradient id="green-glow" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#10b981" stopOpacity="0.15" />
-                                <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
-                              </linearGradient>
-                            </defs>
-
-                            {/* Y-axis grid lines (Cartesian style) */}
-                            {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
-                              const currentVal = ratio * maxChartValue;
-                              const yPos = 170 - ratio * 140; // mapped to height bounds (30px to 170px)
-                              return (
-                                <g key={idx} className="opacity-40">
-                                  <line 
-                                    x1="50" 
-                                    y1={yPos} 
-                                    x2="580" 
-                                    y2={yPos} 
-                                    stroke="rgba(197, 160, 89, 0.15)" 
-                                    strokeDasharray="3,3" 
-                                    strokeWidth="1" 
-                                  />
-                                  <text 
-                                    x="40" 
-                                    y={yPos + 3} 
-                                    textAnchor="end" 
-                                    className="fill-muted-foreground text-xs font-semibold"
-                                  >
+                        <div className="relative w-full h-56 flex flex-col overflow-hidden">
+                          {/* Y-Axis Labels + Plot Area Layout */}
+                          <div className="relative w-full h-48 flex">
+                            {/* Y-Axis Labels Column */}
+                            <div className="w-10 sm:w-12 h-full flex flex-col justify-between items-end pr-1 sm:pr-2 py-2 select-none text-[10px] sm:text-[11px] font-medium text-foreground/80 leading-none shrink-0">
+                              {[1, 0.75, 0.5, 0.25, 0].map((ratio, idx) => {
+                                const currentVal = ratio * maxChartValue;
+                                return (
+                                  <span key={idx} className="whitespace-nowrap">
                                     {ratio === 0 ? 'R$ 0' : formatBRL(currentVal).split(',')[0]}
-                                  </text>
-                                </g>
-                              );
-                            })}
+                                  </span>
+                                );
+                              })}
+                            </div>
 
-                            {/* X/Y Axes solid lines */}
-                            <line x1="50" y1="30" x2="50" y2="170" stroke="rgba(197, 160, 89, 0.3)" strokeWidth="1" />
-                            <line x1="50" y1="170" x2="580" y2="170" stroke="rgba(197, 160, 89, 0.3)" strokeWidth="1" />
+                            {/* SVG Plot Graphic */}
+                            <div className="relative flex-1 h-full min-w-0">
+                              <svg viewBox="0 0 540 180" className="w-full h-full overflow-visible" preserveAspectRatio="none">
+                                <defs>
+                                  <linearGradient id="yellow-glow" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor="#c5a059" stopOpacity="0.25" />
+                                    <stop offset="100%" stopColor="#c5a059" stopOpacity="0.0" />
+                                  </linearGradient>
+                                  <linearGradient id="red-glow" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor="#ef4444" stopOpacity="0.15" />
+                                    <stop offset="100%" stopColor="#ef4444" stopOpacity="0.0" />
+                                  </linearGradient>
+                                  <linearGradient id="green-glow" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor="#10b981" stopOpacity="0.15" />
+                                    <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+                                  </linearGradient>
+                                </defs>
 
-                            {/* Plot lines and area */}
+                                {/* Y-axis grid lines (Cartesian style) */}
+                                {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
+                                  const yPos = 170 - ratio * 150;
+                                  return (
+                                    <line 
+                                      key={idx}
+                                      x1="0" 
+                                      y1={yPos} 
+                                      x2="540" 
+                                      y2={yPos} 
+                                      stroke="rgba(197, 160, 89, 0.15)" 
+                                      strokeDasharray="3,3" 
+                                      strokeWidth="1" 
+                                    />
+                                  );
+                                })}
+
+                                {/* Axis baseline */}
+                                <line x1="0" y1="170" x2="540" y2="170" stroke="rgba(197, 160, 89, 0.3)" strokeWidth="1" />
+
+                                {/* Plot lines and area */}
+                                {(() => {
+                                  const availableWidth = 540;
+                                  const len = dashboardStats.dailyChartData.length;
+
+                                  const getX = (index: number) => len > 1 ? (index * (availableWidth / (len - 1))) : availableWidth / 2;
+                                  const getY = (val: number) => {
+                                    const ratio = Math.max(0, val) / maxChartValue;
+                                    return 170 - (ratio * 150);
+                                  };
+
+                                  const yellowPoints = dashboardStats.dailyChartData.map((d, idx) => ({ x: getX(idx), y: getY(d.receitas), data: d }));
+                                  const redPoints = dashboardStats.dailyChartData.map((d, idx) => ({ x: getX(idx), y: getY(d.despesas), data: d }));
+                                  const greenPoints = dashboardStats.dailyChartData.map((d, idx) => ({ x: getX(idx), y: getY(d.lucro), data: d }));
+
+                                  const yellowLinePath = yellowPoints.map((p, index) => `${index === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+                                  const redLinePath = redPoints.map((p, index) => `${index === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+                                  const greenLinePath = greenPoints.map((p, index) => `${index === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+
+                                  const yellowAreaPath = yellowPoints.length > 0 ? `${yellowLinePath} L ${yellowPoints[yellowPoints.length - 1].x} 170 L ${yellowPoints[0].x} 170 Z` : '';
+                                  const redAreaPath = redPoints.length > 0 ? `${redLinePath} L ${redPoints[redPoints.length - 1].x} 170 L ${redPoints[0].x} 170 Z` : '';
+                                  const greenAreaPath = greenPoints.length > 0 ? `${greenLinePath} L ${greenPoints[greenPoints.length - 1].x} 170 L ${greenPoints[0].x} 170 Z` : '';
+
+                                  const hoverReferencePoints = showYellow ? yellowPoints : (showRed ? redPoints : greenPoints);
+
+                                  return (
+                                    <>
+                                      {/* Glowing bottom areas */}
+                                      {showYellow && yellowAreaPath && (
+                                        <path d={yellowAreaPath} fill="url(#yellow-glow)" className="transition-all duration-500" />
+                                      )}
+                                      {showRed && redAreaPath && (
+                                        <path d={redAreaPath} fill="url(#red-glow)" className="transition-all duration-500" />
+                                      )}
+                                      {showGreen && greenAreaPath && (
+                                        <path d={greenAreaPath} fill="url(#green-glow)" className="transition-all duration-500" />
+                                      )}
+
+                                      {/* Highlight Lines */}
+                                      {showYellow && yellowLinePath && (
+                                        <path 
+                                          d={yellowLinePath} 
+                                          fill="none" 
+                                          stroke="#c5a059" 
+                                          strokeWidth="2.5" 
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          className="transition-all duration-500 drop-shadow-[0_2px_4px_rgba(197,160,89,0.35)]"
+                                        />
+                                      )}
+                                      {showRed && redLinePath && (
+                                        <path 
+                                          d={redLinePath} 
+                                          fill="none" 
+                                          stroke="#ef4444" 
+                                          strokeWidth="2.5" 
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          className="transition-all duration-500 drop-shadow-[0_2px_4px_rgba(239,68,68,0.3)]"
+                                        />
+                                      )}
+                                      {showGreen && greenLinePath && (
+                                        <path 
+                                          d={greenLinePath} 
+                                          fill="none" 
+                                          stroke="#10b981" 
+                                          strokeWidth="2.5" 
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          className="transition-all duration-500 drop-shadow-[0_2px_4px_rgba(16,185,129,0.3)]"
+                                        />
+                                      )}
+
+                                      {hoverReferencePoints.map((p, index) => {
+                                        const dotY = showYellow ? getY(p.data.receitas) : (showRed ? getY(p.data.despesas) : getY(p.data.lucro));
+                                        return (
+                                          <g key={index} className="group cursor-pointer">
+                                            <foreignObject
+                                              x={Math.max(p.x - 75, 5)}
+                                              y={Math.min(Math.max(dotY - 85, 5), 100)}
+                                              width="150"
+                                              height="85"
+                                              className="opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 overflow-visible"
+                                            >
+                                              <div className="bg-background/95 border border-border text-muted-foreground text-xs p-1.5 rounded-sm shadow-2xl space-y-0.5 leading-tight select-none">
+                                                <div className="font-bold text-foreground text-center border-b border-border pb-0.5 mb-1">
+                                                  {p.data.data.includes(':') ? `Hoje, às ${p.data.data}` : p.data.data.split('-').reverse().join('/')}
+                                                </div>
+                                                
+                                                {showYellow && (
+                                                  <div className="flex justify-between gap-2">
+                                                    <span className="text-primary">Faturamento:</span>
+                                                    <span className="font-bold text-primary">{formatBRL(p.data.receitas)}</span>
+                                                  </div>
+                                                )}
+                                                {showRed && (
+                                                  <div className="flex justify-between gap-2">
+                                                    <span className="text-red-600 dark:text-red-400">Despesas:</span>
+                                                    <span className="font-bold text-red-600 dark:text-red-400">{formatBRL(p.data.despesas)}</span>
+                                                  </div>
+                                                )}
+                                                {showGreen && (
+                                                  <div className="flex justify-between gap-1">
+                                                    <span className="text-emerald-600 dark:text-emerald-400">Lucro Líquido:</span>
+                                                    <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatBRL(p.data.lucro)}</span>
+                                                  </div>
+                                                )}
+                                              </div>
+                                            </foreignObject>
+                                          </g>
+                                        );
+                                      })}
+                                    </>
+                                  );
+                                })()}
+                              </svg>
+                            </div>
+                          </div>
+
+                          {/* X-Axis Labels Row (HTML Flex - Responsive step calculation for mobile) */}
+                          <div className="w-full pl-10 sm:pl-12 flex justify-between items-center pt-2 text-[9px] sm:text-[11px] font-medium text-foreground/75 select-none overflow-hidden">
                             {(() => {
-                              const paddingLeft = 60;
-                              const availableWidth = 580 - paddingLeft;
-                              const len = dashboardStats.dailyChartData.length;
-
-                              const getX = (index: number) => paddingLeft + (len > 1 ? (index * (availableWidth / (len - 1))) : availableWidth / 2);
-                              const getY = (val: number) => {
-                                const ratio = Math.max(0, val) / maxChartValue;
-                                return 170 - (ratio * 145);
-                              };
-
-                              const yellowPoints = dashboardStats.dailyChartData.map((d, idx) => ({ x: getX(idx), y: getY(d.receitas), data: d }));
-                              const redPoints = dashboardStats.dailyChartData.map((d, idx) => ({ x: getX(idx), y: getY(d.despesas), data: d }));
-                              const greenPoints = dashboardStats.dailyChartData.map((d, idx) => ({ x: getX(idx), y: getY(d.lucro), data: d }));
-
-                              const yellowLinePath = yellowPoints.map((p, index) => `${index === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-                              const redLinePath = redPoints.map((p, index) => `${index === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-                              const greenLinePath = greenPoints.map((p, index) => `${index === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-
-                              const yellowAreaPath = yellowPoints.length > 0 ? `${yellowLinePath} L ${yellowPoints[yellowPoints.length - 1].x} 170 L ${yellowPoints[0].x} 170 Z` : '';
-                              const redAreaPath = redPoints.length > 0 ? `${redLinePath} L ${redPoints[redPoints.length - 1].x} 170 L ${redPoints[0].x} 170 Z` : '';
-                              const greenAreaPath = greenPoints.length > 0 ? `${greenLinePath} L ${greenPoints[greenPoints.length - 1].x} 170 L ${greenPoints[0].x} 170 Z` : '';
-
-                              const hoverReferencePoints = showYellow ? yellowPoints : (showRed ? redPoints : greenPoints);
-
-                              return (
-                                <>
-                                  {/* Glowing bottom areas */}
-                                  {showYellow && yellowAreaPath && (
-                                    <path d={yellowAreaPath} fill="url(#yellow-glow)" className="transition-all duration-500" />
-                                  )}
-                                  {showRed && redAreaPath && (
-                                    <path d={redAreaPath} fill="url(#red-glow)" className="transition-all duration-500" />
-                                  )}
-                                  {showGreen && greenAreaPath && (
-                                    <path d={greenAreaPath} fill="url(#green-glow)" className="transition-all duration-500" />
-                                  )}
-
-                                  {/* Highlight Lines */}
-                                  {showYellow && yellowLinePath && (
-                                    <path 
-                                      d={yellowLinePath} 
-                                      fill="none" 
-                                      stroke="#c5a059" 
-                                      strokeWidth="2.5" 
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      className="transition-all duration-500 drop-shadow-[0_2px_4px_rgba(197,160,89,0.35)]"
-                                    />
-                                  )}
-                                  {showRed && redLinePath && (
-                                    <path 
-                                      d={redLinePath} 
-                                      fill="none" 
-                                      stroke="#ef4444" 
-                                      strokeWidth="2.5" 
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      className="transition-all duration-500 drop-shadow-[0_2px_4px_rgba(239,68,68,0.3)]"
-                                    />
-                                  )}
-                                  {showGreen && greenLinePath && (
-                                    <path 
-                                      d={greenLinePath} 
-                                      fill="none" 
-                                      stroke="#10b981" 
-                                      strokeWidth="2.5" 
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      className="transition-all duration-500 drop-shadow-[0_2px_4px_rgba(16,185,129,0.3)]"
-                                    />
-                                  )}
-
-                                  {hoverReferencePoints.map((p, index) => {
-                                    const dotY = showYellow ? getY(p.data.receitas) : (showRed ? getY(p.data.despesas) : getY(p.data.lucro));
-                                    return (
-                                      <g key={index} className="group cursor-pointer">
-                                        {/* Invisible hover trigger area for tooltips */}
-                                        
-                                        
-                                        <foreignObject
-                                          x={Math.max(p.x - 75, 5)}
-                                          y={Math.min(Math.max(dotY - 85, 5), 100)}
-                                          width="150"
-                                          height="85"
-                                          className="opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 z-50 overflow-visible"
-                                        >
-                                          <div className="bg-background/95 border border-border text-muted-foreground text-xs p-1.5 rounded-sm shadow-2xl space-y-0.5 leading-tight select-none">
-                                            <div className="font-bold text-foreground text-center border-b border-border pb-0.5 mb-1">
-                                              {p.data.data.includes(':') ? `Hoje, às ${p.data.data}` : p.data.data.split('-').reverse().join('/')}
-                                            </div>
-                                            
-                                            {showYellow && (
-                                              <div className="flex justify-between gap-2">
-                                                <span className="text-primary">Faturamento:</span>
-                                                <span className="font-bold text-primary">{formatBRL(p.data.receitas)}</span>
-                                              </div>
-                                            )}
-                                            {showRed && (
-                                              <div className="flex justify-between gap-2">
-                                                <span className="text-red-600 dark:text-red-400">Despesas:</span>
-                                                <span className="font-bold text-red-600 dark:text-red-400">{formatBRL(p.data.despesas)}</span>
-                                              </div>
-                                            )}
-                                            {showGreen && (
-                                              <div className="flex justify-between gap-1">
-                                                <span className="text-emerald-600 dark:text-emerald-400">Lucro Líquido:</span>
-                                                <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatBRL(p.data.lucro)}</span>
-                                              </div>
-                                            )}
-                                          </div>
-                                        </foreignObject>
-
-                                        
-
-                                        <text 
-                                          x={p.x} 
-                                          y="185" 
-                                          textAnchor="middle" 
-                                          className="fill-muted-foreground text-xs tracking-tighter"
-                                        >
-                                          {p.data.data.includes(':') ? p.data.data : p.data.data.split('-').slice(1).reverse().join('/')}
-                                        </text>
-                                      </g>
-                                    );
-                                  })}
-                                </>
-                              );
+                              const totalItems = dashboardStats.dailyChartData.length;
+                              // Em telas pequenas (mobile), pula rótulos se houver mais de 5 itens para não espremer
+                              return dashboardStats.dailyChartData.map((d, index) => {
+                                const rawLabel = d.data.includes(':') ? d.data.split(':')[0] + 'h' : d.data.split('-').slice(1).reverse().join('/');
+                                const isMobileHide = totalItems > 6 && index % 2 !== 0 && index !== totalItems - 1;
+                                return (
+                                  <span 
+                                    key={index} 
+                                    className={`text-center transition-opacity ${isMobileHide ? 'hidden sm:inline-block' : 'inline-block'}`}
+                                  >
+                                    {rawLabel}
+                                  </span>
+                                );
+                              });
                             })()}
-                          </svg>
+                          </div>
                         </div>
 
                         {/* Compact descriptive chart legend */}
@@ -1587,6 +1626,22 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                 </div>
               </div>
 
+              {/* Status count badges */}
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className="text-xs uppercase tracking-wider font-bold py-1 px-2.5">
+                  Total: {filteredAgendamentos.length}
+                </Badge>
+                <Badge className="text-xs uppercase tracking-wider font-bold py-1 px-2.5 bg-primary/10 text-primary border border-primary/20">
+                  Agendados: {filteredAgendamentos.filter(b => b.status === 'agendado' || b.status === 'confirmado').length}
+                </Badge>
+                <Badge className="text-xs uppercase tracking-wider font-bold py-1 px-2.5 bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/40">
+                  Concluídos: {filteredAgendamentos.filter(b => b.status === 'concluido').length}
+                </Badge>
+                <Badge className="text-xs uppercase tracking-wider font-bold py-1 px-2.5 bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/40">
+                  Cancelados: {filteredAgendamentos.filter(b => b.status === 'cancelado' || b.status === 'faltou').length}
+                </Badge>
+              </div>
+
               {filteredAgendamentos.length === 0 ? (
                 <div className="py-16 text-center space-y-3 bg-card border border-dashed border-border rounded-sm">
                   <CalendarX className="w-8 h-8 text-muted-foreground mx-auto" />
@@ -1603,14 +1658,14 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                     const matchedClient = b.cliente_id ? clientes.find(c => c.id === b.cliente_id) : null;
                     
                     return (
-                      <div 
-                        key={b.id} 
-                        className={`p-5 rounded-sm border transition-all ${
-                          b.status === 'concluido' 
-                            ? 'bg-card/30 border-border opacity-60' 
+                      <div
+                        key={b.id}
+                        className={`p-5 rounded-sm border border-l-4 transition-all ${
+                          b.status === 'concluido'
+                            ? 'bg-card/30 border-border border-l-emerald-500 opacity-60'
                             : b.status === 'cancelado' || b.status === 'faltou'
-                            ? 'bg-red-100 dark:bg-red-950/10 border-red-200 dark:border-red-950/40 opacity-50' 
-                            : 'bg-card border-border shadow-sm hover:border-primary/40'
+                            ? 'bg-red-100 dark:bg-red-950/10 border-red-200 dark:border-red-950/40 border-l-red-500 opacity-50'
+                            : 'bg-card border-border border-l-primary shadow-sm hover:border-primary/40'
                         }`}
                       >
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1646,8 +1701,8 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                                 </p>
                               )}
 
-                              {/* Show client custom technical observations */}
-                              {matchedClient?.observacoes && (
+                              {/* Show client custom technical observations (ignora nota automática de auto-cadastro) */}
+                              {matchedClient?.observacoes && matchedClient.observacoes !== 'Auto-cadastrado via agendamento online' && (
                                 <div className="text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/10 p-2 rounded-sm border border-emerald-200 dark:border-emerald-900/30 mt-2 leading-relaxed">
                                   <span className="font-bold block text-xs uppercase text-emerald-500">Nota Técnica Carlos:</span>
                                   {matchedClient.observacoes}
@@ -1658,6 +1713,34 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
                           {/* Quick Controls */}
                           <div className="pt-3 sm:pt-0 border-t sm:border-t-0 border-border flex flex-wrap items-center gap-2">
+                            {/* Highlighted quick actions */}
+                            {b.status !== 'concluido' && b.status !== 'cancelado' && (
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateBookingStatus(b.id, 'concluido')}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-xs font-bold uppercase tracking-wide bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-900/20 transition cursor-pointer"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Concluir
+                              </button>
+                            )}
+                            {b.status !== 'cancelado' && b.status !== 'concluido' && (
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateBookingStatus(b.id, 'cancelado')}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-xs font-bold uppercase tracking-wide bg-red-600 hover:bg-red-500 text-white shadow-md shadow-red-900/20 transition cursor-pointer"
+                              >
+                                <X className="w-3.5 h-3.5" /> Cancelar
+                              </button>
+                            )}
+                            <a
+                              href={getWhatsAppLink(b.telefone_cliente)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-xs font-bold uppercase tracking-wide bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 transition cursor-pointer"
+                            >
+                              <FaWhatsapp size={14} /> WhatsApp
+                            </a>
+
                             {/* Link fidelidade selector */}
                             {!b.cliente_id && (
                               <div className="relative">
@@ -1794,39 +1877,62 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                 </div>
               </form>
 
-              {/* Service list for admin control */}
+              {/* Service showcase grid for admin control */}
               <div className="space-y-3">
-                <h4 className="text-sm tracking-wide text-foreground font-semibold">Serviços Atuais no Site</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <h4 className="text-sm tracking-wide text-foreground font-semibold">Vitrine de Serviços ({servicos.length})</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {servicos.map(s => (
-                    <div key={s.id} className={`p-4 rounded-sm border flex gap-3 justify-between items-center ${s.ativo ? 'border-border bg-card' : 'border-border bg-black opacity-50'}`}>
-                      <div className="flex gap-3 items-center">
-                        <div className="w-12 h-12 rounded bg-background border border-border overflow-hidden shrink-0">
-                          <img src={s.imagem_url} className="w-full h-full object-cover" />
-                        </div>
-                        <div>
-                          <h5 className="font-sans font-semibold text-foreground text-xs">{s.nome}</h5>
-                          <p className="text-xs text-primary font-bold mt-0.5">{formatBRL(s.preco)} • {s.duracao_minutos} min</p>
-                        </div>
+                    <div
+                      key={s.id}
+                      className={`group rounded-sm border overflow-hidden transition-all ${
+                        s.ativo ? 'border-border bg-card hover:border-primary/40' : 'border-border bg-card/40 opacity-60'
+                      }`}
+                    >
+                      <div className="aspect-video w-full bg-background overflow-hidden">
+                        <img src={s.imagem_url} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
                       </div>
-
-                      <div className="flex gap-2 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handleEditServiceSelect(s)}
-                          className="p-1 px-2.5 border border-border text-muted-foreground rounded-sm hover:bg-accent hover:text-foreground text-xs font-bold"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleServiceActive(s)}
-                          className={`p-1 px-2.5 rounded-sm text-xs font-semibold border ${
-                            s.ativo ? 'bg-primary/10 text-primary border-primary/25' : 'bg-card text-muted-foreground border-border'
-                          }`}
-                        >
-                          {s.ativo ? 'Ativo' : 'Inativo'}
-                        </button>
+                      <div className="p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <h5 className="font-sans font-semibold text-foreground text-sm">{s.nome}</h5>
+                          <Badge
+                            className={`shrink-0 text-xs uppercase tracking-wider font-bold ${
+                              s.ativo
+                                ? 'bg-primary/10 text-primary border border-primary/25'
+                                : 'bg-card text-muted-foreground border border-border'
+                            }`}
+                          >
+                            {s.ativo ? 'Ativo' : 'Inativo'}
+                          </Badge>
+                        </div>
+                        {s.descricao && (
+                          <p className="text-xs text-muted-foreground line-clamp-2">{s.descricao}</p>
+                        )}
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="font-bold text-xl text-primary">{formatBRL(s.preco)}</span>
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Clock className="w-3 h-3" /> {s.duracao_minutos} min
+                          </span>
+                        </div>
+                        <div className="flex gap-2 pt-2 border-t border-border">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => handleEditServiceSelect(s)}
+                          >
+                            Editar
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={s.ativo ? 'ghost' : 'secondary'}
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => handleToggleServiceActive(s)}
+                          >
+                            {s.ativo ? 'Desativar' : 'Ativar'}
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -2008,57 +2114,93 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                 </div>
               </form>
 
-              {/* Products list detail */}
-              <div className="border border-border rounded-sm overflow-hidden bg-card shadow-2xl">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-background border-b border-border text-muted-foreground font-semibold text-xs uppercase tracking-[0.1em]">
-                      <th className="p-3.5">Nome</th>
-                      <th className="p-3.5">Preço</th>
-                      <th className="p-3.5">Estoque Disponível</th>
-                      <th className="p-3.5">Status Vitrine</th>
-                      <th className="p-3.5 text-right">Ação</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-850 text-muted-foreground">
-                    {produtos.map(p => (
-                      <tr key={p.id} className="hover:bg-accent/30">
-                        <td className="p-3.5 font-bold text-foreground">{p.nome}</td>
-                        <td className="p-3.5 text-primary font-bold">{formatBRL(p.preco)}</td>
-                        <td className="p-3.5">
-                          <span className={`px-2 py-0.5 rounded-sm text-xs font-bold border ${
-                            p.estoque <= 2 ? 'bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 border-red-200 dark:border-red-900/40' : 'bg-card text-muted-foreground border-border'
-                          }`}>
-                            {p.estoque} unidades
-                          </span>
-                        </td>
-                        <td className="p-3.5">
-                          <span className={`text-xs uppercase font-bold tracking-wider ${p.ativo ? 'text-primary' : 'text-muted-foreground'}`}>
-                            {p.ativo ? 'Exibido' : 'Oculto'}
-                          </span>
-                        </td>
-                        <td className="p-3.5 text-right flex justify-end gap-1.5 items-center">
-                          <button
-                            type="button"
-                            onClick={() => handleEditProductSelect(p)}
-                            className="bg-background hover:bg-accent border border-border text-muted-foreground hover:text-foreground px-2.5 py-1 rounded-sm text-xs font-bold"
-                          >
-                            Modificar R$
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleProductActive(p)}
-                            className={`px-2.5 py-1 border rounded-sm text-xs font-semibold transition ${
-                              p.ativo ? 'border-primary/25 bg-primary/10 text-primary' : 'border-border bg-card text-muted-foreground'
+              {/* Product showcase grid + stock control */}
+              <div className="space-y-3">
+                <h4 className="text-sm tracking-wide text-foreground font-semibold">Vitrine & Estoque ({produtos.length})</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {produtos.map(p => (
+                    <div
+                      key={p.id}
+                      className={`group rounded-sm border overflow-hidden transition-all ${
+                        p.ativo ? 'border-border bg-card hover:border-primary/40' : 'border-border bg-card/40 opacity-60'
+                      }`}
+                    >
+                      <div className="aspect-video w-full bg-background overflow-hidden">
+                        <img src={p.imagem_url} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+                      </div>
+                      <div className="p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <h5 className="font-sans font-semibold text-foreground text-sm">{p.nome}</h5>
+                          <Badge
+                            className={`shrink-0 text-xs uppercase tracking-wider font-bold ${
+                              p.ativo
+                                ? 'bg-primary/10 text-primary border border-primary/25'
+                                : 'bg-card text-muted-foreground border border-border'
                             }`}
                           >
-                            {p.ativo ? 'Ocultar' : 'Exibir'}
+                            {p.ativo ? 'Exibido' : 'Oculto'}
+                          </Badge>
+                        </div>
+                        {p.descricao && (
+                          <p className="text-xs text-muted-foreground line-clamp-2">{p.descricao}</p>
+                        )}
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="font-bold text-xl text-primary">{formatBRL(p.preco)}</span>
+                          <Badge
+                            className={`text-xs uppercase tracking-wider font-bold ${
+                              p.estoque <= 3
+                                ? 'bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/40'
+                                : 'bg-card text-muted-foreground border border-border'
+                            }`}
+                          >
+                            {p.estoque <= 3 ? 'Estoque baixo' : `${p.estoque} un.`}
+                          </Badge>
+                        </div>
+
+                        {/* Quick stock adjust */}
+                        <div className="flex items-center justify-center gap-3 py-1">
+                          <button
+                            type="button"
+                            onClick={() => handleAdjustStock(p, -1)}
+                            disabled={p.estoque <= 0}
+                            className="p-1.5 border border-border rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+                          >
+                            <Minus className="w-3.5 h-3.5" />
                           </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          <span className="font-bold text-sm text-foreground w-10 text-center">{p.estoque} un.</span>
+                          <button
+                            type="button"
+                            onClick={() => handleAdjustStock(p, 1)}
+                            className="p-1.5 border border-border rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground transition cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <div className="flex gap-2 pt-2 border-t border-border">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => handleEditProductSelect(p)}
+                          >
+                            Modificar
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={p.ativo ? 'ghost' : 'secondary'}
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => handleToggleProductActive(p)}
+                          >
+                            {p.ativo ? 'Ocultar' : 'Exibir'}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -2113,6 +2255,15 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                 </div>
 
                 <div className="space-y-1.5">
+                  <Label>Data de nascimento (opcional)</Label>
+                  <Input
+                    type="date"
+                    value={newClient.data_nascimento}
+                    onChange={(e) => setNewClient({ ...newClient, data_nascimento: e.target.value })}
+                  />
+                </div>
+
+                <div className="md:col-span-2 space-y-1.5">
                   <Label>Observações técnicas do Barbeiro</Label>
                   <Textarea
                     rows={1}
@@ -2143,9 +2294,32 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
               {/* Clients database list */}
               <div className="space-y-3">
-                <h4 className="text-sm tracking-wide text-foreground font-semibold">Histórico de Prontuários ({clientes.length})</h4>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <h4 className="text-sm tracking-wide text-foreground font-semibold">Histórico de Prontuários ({clientes.length})</h4>
+                  <div className="relative w-full sm:w-72">
+                    <Search className="w-3.5 h-3.5 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <Input
+                      type="text"
+                      value={clientSearchQuery}
+                      onChange={(e) => setClientSearchQuery(e.target.value)}
+                      placeholder="Buscar por nome ou telefone..."
+                      className="pl-8"
+                    />
+                  </div>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {clientes.map(c => (
+                  {clientes
+                    .filter(c => {
+                      const query = clientSearchQuery.trim().toLowerCase();
+                      if (!query) return true;
+                      const digitsQuery = query.replace(/\D/g, '');
+                      const matchesName = c.nome.toLowerCase().includes(query);
+                      const matchesPhone = digitsQuery.length > 0 && c.telefone.replace(/\D/g, '').includes(digitsQuery);
+                      return matchesName || matchesPhone;
+                    })
+                    .map(c => {
+                    const vipEntry = assinantesVIP.find(a => a.cliente.id === c.id);
+                    return (
                     <div 
                       key={c.id} 
                       onClick={() => {
@@ -2171,7 +2345,20 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                               )}
                             </div>
                             <div>
-                              <h5 className="font-sans font-bold text-foreground text-sm group-hover:text-primary transition">{c.nome}</h5>
+                              <h5 className="font-sans font-bold text-foreground text-sm group-hover:text-primary transition flex items-center gap-1.5">
+                                {c.nome}
+                                {vipEntry && (
+                                  <Badge
+                                    className={`text-xs uppercase tracking-wider font-bold ${
+                                      vipEntry.renovado
+                                        ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/40'
+                                        : 'bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/40'
+                                    }`}
+                                  >
+                                    {vipEntry.renovado ? 'VIP' : 'VIP vencido'}
+                                  </Badge>
+                                )}
+                              </h5>
                               <p className="text-xs text-muted-foreground uppercase tracking-wider">{c.email || 'Sem e-mail'}</p>
                             </div>
                           </div>
@@ -2182,8 +2369,16 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
                         <div className="text-xs text-muted-foreground space-y-1 pl-1 border-l-2 border-border">
                           <p className="flex items-center gap-1.5">
-                            <span className="text-muted-foreground">WhatsApp:</span> 
-                            <span className="text-muted-foreground">{c.telefone}</span>
+                            <span className="text-muted-foreground">WhatsApp:</span>
+                            <a
+                              href={getWhatsAppLink(c.telefone)}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1"
+                            >
+                              <FaWhatsapp size={12} /> {c.telefone}
+                            </a>
                           </p>
                           {c.email && (
                             <p className="flex items-center gap-1.5">
@@ -2230,7 +2425,8 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                         </button>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -2246,106 +2442,172 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
               </div>
  
               {/* Lançamento manual form */}
-              <form onSubmit={handleSaveFinanceLaunch} className="bg-card p-6 rounded-lg border border-border grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div className="md:col-span-2">
-                  <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-foreground mb-2">
+              <form
+                onSubmit={handleSaveFinanceLaunch}
+                className="bg-card p-6 rounded-lg border border-border space-y-5"
+              >
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-foreground mb-4">
                     Registrar Movimentação Manual
                   </h4>
+
+                  {/* Tipo toggle — verde/vermelho */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      id="finance-type-entrada"
+                      type="button"
+                      onClick={() => {
+                        setNewLaunch({ ...newLaunch, tipo: 'entrada' });
+                        setTimeout(() => (document.getElementById('finance-valor') as HTMLInputElement)?.focus(), 50);
+                      }}
+                      className={`py-3 rounded-sm font-bold text-sm tracking-wide border-2 transition-all cursor-pointer ${
+                        newLaunch.tipo === 'entrada'
+                          ? 'bg-emerald-600 border-emerald-600 text-white shadow-lg shadow-emerald-900/30'
+                          : 'bg-background border-border text-muted-foreground hover:border-emerald-600 hover:text-emerald-500'
+                      }`}
+                    >
+                      ↑ ENTRADA
+                    </button>
+                    <button
+                      id="finance-type-saida"
+                      type="button"
+                      onClick={() => {
+                        setNewLaunch({ ...newLaunch, tipo: 'saida' });
+                        setTimeout(() => (document.getElementById('finance-valor') as HTMLInputElement)?.focus(), 50);
+                      }}
+                      className={`py-3 rounded-sm font-bold text-sm tracking-wide border-2 transition-all cursor-pointer ${
+                        newLaunch.tipo === 'saida'
+                          ? 'bg-red-600 border-red-600 text-white shadow-lg shadow-red-900/30'
+                          : 'bg-background border-border text-muted-foreground hover:border-red-500 hover:text-red-500'
+                      }`}
+                    >
+                      ↓ SAÍDA
+                    </button>
+                  </div>
                 </div>
 
+                {/* Valor em destaque */}
                 <div className="space-y-1.5">
-                  <Label>Tipo de Fluxo</Label>
-                  <Select value={newLaunch.tipo} onValueChange={(v) => v && setNewLaunch({ ...newLaunch, tipo: v as string })}>
-                    <SelectTrigger id="finance-type-select" className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="entrada">Entrada (Ganho Financeiro / Venda)</SelectItem>
-                      <SelectItem value="saida">Saída (Despesa / Custo / Fornecedor)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label>Valor (R$)</Label>
+                  <div className="relative">
+                    <span
+                      className={`absolute left-4 top-1/2 -translate-y-1/2 font-bold text-2xl select-none pointer-events-none ${
+                        newLaunch.tipo === 'entrada' ? 'text-emerald-500' : 'text-red-500'
+                      }`}
+                    >
+                      R$
+                    </span>
+                    <input
+                      id="finance-valor"
+                      type="text"
+                      inputMode="decimal"
+                      required
+                      autoFocus
+                      value={newLaunch.valor}
+                      onChange={(e) => {
+                        let inputVal = e.target.value;
+                        // Substitui pontos por vírgulas se o usuário digitar ponto do teclado numérico
+                        inputVal = inputVal.replace('.', ',');
+                        // Permite apenas dígitos e no máximo 1 vírgula
+                        const parts = inputVal.split(',');
+                        if (parts.length > 2) return; // ignora segunda vírgula
+                        const integerPart = parts[0].replace(/[^0-9]/g, '');
+                        let decimalPart = parts[1] !== undefined ? parts[1].replace(/[^0-9]/g, '').slice(0, 2) : undefined;
+                        
+                        if (decimalPart !== undefined) {
+                          setNewLaunch({ ...newLaunch, valor: `${integerPart},${decimalPart}` });
+                        } else {
+                          setNewLaunch({ ...newLaunch, valor: integerPart });
+                        }
+                      }}
+                      onBlur={() => {
+                        if (!newLaunch.valor) return;
+                        if (!newLaunch.valor.includes(',')) {
+                          setNewLaunch({ ...newLaunch, valor: `${newLaunch.valor},00` });
+                        } else {
+                          const [int, dec] = newLaunch.valor.split(',');
+                          const paddedDec = (dec || '').padEnd(2, '0');
+                          setNewLaunch({ ...newLaunch, valor: `${int || '0'},${paddedDec}` });
+                        }
+                      }}
+                      placeholder="0,00"
+                      className="w-full pl-16 pr-4 py-4 text-3xl font-bold rounded-sm border border-border bg-background outline-none focus:outline-none focus:ring-0 focus:border-border transition-all placeholder:text-muted-foreground/30 text-foreground"
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label>Descrição operacional (opcional)</Label>
-                  <Input
-                    type="text"
-                    value={newLaunch.descricao}
-                    onChange={(e) => setNewLaunch({ ...newLaunch, descricao: e.target.value })}
-                    placeholder="Ex: Compra de golas higiênicas"
-                  />
-                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="space-y-1.5">
+                    <Label>Descrição operacional (opcional)</Label>
+                    <Input
+                      type="text"
+                      value={newLaunch.descricao}
+                      onChange={(e) => setNewLaunch({ ...newLaunch, descricao: e.target.value })}
+                      placeholder="Ex: Compra de golas higiênicas"
+                      className="rounded-sm"
+                    />
+                  </div>
 
-                <div className="space-y-1.5">
-                  <Label>Valor absoluto (mantenha positivo, R$)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    required
-                    value={newLaunch.valor}
-                    onChange={(e) => setNewLaunch({ ...newLaunch, valor: e.target.value })}
-                    placeholder="Ex: 120.00"
-                  />
-                </div>
+                  <div className="space-y-1.5">
+                    <Label>Categoria do lançamento</Label>
+                    <Select value={newLaunch.categoria} onValueChange={(v) => v && setNewLaunch({ ...newLaunch, categoria: v as string })}>
+                      <SelectTrigger className="w-full rounded-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categoriasFinanceiras.filter(c => c.tipo === newLaunch.tipo).map(cat => (
+                          <SelectItem key={cat.id} value={cat.nome}>{cat.nome}</SelectItem>
+                        ))}
+                        {categoriasFinanceiras.filter(c => c.tipo === newLaunch.tipo).length === 0 && (
+                          <SelectItem value="Serviços">Serviços</SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewCategoryType(newLaunch.tipo as 'entrada' | 'saida');
+                        setIsCategoryModalOpen(true);
+                      }}
+                      className="text-primary hover:text-primary/80 text-xs uppercase flex items-center gap-1 cursor-pointer"
+                    >
+                      <Settings className="w-3 h-3" /> Configurar Categorias
+                    </button>
+                  </div>
 
-                <div className="space-y-1.5">
-                  <Label>Categoria do lançamento</Label>
-                  <Select value={newLaunch.categoria} onValueChange={(v) => v && setNewLaunch({ ...newLaunch, categoria: v as string })}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categoriasFinanceiras.filter(c => c.tipo === newLaunch.tipo).map(cat => (
-                        <SelectItem key={cat.id} value={cat.nome}>{cat.nome}</SelectItem>
-                      ))}
-                      {categoriasFinanceiras.filter(c => c.tipo === newLaunch.tipo).length === 0 && (
-                        <SelectItem value="Serviços">Serviços</SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setNewCategoryType(newLaunch.tipo as 'entrada' | 'saida');
-                      setIsCategoryModalOpen(true);
-                    }}
-                    className="text-primary hover:text-primary/80 text-xs uppercase flex items-center gap-1 cursor-pointer"
-                  >
-                    <Settings className="w-3 h-3" /> Configurar Categorias
-                  </button>
-                </div>
+                  <div className="space-y-1.5">
+                    <Label>Forma de pagamento</Label>
+                    <Select value={newLaunch.forma_pagamento} onValueChange={(v) => v && setNewLaunch({ ...newLaunch, forma_pagamento: v as any })}>
+                      <SelectTrigger className="w-full rounded-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                        <SelectItem value="pix">Pix</SelectItem>
+                        <SelectItem value="cartao">Cartão de débito/crédito</SelectItem>
+                        <SelectItem value="outro">Outro método</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                <div className="space-y-1.5">
-                  <Label>Forma de pagamento</Label>
-                  <Select value={newLaunch.forma_pagamento} onValueChange={(v) => v && setNewLaunch({ ...newLaunch, forma_pagamento: v as any })}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                      <SelectItem value="pix">Pix</SelectItem>
-                      <SelectItem value="cartao">Cartão de débito/crédito</SelectItem>
-                      <SelectItem value="outro">Outro método</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>Data de registro</Label>
-                  <Input
-                    type="date"
-                    required
-                    value={newLaunch.data}
-                    onChange={(e) => setNewLaunch({ ...newLaunch, data: e.target.value })}
-                  />
+                  <div className="space-y-1.5">
+                    <Label>Data de registro</Label>
+                    <Input
+                      type="date"
+                      required
+                      value={newLaunch.data}
+                      onChange={(e) => setNewLaunch({ ...newLaunch, data: e.target.value })}
+                      className="rounded-sm"
+                    />
+                  </div>
                 </div>
 
                 {/* Optional linked product selection */}
                 {newLaunch.tipo === 'entrada' && (
-                  <div className="space-y-1.5 md:col-span-2">
+                  <div className="space-y-1.5">
                     <Label>Abater 1 unidade do estoque deste produto? (opcional)</Label>
                     <Select value={newLaunch.produto_id || 'none'} onValueChange={(v) => setNewLaunch({ ...newLaunch, produto_id: (!v || v === 'none') ? '' : (v as string) })}>
-                      <SelectTrigger className="w-full">
+                      <SelectTrigger className="w-full rounded-sm">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -2358,10 +2620,18 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                   </div>
                 )}
 
-                <div className="md:col-span-2 flex justify-end pt-2 border-t border-border">
-                  <Button type="submit" disabled={submitting}>
-                    <Plus className="w-4 h-4" /> Registrar no Fluxo de Caixa
-                  </Button>
+                <div className="pt-2 border-t border-border">
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className={`w-full py-4 rounded-sm font-bold text-lg tracking-wide text-white transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                      newLaunch.tipo === 'entrada'
+                        ? 'bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-900/30'
+                        : 'bg-red-600 hover:bg-red-500 shadow-lg shadow-red-900/30'
+                    }`}
+                  >
+                    {submitting ? 'Salvando...' : newLaunch.tipo === 'entrada' ? '↑ Registrar Entrada' : '↓ Registrar Saída'}
+                  </button>
                 </div>
               </form>
  
@@ -2611,7 +2881,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                     <div 
                       key={ex.id} 
                       className={`p-4 rounded-sm border flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all ${
-                        ex.ativo ? 'border-border bg-card' : 'border-border bg-black opacity-40'
+                        ex.ativo ? 'border-border bg-card' : 'border-border bg-muted opacity-60'
                       }`}
                     >
                       {/* Name and active switch toggle button */}
@@ -2785,7 +3055,6 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
                 </div>
               </div>
-
             </div>
           )}
 
@@ -3071,7 +3340,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
               {/* Body */}
               <div className="space-y-6">
                 {/* Giant Progress representation */}
-                <div className="bg-black/60 border border-border p-4 rounded-sm space-y-3">
+                <div className="bg-background border border-border p-4 rounded-sm space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="text-xs font-medium text-muted-foreground">Tempo Decorrido</span>
                     <span className="text-sm font-bold text-primary">{planStats.elapsedDays} de {planStats.totalDays} dias</span>
@@ -3093,13 +3362,13 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
                 {/* Progress Detail Info */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-black/40 border border-border/60 p-3 rounded-sm space-y-1">
+                  <div className="bg-background border border-border/60 p-3 rounded-sm space-y-1">
                     <span className="text-xs uppercase text-muted-foreground font-bold block">Uso Consumido</span>
                     <span className="text-base font-bold text-primary">{planStats.percent}%</span>
                     <span className="text-xs text-muted-foreground block ">{planStats.elapsedDays} dias decorridos</span>
                   </div>
 
-                  <div className="bg-black/40 border border-border/60 p-3 rounded-sm space-y-1">
+                  <div className="bg-background border border-border/60 p-3 rounded-sm space-y-1">
                     <span className="text-xs uppercase text-muted-foreground font-bold block">Dias Restantes</span>
                     <span className="text-base font-bold text-emerald-600 dark:text-emerald-400">{planStats.remainingDays} d</span>
                     <span className="text-xs text-muted-foreground block ">Até o fechamento</span>
@@ -3146,7 +3415,6 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
           </div>
         )}
       </AnimatePresence>
-
     </div>
   );
 }

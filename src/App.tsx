@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Scissors } from 'lucide-react';
 import { Servico, Produto } from './types.ts';
@@ -23,6 +23,10 @@ export default function App() {
     telefone: string;
     foto_url?: string;
   } | null>(null);
+
+  // Pending booking auto-submit after Google login
+  const [pendingBookingSuccess, setPendingBookingSuccess] = useState<any>(null);
+  const pendingBookedRef = useRef(false);
 
   // Sincroniza loggedClient com a sessão Supabase (cliente não-admin)
   // + puxa perfil do servidor pra pegar telefone persistido
@@ -66,6 +70,40 @@ export default function App() {
       setLoggedClient(null);
     }
   }, [adminSession.session, adminSession.loading]);
+
+  // Auto-submit pending booking when loggedClient becomes available after Google login
+  useEffect(() => {
+    if (!loggedClient || pendingBookedRef.current) return;
+    const pendingJson = localStorage.getItem('pending_booking');
+    if (!pendingJson) return;
+    let pending: any;
+    try { pending = JSON.parse(pendingJson); } catch { return; }
+    pendingBookedRef.current = true;
+
+    fetch('/api/agendamentos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        servico_id: pending.servico_id,
+        data: pending.data,
+        horario: pending.horario,
+        nome_cliente: pending.nome_cliente,
+        telefone_cliente: pending.telefone_cliente,
+        observacao: pending.observacao || '',
+        cliente_email: loggedClient.email
+      })
+    }).then(async res => {
+      if (res.ok) {
+        localStorage.removeItem('pending_booking');
+        const data = await res.json();
+        setPendingBookingSuccess(data);
+      } else {
+        pendingBookedRef.current = false;
+      }
+    }).catch(() => {
+      pendingBookedRef.current = false;
+    });
+  }, [loggedClient]);
 
   // Hidrata loggedClient do localStorage no boot (sobrevive a reload)
   useEffect(() => {
@@ -181,6 +219,72 @@ export default function App() {
               // Sessão Supabase atualiza via onAuthStateChange automaticamente
             }}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Pending Booking Success Popup */}
+      <AnimatePresence>
+        {pendingBookingSuccess && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/85 backdrop-blur-md"
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative z-10 w-full max-w-sm bg-card border border-border rounded-sm shadow-2xl p-8 text-center space-y-5"
+            >
+              <div className="w-14 h-14 bg-emerald-100 dark:bg-emerald-950/30 rounded-full flex items-center justify-center text-emerald-600 dark:text-emerald-400 mx-auto border border-emerald-200 dark:border-emerald-900/50 shadow-lg">
+                <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-xl font-normal text-foreground tracking-wide">Agendamento Confirmado!</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Seu horário foi reservado com sucesso na <strong className="text-primary">Detalhe Barbearia</strong>.
+                </p>
+              </div>
+
+              <div className="bg-muted/40 border border-border rounded-sm p-4 text-xs space-y-2 text-left">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Código:</span>
+                  <span className="font-bold text-primary">{pendingBookingSuccess.id}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Cliente:</span>
+                  <span className="font-semibold text-foreground">{loggedClient?.nome}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Quando:</span>
+                  <span className="font-bold text-foreground">
+                    {(() => {
+                      try {
+                        const [d, t] = pendingBookingSuccess.inicio_em?.split('T') || [];
+                        return `${d?.split('-').reverse().join('/')} às ${t?.slice(0, 5)}h`;
+                      } catch { return ''; }
+                    })()}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingBookingSuccess(null);
+                  pendingBookedRef.current = false;
+                }}
+                className="w-full bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-black text-xs uppercase tracking-widest font-black py-3.5 rounded-sm transition-all cursor-pointer shadow-md"
+              >
+                Fechar
+              </button>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
