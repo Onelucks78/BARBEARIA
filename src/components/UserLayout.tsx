@@ -396,7 +396,7 @@ export default function UserLayout({
               <Calendar className="w-4 h-4" /> Novo Agendamento
             </button>
             <button onClick={() => setActiveTab('assinatura')} className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${activeTab === 'assinatura' ? 'bg-primary text-primary-foreground shadow-lg font-black' : 'text-muted-foreground hover:bg-accent hover:text-foreground'}`}>
-              <CreditCard className="w-4 h-4" /> Assinatura & Planos
+              <Crown className="w-4 h-4" /> Meu Plano
             </button>
             <button onClick={() => setActiveTab('agendamentos')} className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${activeTab === 'agendamentos' ? 'bg-primary text-primary-foreground shadow-lg font-black' : 'text-muted-foreground hover:bg-accent hover:text-foreground'}`}>
               <Clock className="w-4 h-4" /> Meus Agendamentos
@@ -663,12 +663,12 @@ export default function UserLayout({
           </div>
         )}
 
-        {/* ABA: ASSINATURA & PLANOS */}
+        {/* ABA: MEU PLANO */}
         {activeTab === 'assinatura' && (
           <div className={`mx-auto space-y-6 ${subscription?.status !== 'ativo' && !selectedPlano ? 'max-w-5xl' : 'max-w-xl'}`}>
             <div>
-              <h2 className="text-2xl font-bold tracking-tight text-foreground">Gerenciar Assinatura</h2>
-              <p className="text-muted-foreground text-xs mt-1">Escolha o plano ideal para você e tenha benefícios ilimitados na poltrona da barbearia.</p>
+              <h2 className="text-2xl font-bold tracking-tight text-foreground">Meu Plano</h2>
+              <p className="text-muted-foreground text-xs mt-1">Gerencie a sua assinatura mensal ou escolha o plano ideal para você.</p>
             </div>
 
             {subscription?.status === 'ativo' ? (
