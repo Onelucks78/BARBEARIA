@@ -39,6 +39,7 @@ export default function App() {
     email: string;
     telefone: string;
     foto_url?: string;
+    observacoes?: string;
   } | null>(null);
 
   // Pending booking auto-submit after Google login
@@ -73,7 +74,8 @@ export default function App() {
                 nome: data.profile.nome || prev?.nome || '',
                 email: data.profile.email || prev?.email || '',
                 telefone: data.profile.telefone || prev?.telefone || '',
-                foto_url: data.profile.foto_url || prev?.foto_url
+                foto_url: data.profile.foto_url || prev?.foto_url,
+                observacoes: data.profile.observacoes || prev?.observacoes
               };
               try { localStorage.setItem('logged_client', JSON.stringify(merged)); } catch {}
               return merged;
