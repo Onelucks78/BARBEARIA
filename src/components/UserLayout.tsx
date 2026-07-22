@@ -230,85 +230,6 @@ export default function UserLayout({
     }
   };
 
-  const handleSubscribe = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedPlano) {
-      setCheckoutError('Selecione um plano para continuar.');
-      return;
-    }
-    if (!cardNumber || !cardName || !cardExpiry || !cardCvv) {
-      setCheckoutError('Preencha todos os campos do cartão.');
-      return;
-    }
-    setIsSubscribing(true);
-    setCheckoutError('');
-    try {
-      const nextMonth = new Date();
-      nextMonth.setDate(nextMonth.getDate() + 30);
-      
-      let currentObsText = '';
-      if (loggedClient.observacoes) {
-        try {
-          if (loggedClient.observacoes.trim().startsWith('{')) {
-            const parsed = JSON.parse(loggedClient.observacoes);
-            currentObsText = parsed.observacoes_usuario || '';
-          } else {
-            currentObsText = loggedClient.observacoes;
-          }
-        } catch {
-          currentObsText = loggedClient.observacoes;
-        }
-      }
-
-      const packedData = JSON.stringify({
-        observacoes_usuario: currentObsText,
-        subscription: {
-          plan: selectedPlano.key,
-          status: 'ativo',
-          price: selectedPlano.preco,
-          renews_at: nextMonth.toISOString(),
-          card_last4: cardNumber.slice(-4),
-          card_brand: 'Mastercard'
-        }
-      });
-
-      const res = await fetch('/api/cliente/perfil', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: loggedClient.email,
-          nome: loggedClient.nome,
-          telefone: loggedClient.telefone,
-          foto_url: loggedClient.foto_url || '',
-          observacoes: packedData
-        })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.profile) {
-          onProfileUpdate(data.profile);
-          setCheckoutSuccess(true);
-          setCardNumber('');
-          setCardName('');
-          setCardExpiry('');
-          setCardCvv('');
-          setSelectedPlano(null);
-          setTimeout(() => {
-            setCheckoutSuccess(false);
-            setActiveTab('painel');
-          }, 2000);
-        }
-      } else {
-        setCheckoutError('Falha ao processar assinatura.');
-      }
-    } catch (err) {
-      setCheckoutError('Erro de conexão ao assinar.');
-    } finally {
-      setIsSubscribing(false);
-    }
-  };
-
   const handleCancelSubscription = async () => {
     if (!confirm(`Deseja realmente cancelar o seu Plano ${planoDisplayName}?`)) return;
     try {
@@ -659,7 +580,7 @@ export default function UserLayout({
 
         {/* ABA: MEU PLANO */}
         {activeTab === 'assinatura' && (
-          <div className={`mx-auto space-y-6 ${subscription?.status !== 'ativo' && !selectedPlano ? 'max-w-5xl' : 'max-w-xl'}`}>
+          <div className={`mx-auto space-y-6 ${subscription?.status !== 'ativo' ? 'max-w-5xl' : 'max-w-xl'}`}>
             <div>
               <h2 className="text-2xl font-bold tracking-tight text-foreground">Meu Plano</h2>
               <p className="text-muted-foreground text-xs mt-1">Gerencie a sua assinatura mensal ou escolha o plano ideal para você.</p>
