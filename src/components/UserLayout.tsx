@@ -74,20 +74,12 @@ export default function UserLayout({
   const [clientBookings, setClientBookings] = useState<any[]>([]);
   const [loadingBookings, setLoadingBookings] = useState(false);
   const [subscription, setSubscription] = useState<any>(null);
-  const [selectedPlano, setSelectedPlano] = useState<PlanoAssinatura | null>(null);
-
   const currentPlano = PLANOS.find(p => p.key === (subscription?.plan || '').toLowerCase());
   const planoDisplayName = currentPlano ? currentPlano.nome : (subscription?.plan || 'VIP');
 
-  // Credit Card Checkout States
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardName, setCardName] = useState('');
-  const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvv, setCardCvv] = useState('');
-  const [isSubscribing, setIsSubscribing] = useState(false);
+  // Stripe Checkout & Portal States
   const [redirectingPlan, setRedirectingPlan] = useState<string | null>(null);
   const [isOpeningPortal, setIsOpeningPortal] = useState(false);
-  const [checkoutSuccess, setCheckoutSuccess] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
 
   // Profile Form States
@@ -193,6 +185,8 @@ export default function UserLayout({
       console.error(e);
       alert('Erro de rede ao cancelar.');
     }
+  };
+
   const handleStartStripeCheckout = async (planoKey: string) => {
     setRedirectingPlan(planoKey);
     setCheckoutError('');
@@ -877,3 +871,4 @@ export default function UserLayout({
     </div>
   );
 }
+// End of UserLayout component
