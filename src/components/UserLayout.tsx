@@ -754,8 +754,6 @@ export default function UserLayout({
             )}
           </div>
         )}
-          </div>
-        )}
 
         {/* ABA: AGENDAR */}
         {activeTab === 'agendar' && (
