@@ -8,3 +8,8 @@ coverage/
 !.env.example
 db.json
 .serena/
+.vercel
+api/_app.mjs
+
+.vercel
+.env*
