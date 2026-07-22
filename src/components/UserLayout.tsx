@@ -308,21 +308,31 @@ export default function UserLayout({
             <ThemeToggle />
           </div>
 
-          <div className="flex items-center gap-3 p-3 bg-card/40 border border-border rounded-md mb-6">
-            <div className="w-10 h-10 rounded-full border border-primary overflow-hidden bg-background shrink-0">
-              {loggedClient.foto_url ? (
-                <img src={loggedClient.foto_url} alt="Profile" className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-primary font-bold uppercase text-sm">
-                  {loggedClient.nome.charAt(0)}
+          <div className="flex items-center gap-3 p-3 bg-card/40 border border-border rounded-xl mb-6">
+            <div className="relative w-10 h-10 shrink-0">
+              <div className="w-10 h-10 rounded-full border border-primary/60 overflow-hidden bg-background">
+                {loggedClient.foto_url ? (
+                  <img src={loggedClient.foto_url} alt="Profile" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-primary font-bold uppercase text-sm">
+                    {loggedClient.nome.charAt(0)}
+                  </div>
+                )}
+              </div>
+              {subscription?.status === 'ativo' && (
+                <div className="absolute -top-1.5 -right-1.5 bg-gradient-to-r from-blue-600 to-sky-500 text-white p-0.5 rounded-full shadow-md border border-background flex items-center justify-center">
+                  <Crown className="w-3 h-3 fill-sky-200 text-sky-100" />
                 </div>
               )}
             </div>
-            <div className="min-w-0">
-              <h4 className="font-bold text-xs text-foreground truncate">{loggedClient.nome}</h4>
-              <span className={`text-xs uppercase tracking-wider px-1.5 py-0.5 rounded-sm inline-block mt-0.5 ${subscription?.status === 'ativo' ? 'bg-amber-600/10 text-primary border border-primary/30 font-bold' : 'bg-muted text-muted-foreground'}`}>
-                {subscription?.status === 'ativo' ? `Cliente ${planoDisplayName}` : 'Cliente Comum'}
-              </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <h4 className="font-bold text-xs text-foreground truncate">{loggedClient.nome}</h4>
+                {subscription?.status === 'ativo' && (
+                  <Crown className="w-3.5 h-3.5 text-blue-500 fill-blue-500/20 shrink-0" />
+                )}
+              </div>
+              <p className="text-[10px] text-muted-foreground truncate">{loggedClient.email}</p>
             </div>
           </div>
 
