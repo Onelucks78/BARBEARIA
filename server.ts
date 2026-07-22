@@ -32,7 +32,7 @@ import * as stripe from './server/stripe.ts';
 // Authenticate middleware
 // (substituído por server/auth.ts que verifica JWT real do Supabase)
 
-async function startServer() {
+export async function createApp() {
   // Test connectivity
   if (isSupabaseConfigured()) {
     try {
@@ -1764,24 +1764,41 @@ async function startServer() {
 
 
   // --- BIND LIVE VITE MIDDLEWARE (DEV) OR SERVE BUILDS (PROD) ---
+  // Vercel handles static file serving via CDN — skip when running serverless.
 
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+  if (!process.env.VERCEL) {
+    if (process.env.NODE_ENV !== 'production') {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: 'spa',
+      });
+      app.use(vite.middlewares);
+    } else {
+      const distPath = path.join(process.cwd(), 'dist');
+      app.use(express.static(distPath));
+      app.get('*', (req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
   }
 
+  return app;
+}
+
+async function startServer() {
+  const app = await createApp();
+  const PORT = Number(process.env.PORT) || 3000;
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[Barbearia Fullstack Server] rodando em http//0.0.0.0:${PORT}`);
+    console.log(`[Barbearia Fullstack Server] rodando em http://0.0.0.0:${PORT}`);
   });
 }
 
-startServer();
+// Only start the server when run directly (not imported as a module)
+const isMainModule = process.argv[1] && (
+  process.argv[1].endsWith('server.ts') ||
+  process.argv[1].endsWith('server.js')
+);
+
+if (isMainModule) {
+  startServer();
+}
