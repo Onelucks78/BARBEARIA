@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle.tsx';
 
+import Logo from './Logo.tsx';
+
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: any) => void;
@@ -40,14 +42,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Top Branding & Nav */}
       <div className="p-4 xl:p-6 space-y-6">
         {/* Logo / Branding */}
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-sm bg-primary rotate-45 flex items-center justify-center font-bold text-xs text-primary-foreground">
-            <span className="-rotate-45">AI</span>
-          </div>
-          <div>
-            <span className="font-normal text-sm tracking-widest uppercase block text-primary">Escritório</span>
-            <span className="text-[9px] text-primary/70 uppercase block -mt-0.5">do Barbeiro</span>
-          </div>
+        <div className="flex items-center justify-center py-2">
+          <Logo className="h-16 xl:h-24 max-w-full w-auto object-contain shrink-0 hover:scale-105 transition-transform duration-300" />
         </div>
 
         <nav className="space-y-1.5 pt-2">
@@ -73,6 +69,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
             }`}
           >
             <Calendar className="w-4 h-4" /> Agenda & Status
+          </button>
+
+          <button
+            onClick={() => setActiveTab('equipe')}
+            className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${
+              activeTab === 'equipe'
+                ? 'bg-primary text-primary-foreground shadow-lg font-bold'
+                : 'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground'
+            }`}
+          >
+            <Users className="w-4 h-4" /> Equipe
           </button>
 
           <button
@@ -191,12 +198,14 @@ interface HeaderProps {
   activeTab: string;
   setActiveTab: (tab: any) => void;
   setIsMobileMenuOpen: (open: boolean) => void;
+  onOpenFinanceModal?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   activeTab,
   setActiveTab,
-  setIsMobileMenuOpen
+  setIsMobileMenuOpen,
+  onOpenFinanceModal
 }) => {
   return (
     <header className="h-16 border-b border-sidebar-border bg-sidebar px-4 lg:px-8 flex items-center justify-between shrink-0 select-none">
@@ -217,6 +226,7 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="text-primary font-bold">
             {activeTab === 'dashboard' && 'Balanço Financeiro'}
             {activeTab === 'agenda' && 'Agenda & Status'}
+            {activeTab === 'equipe' && 'Equipe'}
             {activeTab === 'servicos' && 'Serviços CRUD'}
             {activeTab === 'produtos' && 'Produtos CRUD'}
             {activeTab === 'planos' && 'Configurar Planos'}
@@ -230,12 +240,13 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-center gap-3">
         <ThemeToggle />
         <button
+          type="button"
           onClick={() => {
-            setActiveTab('financeiro');
-            setTimeout(() => {
-              const selectEl = document.getElementById('finance-type-select');
-              if (selectEl) selectEl.focus();
-            }, 150);
+            if (onOpenFinanceModal) {
+              onOpenFinanceModal();
+            } else {
+              setActiveTab('financeiro');
+            }
           }}
           className="bg-primary border border-primary text-primary-foreground px-4 py-2 rounded-sm text-xs font-bold transition flex items-center gap-1.5 hover:bg-primary/90 cursor-pointer shadow-md font-sans uppercase tracking-wide"
         >

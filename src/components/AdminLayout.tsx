@@ -26,10 +26,13 @@ import {
   X,
   Search,
   Minus,
-  CheckCircle2
+  CheckCircle2,
+  Upload,
+  Loader2
 } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 import { Sidebar, Header } from './Layout.tsx';
+import Logo from './Logo.tsx';
 import { Button } from '@/components/ui/button.tsx';
 import { Input } from '@/components/ui/input.tsx';
 import { Label } from '@/components/ui/label.tsx';
@@ -46,18 +49,77 @@ import {
   LancamentoFinanceiro,
   DashboardStats,
   CategoriaFinanceira,
-  ClienteSubscription
+  ClienteSubscription,
+  Profissional
 } from '../types.ts';
 import type { Session } from '@supabase/supabase-js';
-import { authedFetch } from '../lib/supabase.ts';
+import { authedFetch, supabase, isSupabaseConfigured } from '../lib/supabase.ts';
+import EquipeTab from './admin/EquipeTab.tsx';
+import FiltroBarbeiro from './admin/FiltroBarbeiro.tsx';
+import { resizeImageToDataUrl, uploadImagem } from '../lib/imagem.ts';
 
 interface AdminLayoutProps {
   session: Session;
   onLogout: () => void;
 }
 
+// Planos de assinatura recorrente — mesmas 3 chaves canônicas gravadas em subscription.plan
+// pelo checkout do cliente (UserLayout). Apenas informativo aqui: a edição dos planos
+// acontece no fluxo de checkout, não neste painel.
+const PLAN_TIERS: {
+  key: 'essential' | 'premium' | 'exclusive';
+  label: string;
+  price: number;
+  features: string[];
+  textClass: string;
+  borderClass: string;
+  badgeClass: string;
+}[] = [
+  {
+    key: 'essential',
+    label: 'Essential',
+    price: 109.99,
+    features: ['Corte ilimitado'],
+    textClass: 'text-muted-foreground',
+    borderClass: 'border-border',
+    badgeClass: 'bg-card text-muted-foreground border border-border'
+  },
+  {
+    key: 'premium',
+    label: 'Premium',
+    price: 159.99,
+    features: ['Corte ilimitado', 'Barba ilimitada'],
+    textClass: 'text-primary',
+    borderClass: 'border-primary/30',
+    badgeClass: 'bg-primary/10 text-primary border border-primary/25'
+  },
+  {
+    key: 'exclusive',
+    label: 'Exclusive',
+    price: 199.99,
+    features: ['Corte ilimitado', 'Barba ilimitada', 'Sobrancelha ilimitada', 'Penteado ilimitado'],
+    textClass: 'text-amber-600 dark:text-amber-400',
+    borderClass: 'border-amber-300 dark:border-amber-900/50',
+    badgeClass: 'bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-900/40'
+  }
+];
+
+// Rótulo amigável para uma chave de plano crua; plano legado/desconhecido cai de volta na própria chave.
+const planLabel = (plan: string): string => PLAN_TIERS.find(t => t.key === plan.toLowerCase())?.label ?? plan;
+
+// Classes do badge de plano; plano legado/desconhecido usa um estilo neutro.
+const planBadgeClass = (plan: string): string =>
+  PLAN_TIERS.find(t => t.key === plan.toLowerCase())?.badgeClass ?? 'bg-card text-muted-foreground border border-border';
+
+function getLocalDateString(d = new Date()): string {
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+}
+
 export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'agenda' | 'servicos' | 'produtos' | 'planos' | 'clientes' | 'financeiro' | 'configuracoes'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'agenda' | 'equipe' | 'servicos' | 'produtos' | 'planos' | 'clientes' | 'financeiro' | 'configuracoes'>('dashboard');
+  const [profissionais, setProfissionais] = useState<Profissional[]>([]);
+  // '' = todos os barbeiros. Vale para agenda, financeiro e dashboard.
+  const [filtroProfissional, setFiltroProfissional] = useState<string>('');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Backend States
@@ -91,15 +153,21 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
   // Form creation States
   const [newService, setNewService] = useState({ nome: '', descricao: '', preco: '', duracao_minutos: '45', imagem_url: '' });
   const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
+  const [uploadingServiceImage, setUploadingServiceImage] = useState(false);
+  const [showServiceForm, setShowServiceForm] = useState(false);
 
   const [newProduct, setNewProduct] = useState({ nome: '', descricao: '', preco: '', estoque: '10', imagem_url: '' });
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [uploadingProductImage, setUploadingProductImage] = useState(false);
+  const [showProductForm, setShowProductForm] = useState(false);
 
   const [newClient, setNewClient] = useState({ nome: '', telefone: '', email: '', data_nascimento: '', observacoes: '' });
   const [editingClientId, setEditingClientId] = useState<string | null>(null);
+  const [showClientForm, setShowClientForm] = useState(false);
 
-  const [newLaunch, setNewLaunch] = useState({ tipo: 'entrada', descricao: '', valor: '', categoria: '', forma_pagamento: 'pix', data: '', produto_id: '' });
+  const [newLaunch, setNewLaunch] = useState({ tipo: 'entrada', descricao: '', valor: '', categoria: '', forma_pagamento: 'pix', data: '', produto_id: '', profissional_id: '' });
   const [editingFinanceId, setEditingFinanceId] = useState<string | null>(null);
+  const [showFinanceForm, setShowFinanceForm] = useState(false);
   const [editFinanceForm, setEditFinanceForm] = useState({ tipo: 'entrada', descricao: '', valor: '', categoria: 'Serviços', forma_pagamento: 'pix', data: '' });
   const [newBlock, setNewBlock] = useState({ data: '', hora_inicio: '', hora_fim: '', motivo: '' });
 
@@ -166,7 +234,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
   // Initialize dates
   useEffect(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getLocalDateString();
     setAgendaDateFilter(todayStr);
     setNewLaunch(prev => ({ ...prev, data: todayStr }));
     setNewBlock(prev => ({ ...prev, data: todayStr }));
@@ -195,6 +263,10 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
       url += `?start_date=${localDate(start)}&end_date=${localDate()}T23:59:59.999Z`;
     }
 
+    if (filtroProfissional) {
+      url += (url.includes('?') ? '&' : '?') + `profissional_id=${filtroProfissional}`;
+    }
+
     authedFetch(url)
       .then(res => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -206,10 +278,20 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
 
   const fetchAgendamentos = () => {
-    authedFetch('/api/admin/agendamentos')
+    const url = filtroProfissional
+      ? `/api/admin/agendamentos?profissional_id=${filtroProfissional}`
+      : '/api/admin/agendamentos';
+    authedFetch(url)
       .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
       .then(data => setAgendamentos(data))
       .catch(err => console.error('Agendamentos:', err));
+  };
+
+  const fetchProfissionais = () => {
+    authedFetch('/api/admin/profissionais')
+      .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
+      .then(data => setProfissionais(data))
+      .catch(err => console.error('Profissionais:', err));
   };
 
   const fetchServicos = () => {
@@ -234,7 +316,10 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
   };
 
   const fetchFinanceiro = () => {
-    authedFetch('/api/admin/financeiro')
+    const url = filtroProfissional
+      ? `/api/admin/financeiro?profissional_id=${filtroProfissional}`
+      : '/api/admin/financeiro';
+    authedFetch(url)
       .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
       .then(data => setFinanceiro(data))
       .catch(err => console.error('Financeiro:', err));
@@ -265,6 +350,8 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
     } else if (activeTab === 'agenda') {
       fetchAgendamentos();
       fetchClientes();
+    } else if (activeTab === 'equipe') {
+      fetchProfissionais();
     } else if (activeTab === 'servicos') {
       fetchServicos();
     } else if (activeTab === 'produtos') {
@@ -280,7 +367,54 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
     } else if (activeTab === 'configuracoes') {
       fetchConfiguracoes();
     }
-  }, [activeTab, dashboardPeriod]);
+  }, [activeTab, dashboardPeriod, filtroProfissional]);
+
+  useEffect(() => {
+    fetchProfissionais();
+  }, []);
+
+  // ---------- REAL-TIME & AUTO-POLLING AGENDAMENTOS ----------
+  // 1. Supabase Realtime Channel: escuta alterações na tabela agendamentos em tempo real
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    const channel = supabase
+      .channel('realtime-admin-agendamentos')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'agendamentos' },
+        () => {
+          fetchAgendamentos();
+          if (activeTab === 'dashboard') fetchDashboard();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeTab, filtroProfissional, dashboardPeriod]);
+
+  // 2. Intervalo de atualização (5s) + ouvinte de eventos de novos agendamentos
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (activeTab === 'agenda' || activeTab === 'dashboard') {
+        fetchAgendamentos();
+        if (activeTab === 'dashboard') fetchDashboard();
+      }
+    }, 5000);
+
+    const handleBookingCreated = () => {
+      fetchAgendamentos();
+      fetchDashboard();
+    };
+    window.addEventListener('agendamento-criado', handleBookingCreated);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('agendamento-criado', handleBookingCreated);
+    };
+  }, [activeTab, filtroProfissional, dashboardPeriod]);
 
   // Set default category when type transitions
   useEffect(() => {
@@ -339,6 +473,37 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
     }
   };
 
+  // Image upload helpers (Serviços/Produtos): redimensiona no canvas do navegador antes de subir pro Supabase Storage
+  const handleServiceImageSelect = async (file: File | undefined) => {
+    if (!file) return;
+    setUploadingServiceImage(true);
+    setErrorMsg('');
+    try {
+      const dataUrl = await resizeImageToDataUrl(file);
+      const url = await uploadImagem(dataUrl, 'servicos');
+      setNewService(prev => ({ ...prev, imagem_url: url }));
+    } catch (err: any) {
+      setErrorMsg(err.message);
+    } finally {
+      setUploadingServiceImage(false);
+    }
+  };
+
+  const handleProductImageSelect = async (file: File | undefined) => {
+    if (!file) return;
+    setUploadingProductImage(true);
+    setErrorMsg('');
+    try {
+      const dataUrl = await resizeImageToDataUrl(file);
+      const url = await uploadImagem(dataUrl, 'produtos');
+      setNewProduct(prev => ({ ...prev, imagem_url: url }));
+    } catch (err: any) {
+      setErrorMsg(err.message);
+    } finally {
+      setUploadingProductImage(false);
+    }
+  };
+
   // CRUD Actions: SERVICES
   const handleSaveService = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -363,6 +528,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
       setSuccessMsg(isEditing ? 'Serviço atualizado com sucesso.' : 'Novo serviço adicionado.');
       setNewService({ nome: '', descricao: '', preco: '', duracao_minutos: '45', imagem_url: '' });
       setEditingServiceId(null);
+      setShowServiceForm(false);
       fetchServicos();
     } catch (err: any) {
       setErrorMsg(err.message);
@@ -380,6 +546,8 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
       duracao_minutos: String(s.duracao_minutos),
       imagem_url: s.imagem_url
     });
+    setShowServiceForm(true);
+    setTimeout(() => document.getElementById('service-form-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   };
 
   // Flip service active flag (soft delete)
@@ -421,6 +589,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
       setSuccessMsg(isEditing ? 'Preços e estoques atualizados com sucesso.' : 'Novo cosmético cadastrado.');
       setNewProduct({ nome: '', descricao: '', preco: '', estoque: '10', imagem_url: '' });
       setEditingProductId(null);
+      setShowProductForm(false);
       fetchProdutos();
     } catch (err: any) {
       setErrorMsg(err.message);
@@ -438,6 +607,8 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
       estoque: String(p.estoque),
       imagem_url: p.imagem_url
     });
+    setShowProductForm(true);
+    setTimeout(() => document.getElementById('product-form-anchor')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   };
 
   const handleToggleProductActive = async (p: Produto) => {
@@ -483,10 +654,14 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
         body: newClient
       });
 
-      if (!res.ok) throw new Error('Erro ao cuidar do cadastro de cliente.');
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Erro ao cuidar do cadastro de cliente.');
+      }
       setSuccessMsg(isEditing ? 'Ficha técnica do cliente atualizada.' : 'Cliente fidelizado com sucesso.');
       setNewClient({ nome: '', telefone: '', email: '', data_nascimento: '', observacoes: '' });
       setEditingClientId(null);
+      setShowClientForm(false);
       fetchClientes();
     } catch (err: any) {
       setErrorMsg(err.message);
@@ -504,6 +679,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
       data_nascimento: c.data_nascimento || '',
       observacoes: c.observacoes || ''
     });
+    setShowClientForm(true);
   };
 
   const handleToggleClientActive = async (c: Cliente) => {
@@ -553,6 +729,10 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
       if (!launchPayload.produto_id) {
         delete launchPayload.produto_id;
       }
+      // '' vira null: lançamento da casa. Produto é sempre da casa.
+      launchPayload.profissional_id = launchPayload.produto_id
+        ? null
+        : (launchPayload.profissional_id || null);
       const res = await authedFetch('/api/admin/financeiro', {
         method: 'POST',
         body: launchPayload
@@ -572,8 +752,10 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
         categoria: firstEntradaCat,
         forma_pagamento: 'pix',
         data: new Date().toISOString().split('T')[0],
-        produto_id: ''
+        produto_id: '',
+        profissional_id: ''
       });
+      setShowFinanceForm(false);
       fetchFinanceiro();
       fetchDashboard();
     } catch (err: any) {
@@ -834,10 +1016,20 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
       renovado: new Date(x.subscription.renews_at) >= new Date()
     }));
 
+  // Assinantes agrupados por tier (Essential/Premium/Exclusive) para o resumo da aba Planos
+  const assinantesPorPlano = PLAN_TIERS.map(tier => ({
+    tier,
+    subs: assinantesVIP.filter(a => (a.subscription.plan || '').toLowerCase() === tier.key)
+  }));
+  // Assinaturas com um valor de plano que não bate com nenhuma das 3 chaves atuais (ex.: dado legado 'VIP')
+  const assinantesOutrosPlanos = assinantesVIP.filter(
+    a => !PLAN_TIERS.some(t => t.key === (a.subscription.plan || '').toLowerCase())
+  );
+
   // Filtered list of agenda
   const filteredAgendamentos = [...agendamentos]
     .filter(a => {
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = getLocalDateString();
       const appointmentDateStr = a.inicio_em.split('T')[0];
       
       if (agendaFilterMode === 'upcoming') {
@@ -894,15 +1086,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
               {/* Drawer Top Branding & Nav */}
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-sm bg-primary rotate-45 flex items-center justify-center font-bold text-xs text-black">
-                      <span className="-rotate-45">AI</span>
-                    </div>
-                    <div>
-                      <span className="font-normal text-sm tracking-widest uppercase block text-primary">Escritório</span>
-                      <span className="text-xs text-primary/70 uppercase block -mt-0.5">do Barbeiro</span>
-                    </div>
-                  </div>
+                  <Logo className="h-16 w-auto max-w-[180px] object-contain shrink-0" />
 
                   <button
                     type="button"
@@ -939,6 +1123,17 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                     }`}
                   >
                     <Calendar className="w-4 h-4" /> Agenda & Status
+                  </button>
+
+                  <button
+                    onClick={() => { setActiveTab('equipe'); setIsMobileMenuOpen(false); }}
+                    className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${
+                      activeTab === 'equipe'
+                        ? 'bg-primary text-primary-foreground shadow-lg font-bold'
+                        : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                    }`}
+                  >
+                    <Users className="w-4 h-4" /> Equipe
                   </button>
 
                   <button
@@ -1059,7 +1254,235 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
           activeTab={activeTab} 
           setActiveTab={setActiveTab} 
           setIsMobileMenuOpen={setIsMobileMenuOpen} 
+          onOpenFinanceModal={() => {
+            setShowFinanceForm(true);
+            setTimeout(() => {
+              const el = document.getElementById('finance-valor') as HTMLInputElement;
+              if (el) el.focus();
+            }, 100);
+          }}
         />
+
+        {/* Global Modal Popup de Lançamento Financeiro Rápido (Abre em qualquer aba) */}
+        <AnimatePresence>
+          {showFinanceForm && (
+            <div 
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in"
+              onClick={() => setShowFinanceForm(false)}
+            >
+              <div 
+                className="relative w-full max-w-xl bg-card border border-border rounded-2xl shadow-2xl overflow-hidden text-foreground space-y-5 p-6"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Modal Header */}
+                <div className="flex items-center justify-between border-b border-border pb-4">
+                  <div>
+                    <h3 className="text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
+                      <Plus className="w-5 h-5 text-primary" /> Registrar Movimentação Financeira
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Digite o valor e os detalhes do lançamento para atualizar o saldo instantaneamente
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowFinanceForm(false)}
+                    className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-full transition cursor-pointer"
+                    aria-label="Fechar"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Modal Form */}
+                <form onSubmit={handleSaveFinanceLaunch} className="space-y-5">
+                  {/* Tipo toggle — Entrada vs Saída */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      id="finance-type-entrada"
+                      type="button"
+                      onClick={() => {
+                        setNewLaunch({ ...newLaunch, tipo: 'entrada' });
+                        setTimeout(() => (document.getElementById('finance-valor') as HTMLInputElement)?.focus(), 50);
+                      }}
+                      className={`py-3 rounded-xl font-bold text-sm tracking-wide border-2 transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                        newLaunch.tipo === 'entrada'
+                          ? 'bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-900/30'
+                          : 'bg-background border-border text-muted-foreground hover:border-emerald-600 hover:text-emerald-500'
+                      }`}
+                    >
+                      <TrendingUp className="w-4 h-4" /> ENTRADA (Receita)
+                    </button>
+                    <button
+                      id="finance-type-saida"
+                      type="button"
+                      onClick={() => {
+                        setNewLaunch({ ...newLaunch, tipo: 'saida' });
+                        setTimeout(() => (document.getElementById('finance-valor') as HTMLInputElement)?.focus(), 50);
+                      }}
+                      className={`py-3 rounded-xl font-bold text-sm tracking-wide border-2 transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                        newLaunch.tipo === 'saida'
+                          ? 'bg-red-600 border-red-600 text-white shadow-md shadow-red-900/30'
+                          : 'bg-background border-border text-muted-foreground hover:border-red-500 hover:text-red-500'
+                      }`}
+                    >
+                      <TrendingDown className="w-4 h-4" /> SAÍDA (Despesa)
+                    </button>
+                  </div>
+
+                  {/* Valor em destaque absoluto - autoFocus */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Valor (R$)</Label>
+                    <div className="relative">
+                      <span
+                        className={`absolute left-4 top-1/2 -translate-y-1/2 font-extrabold text-3xl select-none pointer-events-none ${
+                          newLaunch.tipo === 'entrada' ? 'text-emerald-500' : 'text-red-500'
+                        }`}
+                      >
+                        R$
+                      </span>
+                      <input
+                        id="finance-valor"
+                        type="text"
+                        inputMode="decimal"
+                        required
+                        autoFocus
+                        value={newLaunch.valor}
+                        onChange={(e) => {
+                          let inputVal = e.target.value;
+                          inputVal = inputVal.replace('.', ',');
+                          const parts = inputVal.split(',');
+                          if (parts.length > 2) return;
+                          const integerPart = parts[0].replace(/[^0-9]/g, '');
+                          let decimalPart = parts[1] !== undefined ? parts[1].replace(/[^0-9]/g, '').slice(0, 2) : undefined;
+                          
+                          if (decimalPart !== undefined) {
+                            setNewLaunch({ ...newLaunch, valor: `${integerPart},${decimalPart}` });
+                          } else {
+                            setNewLaunch({ ...newLaunch, valor: integerPart });
+                          }
+                        }}
+                        onBlur={() => {
+                          if (!newLaunch.valor) return;
+                          if (!newLaunch.valor.includes(',')) {
+                            setNewLaunch({ ...newLaunch, valor: `${newLaunch.valor},00` });
+                          } else {
+                            const [int, dec] = newLaunch.valor.split(',');
+                            const paddedDec = (dec || '').padEnd(2, '0');
+                            setNewLaunch({ ...newLaunch, valor: `${int || '0'},${paddedDec}` });
+                          }
+                        }}
+                        placeholder="0,00"
+                        className="w-full pl-16 pr-4 py-4 text-3xl font-extrabold rounded-xl border border-border bg-background outline-none focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all placeholder:text-muted-foreground/30 text-foreground"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">Descrição (opcional)</Label>
+                      <Input
+                        type="text"
+                        value={newLaunch.descricao}
+                        onChange={(e) => setNewLaunch({ ...newLaunch, descricao: e.target.value })}
+                        placeholder="Ex: Compra de golas higiênicas"
+                        className="rounded-xl"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">Categoria</Label>
+                      <Select value={newLaunch.categoria} onValueChange={(v) => v && setNewLaunch({ ...newLaunch, categoria: v as string })}>
+                        <SelectTrigger className="w-full rounded-xl">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {categoriasFinanceiras.filter(c => c.tipo === newLaunch.tipo).map(cat => (
+                            <SelectItem key={cat.id} value={cat.nome}>{cat.nome}</SelectItem>
+                          ))}
+                          {categoriasFinanceiras.filter(c => c.tipo === newLaunch.tipo).length === 0 && (
+                            <SelectItem value="Serviços">Serviços</SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">Forma de Pagamento</Label>
+                      <Select value={newLaunch.forma_pagamento} onValueChange={(v) => v && setNewLaunch({ ...newLaunch, forma_pagamento: v as any })}>
+                        <SelectTrigger className="w-full rounded-xl">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                          <SelectItem value="pix">Pix</SelectItem>
+                          <SelectItem value="cartao">Cartão de débito/crédito</SelectItem>
+                          <SelectItem value="outro">Outro método</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">Data</Label>
+                      <Input
+                        type="date"
+                        required
+                        value={newLaunch.data}
+                        onChange={(e) => setNewLaunch({ ...newLaunch, data: e.target.value })}
+                        className="rounded-xl"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Barbeiro receptor / pagador */}
+                  {profissionais.filter(p => p.ativo).length > 1 && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">
+                        {newLaunch.tipo === 'entrada' ? 'Venda de qual barbeiro?' : 'Despesa de qual barbeiro?'}
+                      </Label>
+                      <Select
+                        value={newLaunch.profissional_id || 'casa'}
+                        onValueChange={(v) => setNewLaunch({ ...newLaunch, profissional_id: v === 'casa' ? '' : (v as string) })}
+                      >
+                        <SelectTrigger className="w-full rounded-xl">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="casa">Barbearia (Sem barbeiro específico)</SelectItem>
+                          {profissionais.filter(p => p.ativo).map(p => (
+                            <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  <div className="pt-2 border-t border-border flex items-center gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setShowFinanceForm(false)}
+                      className="w-1/3 py-3 rounded-xl text-xs uppercase font-bold cursor-pointer"
+                    >
+                      Cancelar
+                    </Button>
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className={`w-2/3 py-3 rounded-xl font-bold text-sm tracking-wide text-white transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-md ${
+                        newLaunch.tipo === 'entrada'
+                          ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/30'
+                          : 'bg-red-600 hover:bg-red-500 shadow-red-900/30'
+                      }`}
+                    >
+                      {submitting ? 'Salvando...' : newLaunch.tipo === 'entrada' ? '↑ Confirmar Entrada' : '↓ Confirmar Saída'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+        </AnimatePresence>
 
         {/* Content Panel (Expanded area) */}
         <main className="flex-1 overflow-y-auto p-6 md:p-8">
@@ -1101,6 +1524,12 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                   </button>
                 </div>
               </div>
+
+              <FiltroBarbeiro
+                profissionais={profissionais}
+                valor={filtroProfissional}
+                onChange={(id) => { setFiltroProfissional(id); setDashboardCurrentPage(1); }}
+              />
 
               {/* Stats bento cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1172,6 +1601,52 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                   <p className="text-xs text-muted-foreground">Saldo líquido final</p>
                 </div>
               </div>
+
+              {/* Quebra de faturamento por barbeiro no período.
+                  Só aparece quando há mais de uma linha para comparar. */}
+              {(dashboardStats.porProfissional?.length ?? 0) > 1 && (
+                <div className="border border-border rounded-sm bg-card overflow-hidden">
+                  <div className="px-5 py-3.5 border-b border-border">
+                    <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-foreground">
+                      Faturamento por barbeiro
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      No período selecionado. "Barbearia" reúne produtos e receitas sem barbeiro.
+                    </p>
+                  </div>
+                  <div className="divide-y divide-border">
+                    {dashboardStats.porProfissional.map((linha) => {
+                      const topo = dashboardStats.porProfissional[0]?.receita || 1;
+                      const largura = Math.max(2, (linha.receita / topo) * 100);
+                      return (
+                        <div key={linha.profissional_id ?? 'casa'} className="px-5 py-3.5">
+                          <div className="flex items-center justify-between gap-4 mb-2">
+                            <span className="text-xs font-semibold text-foreground truncate">
+                              {linha.nome}
+                            </span>
+                            <div className="flex items-center gap-3 shrink-0">
+                              {linha.atendimentos > 0 && (
+                                <span className="text-xs text-muted-foreground">
+                                  {linha.atendimentos} {linha.atendimentos === 1 ? 'atendimento' : 'atendimentos'}
+                                </span>
+                              )}
+                              <span className="text-sm font-bold text-primary">
+                                {formatBRL(linha.receita)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="h-1.5 w-full bg-muted rounded-sm overflow-hidden">
+                            <div
+                              className="h-full bg-primary rounded-sm transition-all duration-500"
+                              style={{ width: `${largura}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Graphic bars summary (Craftsmanship over Defaults: dynamic CSS pure widgets) */}
               <div className="space-y-4">
@@ -1626,6 +2101,12 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                 </div>
               </div>
 
+              <FiltroBarbeiro
+                profissionais={profissionais}
+                valor={filtroProfissional}
+                onChange={setFiltroProfissional}
+              />
+
               {/* Status count badges */}
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline" className="text-xs uppercase tracking-wider font-bold py-1 px-2.5">
@@ -1655,8 +2136,21 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                 <div className="space-y-3">
                   {filteredAgendamentos.map((b) => {
                     const servLabel = servicos.find(s => s.id === b.servico_id)?.nome || 'Corte de Cabelo';
-                    const matchedClient = b.cliente_id ? clientes.find(c => c.id === b.cliente_id) : null;
-                    
+                    const matchedClient = b.cliente_id 
+                      ? clientes.find(c => c.id === b.cliente_id) 
+                      : clientes.find(c => (c.telefone && c.telefone === b.telefone_cliente) || (c.email && c.email === b.email_cliente));
+                    const clientSub = matchedClient ? parseSubscription(matchedClient) : null;
+                    const isVipActive = clientSub && clientSub.status === 'ativo' && new Date(clientSub.renews_at) >= new Date();
+                    const clientBadge = isVipActive ? (
+                      <span className={`text-xs px-2.5 py-1 rounded-md font-bold uppercase tracking-wider border ${planBadgeClass(clientSub.plan || '')}`}>
+                        {planLabel(clientSub.plan || '')}
+                      </span>
+                    ) : (
+                      <span className="text-xs bg-card text-muted-foreground border border-border px-2.5 py-1 rounded-md font-semibold">
+                        Cliente Comum
+                      </span>
+                    );
+
                     return (
                       <div
                         key={b.id}
@@ -1669,7 +2163,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                         }`}
                       >
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                          <div className="space-y-2">
+                          <div className="space-y-2.5 flex-1 min-w-0">
                             {/* Date, Time and service */}
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="text-xs font-bold text-muted-foreground bg-card border border-border px-2.5 py-1 rounded-sm">
@@ -1678,33 +2172,51 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                               <span className="font-bold text-primary text-sm bg-primary/10 px-2.5 py-1 rounded-sm border border-primary/20">
                                 {b.inicio_em.split('T')[1].substring(0, 5)}h
                               </span>
-                              <span className="text-foreground">|</span>
+                              <span className="text-foreground/40 hidden sm:inline">|</span>
                               <span className="font-sans font-semibold text-foreground text-xs sm:text-sm">{servLabel}</span>
-                              <span className="text-foreground">|</span>
+                              <span className="text-foreground/40">|</span>
                               <span className="text-primary text-xs font-bold">{formatBRL(b.preco_cobrado)}</span>
+                              {profissionais.length > 1 && (
+                                <>
+                                  <span className="text-foreground/40">|</span>
+                                  <span className="text-xs font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded-sm">
+                                    {profissionais.find(p => p.id === b.profissional_id)?.nome ?? 'Sem barbeiro'}
+                                  </span>
+                                </>
+                              )}
                             </div>
 
                             {/* Client particulars details */}
-                            <div className="space-y-1">
-                              <h4 className="font-bold text-foreground text-xs flex items-center gap-1.5">
-                                Cliente: {b.nome_cliente}
-                                {b.cliente_id ? (
-                                  <span className="text-xs bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/30 px-1.5 py-0.5 rounded-sm font-bold">Fiel</span>
-                                ) : (
-                                  <span className="text-xs bg-card text-muted-foreground border border-border px-1.5 py-0.5 rounded-sm">Simples</span>
-                                )}
+                            <div className="space-y-1.5">
+                              <h4 className="font-bold text-foreground text-sm flex items-center justify-between sm:justify-start gap-2">
+                                <span>Cliente: <span className="text-foreground font-extrabold">{b.nome_cliente}</span></span>
+                                <span className="sm:hidden">{clientBadge}</span>
                               </h4>
-                              <p className="text-muted-foreground text-xs">Contato: {b.telefone_cliente}</p>
+
+                              <div className="flex items-center gap-2 pt-0.5">
+                                <span className="text-muted-foreground text-xs font-medium">Contato:</span>
+                                <a
+                                  href={getWhatsAppLink(b.telefone_cliente)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 transition cursor-pointer group shadow-xs"
+                                  title="Chamar no WhatsApp"
+                                >
+                                  <span className="text-emerald-500 group-hover:scale-110 transition-transform"><FaWhatsapp size={14} /></span>
+                                  <span>{b.telefone_cliente}</span>
+                                </a>
+                              </div>
+
                               {b.observacao && (
-                                <p className="text-primary text-xs bg-primary/5 p-2 rounded-sm border border-primary/10 ">
+                                <p className="text-primary text-xs bg-primary/5 p-2 rounded-sm border border-primary/10">
                                   "{b.observacao}"
                                 </p>
                               )}
 
-                              {/* Show client custom technical observations (ignora nota automática de auto-cadastro) */}
+                              {/* Show client custom observations */}
                               {matchedClient?.observacoes && matchedClient.observacoes !== 'Auto-cadastrado via agendamento online' && (
                                 <div className="text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/10 p-2 rounded-sm border border-emerald-200 dark:border-emerald-900/30 mt-2 leading-relaxed">
-                                  <span className="font-bold block text-xs uppercase text-emerald-500">Nota Técnica Carlos:</span>
+                                  <span className="font-bold block text-xs uppercase text-emerald-500">Observação:</span>
                                   {matchedClient.observacoes}
                                 </div>
                               )}
@@ -1712,71 +2224,43 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                           </div>
 
                           {/* Quick Controls */}
-                          <div className="pt-3 sm:pt-0 border-t sm:border-t-0 border-border flex flex-wrap items-center gap-2">
-                            {/* Highlighted quick actions */}
-                            {b.status !== 'concluido' && b.status !== 'cancelado' && (
-                              <button
-                                type="button"
-                                onClick={() => handleUpdateBookingStatus(b.id, 'concluido')}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-xs font-bold uppercase tracking-wide bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-900/20 transition cursor-pointer"
-                              >
-                                <CheckCircle2 className="w-3.5 h-3.5" /> Concluir
-                              </button>
-                            )}
-                            {b.status !== 'cancelado' && b.status !== 'concluido' && (
-                              <button
-                                type="button"
-                                onClick={() => handleUpdateBookingStatus(b.id, 'cancelado')}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-xs font-bold uppercase tracking-wide bg-red-600 hover:bg-red-500 text-white shadow-md shadow-red-900/20 transition cursor-pointer"
-                              >
-                                <X className="w-3.5 h-3.5" /> Cancelar
-                              </button>
-                            )}
-                            <a
-                              href={getWhatsAppLink(b.telefone_cliente)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-xs font-bold uppercase tracking-wide bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 transition cursor-pointer"
-                            >
-                              <FaWhatsapp size={14} /> WhatsApp
-                            </a>
+                          <div className="pt-3 sm:pt-0 border-t sm:border-t-0 border-border flex flex-col items-stretch sm:items-end justify-center gap-2.5 shrink-0 w-full sm:w-auto">
+                            {/* On desktop, show client type badge directly above buttons */}
+                            <div className="hidden sm:flex items-center justify-end">
+                              {clientBadge}
+                            </div>
 
-                            {/* Link fidelidade selector */}
-                            {!b.cliente_id && (
-                              <div className="relative">
-                                <select
-                                  onChange={(e) => handleLinkClientToBooking(b.id, e.target.value)}
-                                  defaultValue=""
-                                  className="text-xs bg-background hover:bg-accent border border-border p-1.5 rounded-sm text-muted-foreground focus:outline-none focus:border-primary"
-                                >
-                                  <option value="" disabled>Vincular Ficha...</option>
-                                  {clientes.map(c => (
-                                    <option key={c.id} value={c.id}>{c.nome}</option>
-                                  ))}
-                                </select>
-                              </div>
-                            )}
-
-                            {/* Status changer */}
-                            <select
-                              value={b.status}
-                              onChange={(e) => handleUpdateBookingStatus(b.id, e.target.value)}
-                              className={`text-xs font-bold p-1.5 rounded-sm border focus:outline-none capitalize ${
-                                b.status === 'concluido' 
-                                  ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/30'
-                                  : b.status === 'agendado'
-                                  ? 'bg-card text-muted-foreground border-border'
-                                  : b.status === 'confirmado'
-                                  ? 'bg-primary text-primary-foreground border-primary'
-                                  : 'bg-red-100 dark:bg-red-950 text-red-600 dark:text-red-400 border-red-200 dark:border-red-900/40'
-                              }`}
-                            >
-                              <option value="agendado">agendado</option>
-                              <option value="confirmado">confirmado</option>
-                              <option value="concluido">concluido (Baixa Receita)</option>
-                              <option value="cancelado">cancelado</option>
-                              <option value="faltou">faltou</option>
-                            </select>
+                            {/* Buttons: Grid 2 cols on mobile (w-full), flex row on desktop */}
+                            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
+                              {b.status !== 'concluido' && b.status !== 'cancelado' && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateBookingStatus(b.id, 'concluido')}
+                                    className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 rounded-lg text-xs font-bold uppercase tracking-wide bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-900/20 transition cursor-pointer active:scale-95"
+                                  >
+                                    <CheckCircle2 className="w-4 h-4" /> Concluir
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateBookingStatus(b.id, 'cancelado')}
+                                    className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 rounded-lg text-xs font-bold uppercase tracking-wide bg-red-600 hover:bg-red-500 text-white shadow-md shadow-red-900/20 transition cursor-pointer active:scale-95"
+                                  >
+                                    <X className="w-4 h-4" /> Cancelar
+                                  </button>
+                                </>
+                              )}
+                              {b.status === 'concluido' && (
+                                <span className="col-span-2 sm:col-span-1 w-full sm:w-auto inline-flex items-center justify-center gap-1 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                                  <CheckCircle2 className="w-4 h-4" /> Concluído
+                                </span>
+                              )}
+                              {b.status === 'cancelado' && (
+                                <span className="col-span-2 sm:col-span-1 w-full sm:w-auto inline-flex items-center justify-center gap-1 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/30">
+                                  <X className="w-4 h-4" /> Cancelado
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1789,15 +2273,35 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
 
           {/* TAB 3: SERVICES CRUD */}
+          {activeTab === 'equipe' && (
+            <EquipeTab profissionais={profissionais} onChanged={fetchProfissionais} />
+          )}
+
           {activeTab === 'servicos' && (
             <div className="space-y-8">
-              <div>
-                <h2 className="font-normal text-2xl text-foreground tracking-tight">Catálogo de Serviços</h2>
-                <p className="text-muted-foreground text-xs mt-1">Crie e edite preços, descrições e durações dos serviços no site público</p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="font-normal text-2xl text-foreground tracking-tight">Catálogo de Serviços</h2>
+                  <p className="text-muted-foreground text-xs mt-1">Crie e edite preços, descrições e durações dos serviços no site público</p>
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    if (showServiceForm) {
+                      setEditingServiceId(null);
+                      setNewService({ nome: '', descricao: '', preco: '', duracao_minutos: '45', imagem_url: '' });
+                    }
+                    setShowServiceForm(v => !v);
+                  }}
+                  className="shrink-0"
+                >
+                  <Plus className="w-4 h-4" /> {showServiceForm ? 'Fechar' : 'Novo Serviço'}
+                </Button>
               </div>
 
               {/* Service Form */}
-              <form onSubmit={handleSaveService} className="bg-card p-6 rounded-lg border border-border grid grid-cols-1 md:grid-cols-2 gap-5">
+              {showServiceForm && (
+              <form id="service-form-anchor" onSubmit={handleSaveService} className="bg-card p-6 rounded-lg border border-border grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="md:col-span-2">
                   <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-foreground mb-2">
                     {editingServiceId ? 'Modificar Serviço Existente' : 'Cadastrar Novo Serviço'}
@@ -1839,13 +2343,30 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label>URL da imagem decorativa</Label>
-                  <Input
-                    type="url"
-                    value={newService.imagem_url}
-                    onChange={(e) => setNewService({ ...newService, imagem_url: e.target.value })}
-                    placeholder="Cole um link de imagem do Unsplash"
-                  />
+                  <Label>Foto do serviço</Label>
+                  <div className="flex items-center gap-3">
+                    <div className="w-16 h-16 rounded-sm bg-background border border-border overflow-hidden shrink-0 flex items-center justify-center">
+                      {newService.imagem_url ? (
+                        <img src={newService.imagem_url} className="w-full h-full object-cover" />
+                      ) : (
+                        <Upload className="w-4 h-4 text-muted-foreground" />
+                      )}
+                    </div>
+                    <label className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 border border-dashed border-border rounded-sm text-xs font-semibold text-muted-foreground hover:border-primary/40 hover:text-foreground transition ${uploadingServiceImage ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}>
+                      {uploadingServiceImage ? (
+                        <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Enviando...</>
+                      ) : (
+                        <><Upload className="w-3.5 h-3.5" /> {newService.imagem_url ? 'Trocar imagem' : 'Enviar imagem'}</>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        disabled={uploadingServiceImage}
+                        onChange={(e) => handleServiceImageSelect(e.target.files?.[0])}
+                      />
+                    </label>
+                  </div>
                 </div>
 
                 <div className="md:col-span-2 space-y-1.5">
@@ -1866,6 +2387,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                       onClick={() => {
                         setEditingServiceId(null);
                         setNewService({ nome: '', descricao: '', preco: '', duracao_minutos: '45', imagem_url: '' });
+                        setShowServiceForm(false);
                       }}
                     >
                       Cancelar Edição
@@ -1876,6 +2398,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                   </Button>
                 </div>
               </form>
+              )}
 
               {/* Service showcase grid for admin control */}
               <div className="space-y-3">
@@ -1942,46 +2465,78 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
           )}
 
 
-          {/* TAB 3b: PLANOS (assinantes do plano VIP fixo) */}
+          {/* TAB 3b: PLANOS (assinantes distribuídos entre os 3 tiers: Essential/Premium/Exclusive) */}
           {activeTab === 'planos' && (
             <div className="space-y-8">
               <div>
                 <h2 className="font-normal text-2xl text-foreground tracking-tight">Configurar Planos</h2>
-                <p className="text-muted-foreground text-xs mt-1">Acompanhe quem está assinado no plano recorrente e quem está com a renovação atrasada.</p>
+                <p className="text-muted-foreground text-xs mt-1">Acompanhe quem está assinado em cada plano recorrente e quem está com a renovação atrasada.</p>
               </div>
 
-              {/* Plano fixo (por enquanto não editável) */}
-              <div className="bg-card p-5 rounded-sm border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-primary mb-1">Plano VIP</h4>
-                  <p className="text-sm text-foreground font-semibold">Corte de cabelo e barba à vontade durante todo o mês</p>
-                  <p className="text-xs text-muted-foreground mt-1">Cobrança recorrente no cartão via Stripe (integração pendente de configuração).</p>
+              {/* Planos de referência (configurados no checkout do cliente; não editáveis neste painel) */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-foreground">Planos Configurados</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {PLAN_TIERS.map(tier => (
+                    <div key={tier.key} className={`rounded-sm border bg-card overflow-hidden ${tier.borderClass}`}>
+                      <div className="p-5 space-y-3">
+                        <h5 className={`text-xs font-bold uppercase tracking-[0.2em] ${tier.textClass}`}>{tier.label}</h5>
+                        <div className="text-2xl font-bold text-primary">
+                          {formatBRL(tier.price)}<span className="text-xs text-muted-foreground font-normal">/mês</span>
+                        </div>
+                        <ul className="space-y-1.5 pt-2 border-t border-border">
+                          {tier.features.map(feature => (
+                            <li key={feature} className="flex items-center gap-2 text-xs text-foreground">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                              {feature}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="text-2xl font-bold text-primary shrink-0">{formatBRL(120)}<span className="text-xs text-muted-foreground font-normal">/mês</span></div>
+                <p className="text-xs text-muted-foreground">Cobrança recorrente no cartão via Stripe. A edição dos planos é feita no fluxo de checkout do cliente.</p>
               </div>
 
-              {/* Resumo de assinantes */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="p-4 bg-card border border-border rounded-sm space-y-1">
-                  <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Total de Assinantes</span>
-                  <h3 className="font-bold text-xl text-foreground">{assinantesVIP.length}</h3>
-                </div>
-                <div className="p-4 bg-card border border-border rounded-sm space-y-1">
-                  <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Renovados</span>
-                  <h3 className="font-bold text-xl text-emerald-600 dark:text-emerald-400">{assinantesVIP.filter(a => a.renovado).length}</h3>
-                </div>
-                <div className="p-4 bg-card border border-border rounded-sm space-y-1">
-                  <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Não Renovados</span>
-                  <h3 className="font-bold text-xl text-red-600 dark:text-red-400">{assinantesVIP.filter(a => !a.renovado).length}</h3>
-                </div>
+              {/* Resumo de assinantes por plano */}
+              <div className={`grid grid-cols-1 sm:grid-cols-3 ${assinantesOutrosPlanos.length > 0 ? 'lg:grid-cols-4' : ''} gap-4`}>
+                {assinantesPorPlano.map(({ tier, subs }) => {
+                  const renovados = subs.filter(a => a.renovado).length;
+                  const naoRenovados = subs.length - renovados;
+                  return (
+                    <div key={tier.key} className="p-4 bg-card border border-border rounded-sm space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`text-xs uppercase tracking-wider font-bold ${tier.textClass}`}>{tier.label}</span>
+                        <h3 className="font-bold text-xl text-foreground">{subs.length}</h3>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs font-semibold">
+                        <span className="text-emerald-600 dark:text-emerald-400">{renovados} renovado{renovados === 1 ? '' : 's'}</span>
+                        <span className="text-red-600 dark:text-red-400">{naoRenovados} não renovado{naoRenovados === 1 ? '' : 's'}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+                {assinantesOutrosPlanos.length > 0 && (
+                  <div className="p-4 bg-card border border-dashed border-border rounded-sm space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Outros / Legado</span>
+                      <h3 className="font-bold text-xl text-foreground">{assinantesOutrosPlanos.length}</h3>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs font-semibold">
+                      <span className="text-emerald-600 dark:text-emerald-400">{assinantesOutrosPlanos.filter(a => a.renovado).length} renovado(s)</span>
+                      <span className="text-red-600 dark:text-red-400">{assinantesOutrosPlanos.filter(a => !a.renovado).length} não renovado(s)</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Lista de assinantes */}
               <div className="space-y-3">
-                <h4 className="text-sm tracking-wide text-foreground font-semibold">Clientes Assinantes</h4>
+                <h4 className="text-sm tracking-wide text-foreground font-semibold">Clientes Assinantes ({assinantesVIP.length})</h4>
                 {assinantesVIP.length === 0 ? (
                   <div className="py-12 text-center bg-card border border-dashed border-border rounded-sm">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider">Nenhum cliente assinou o plano VIP ainda.</p>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider">Nenhum cliente assinou um plano ainda.</p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto rounded-sm border border-border bg-card">
@@ -1989,6 +2544,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                       <thead>
                         <tr className="bg-background border-b border-border text-muted-foreground font-semibold text-xs uppercase tracking-wider">
                           <th className="p-3">Cliente</th>
+                          <th className="p-3">Plano</th>
                           <th className="p-3">Telefone</th>
                           <th className="p-3">Cartão</th>
                           <th className="p-3">Renova em</th>
@@ -1999,6 +2555,11 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                         {assinantesVIP.map(({ cliente, subscription, renovado }) => (
                           <tr key={cliente.id} className="border-b border-border last:border-b-0">
                             <td className="p-3 font-semibold text-foreground">{cliente.nome}</td>
+                            <td className="p-3">
+                              <span className={`px-2 py-0.5 rounded-sm text-xs font-bold uppercase tracking-wider border ${planBadgeClass(subscription.plan || '')}`}>
+                                {planLabel(subscription.plan || '')}
+                              </span>
+                            </td>
                             <td className="p-3 text-muted-foreground">{cliente.telefone}</td>
                             <td className="p-3 text-muted-foreground">
                               {subscription.card_brand ? `${subscription.card_brand} •••• ${subscription.card_last4}` : '—'}
@@ -2028,13 +2589,29 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
           {/* TAB 4: PRODUCTS CRUD */}
           {activeTab === 'produtos' && (
             <div className="space-y-8">
-              <div>
-                <h2 className="font-normal text-2xl text-foreground tracking-tight">Gestão de Produtos / Estoque</h2>
-                <p className="text-muted-foreground text-xs mt-1">Exponha pomadas e shampoos na vitrine e modifique as unidades de estoque</p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="font-normal text-2xl text-foreground tracking-tight">Gestão de Produtos / Estoque</h2>
+                  <p className="text-muted-foreground text-xs mt-1">Exponha pomadas e shampoos na vitrine e modifique as unidades de estoque</p>
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    if (showProductForm) {
+                      setEditingProductId(null);
+                      setNewProduct({ nome: '', descricao: '', preco: '', estoque: '10', imagem_url: '' });
+                    }
+                    setShowProductForm(v => !v);
+                  }}
+                  className="shrink-0"
+                >
+                  <Plus className="w-4 h-4" /> {showProductForm ? 'Fechar' : 'Novo Produto'}
+                </Button>
               </div>
 
               {/* Product Form */}
-              <form onSubmit={handleSaveProduct} className="bg-card p-6 rounded-lg border border-border grid grid-cols-1 md:grid-cols-2 gap-5">
+              {showProductForm && (
+              <form id="product-form-anchor" onSubmit={handleSaveProduct} className="bg-card p-6 rounded-lg border border-border grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="md:col-span-2">
                   <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-foreground mb-2">
                     {editingProductId ? 'Modificar Estoque / Descrição' : 'Cadastrar Novo Item'}
@@ -2076,13 +2653,30 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label>URL imagem ilustrativa</Label>
-                  <Input
-                    type="url"
-                    value={newProduct.imagem_url}
-                    onChange={(e) => setNewProduct({ ...newProduct, imagem_url: e.target.value })}
-                    placeholder="Cole um link de imagem do Unsplash"
-                  />
+                  <Label>Foto do produto</Label>
+                  <div className="flex items-center gap-3">
+                    <div className="w-16 h-16 rounded-sm bg-background border border-border overflow-hidden shrink-0 flex items-center justify-center">
+                      {newProduct.imagem_url ? (
+                        <img src={newProduct.imagem_url} className="w-full h-full object-cover" />
+                      ) : (
+                        <Upload className="w-4 h-4 text-muted-foreground" />
+                      )}
+                    </div>
+                    <label className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 border border-dashed border-border rounded-sm text-xs font-semibold text-muted-foreground hover:border-primary/40 hover:text-foreground transition ${uploadingProductImage ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}`}>
+                      {uploadingProductImage ? (
+                        <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Enviando...</>
+                      ) : (
+                        <><Upload className="w-3.5 h-3.5" /> {newProduct.imagem_url ? 'Trocar imagem' : 'Enviar imagem'}</>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        disabled={uploadingProductImage}
+                        onChange={(e) => handleProductImageSelect(e.target.files?.[0])}
+                      />
+                    </label>
+                  </div>
                 </div>
 
                 <div className="md:col-span-2 space-y-1.5">
@@ -2103,6 +2697,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                       onClick={() => {
                         setEditingProductId(null);
                         setNewProduct({ nome: '', descricao: '', preco: '', estoque: '10', imagem_url: '' });
+                        setShowProductForm(false);
                       }}
                     >
                       Cancelar
@@ -2113,6 +2708,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                   </Button>
                 </div>
               </form>
+              )}
 
               {/* Product showcase grid + stock control */}
               <div className="space-y-3">
@@ -2209,12 +2805,28 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
           {/* TAB 5: CLIENTS CRUD */}
           {activeTab === 'clientes' && (
             <div className="space-y-8">
-              <div>
-                <h2 className="font-normal text-2xl text-foreground tracking-tight">Cadastro de Clientes</h2>
-                <p className="text-muted-foreground text-xs mt-1">Crie prontuários, registre limitações térmicas, químicas ou de preferência de cada cliente</p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="font-normal text-2xl text-foreground tracking-tight">Cadastro de Clientes</h2>
+                  <p className="text-muted-foreground text-xs mt-1">Crie prontuários, registre limitações térmicas, químicas ou de preferência de cada cliente</p>
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    if (showClientForm) {
+                      setEditingClientId(null);
+                      setNewClient({ nome: '', telefone: '', email: '', data_nascimento: '', observacoes: '' });
+                    }
+                    setShowClientForm(v => !v);
+                  }}
+                  className="shrink-0"
+                >
+                  <Plus className="w-4 h-4" /> {showClientForm ? 'Fechar' : 'Novo Cliente'}
+                </Button>
               </div>
 
               {/* Client Form */}
+              {showClientForm && (
               <form onSubmit={handleSaveClient} className="bg-card p-6 rounded-lg border border-border grid grid-cols-1 md:grid-cols-2 gap-5" id="client-form-anchor">
                 <div className="md:col-span-2">
                   <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-foreground mb-2">
@@ -2281,6 +2893,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                       onClick={() => {
                         setEditingClientId(null);
                         setNewClient({ nome: '', telefone: '', email: '', data_nascimento: '', observacoes: '' });
+                        setShowClientForm(false);
                       }}
                     >
                       Cancelar
@@ -2291,6 +2904,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                   </Button>
                 </div>
               </form>
+              )}
 
               {/* Clients database list */}
               <div className="space-y-3">
@@ -2351,11 +2965,11 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                                   <Badge
                                     className={`text-xs uppercase tracking-wider font-bold ${
                                       vipEntry.renovado
-                                        ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/40'
+                                        ? planBadgeClass(vipEntry.subscription.plan || '')
                                         : 'bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/40'
                                     }`}
                                   >
-                                    {vipEntry.renovado ? 'VIP' : 'VIP vencido'}
+                                    {vipEntry.renovado ? planLabel(vipEntry.subscription.plan || '') : `${planLabel(vipEntry.subscription.plan || '')} vencido`}
                                   </Badge>
                                 )}
                               </h5>
@@ -2436,217 +3050,264 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
           {/* TAB 6: FINANCE CRUD & HISTORY */}
           {activeTab === 'financeiro' && (
             <div className="space-y-8 animate-fade-in">
-              <div>
-                <h2 className="font-normal text-2xl text-foreground tracking-tight">Fluxo de Caixa</h2>
-                <p className="text-muted-foreground text-xs mt-1 font-sans">Lançamentos independentes (aluguel, água, compras manuais de insumos) que alteram os balanços gerais no painel principal</p>
-              </div>
- 
-              {/* Lançamento manual form */}
-              <form
-                onSubmit={handleSaveFinanceLaunch}
-                className="bg-card p-6 rounded-lg border border-border space-y-5"
-              >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-foreground mb-4">
-                    Registrar Movimentação Manual
-                  </h4>
-
-                  {/* Tipo toggle — verde/vermelho */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      id="finance-type-entrada"
-                      type="button"
-                      onClick={() => {
-                        setNewLaunch({ ...newLaunch, tipo: 'entrada' });
-                        setTimeout(() => (document.getElementById('finance-valor') as HTMLInputElement)?.focus(), 50);
-                      }}
-                      className={`py-3 rounded-sm font-bold text-sm tracking-wide border-2 transition-all cursor-pointer ${
-                        newLaunch.tipo === 'entrada'
-                          ? 'bg-emerald-600 border-emerald-600 text-white shadow-lg shadow-emerald-900/30'
-                          : 'bg-background border-border text-muted-foreground hover:border-emerald-600 hover:text-emerald-500'
-                      }`}
-                    >
-                      ↑ ENTRADA
-                    </button>
-                    <button
-                      id="finance-type-saida"
-                      type="button"
-                      onClick={() => {
-                        setNewLaunch({ ...newLaunch, tipo: 'saida' });
-                        setTimeout(() => (document.getElementById('finance-valor') as HTMLInputElement)?.focus(), 50);
-                      }}
-                      className={`py-3 rounded-sm font-bold text-sm tracking-wide border-2 transition-all cursor-pointer ${
-                        newLaunch.tipo === 'saida'
-                          ? 'bg-red-600 border-red-600 text-white shadow-lg shadow-red-900/30'
-                          : 'bg-background border-border text-muted-foreground hover:border-red-500 hover:text-red-500'
-                      }`}
-                    >
-                      ↓ SAÍDA
-                    </button>
-                  </div>
+                  <h2 className="font-normal text-2xl text-foreground tracking-tight">Fluxo de Caixa</h2>
                 </div>
-
-                {/* Valor em destaque */}
-                <div className="space-y-1.5">
-                  <Label>Valor (R$)</Label>
-                  <div className="relative">
-                    <span
-                      className={`absolute left-4 top-1/2 -translate-y-1/2 font-bold text-2xl select-none pointer-events-none ${
-                        newLaunch.tipo === 'entrada' ? 'text-emerald-500' : 'text-red-500'
-                      }`}
-                    >
-                      R$
-                    </span>
-                    <input
-                      id="finance-valor"
-                      type="text"
-                      inputMode="decimal"
-                      required
-                      autoFocus
-                      value={newLaunch.valor}
-                      onChange={(e) => {
-                        let inputVal = e.target.value;
-                        // Substitui pontos por vírgulas se o usuário digitar ponto do teclado numérico
-                        inputVal = inputVal.replace('.', ',');
-                        // Permite apenas dígitos e no máximo 1 vírgula
-                        const parts = inputVal.split(',');
-                        if (parts.length > 2) return; // ignora segunda vírgula
-                        const integerPart = parts[0].replace(/[^0-9]/g, '');
-                        let decimalPart = parts[1] !== undefined ? parts[1].replace(/[^0-9]/g, '').slice(0, 2) : undefined;
-                        
-                        if (decimalPart !== undefined) {
-                          setNewLaunch({ ...newLaunch, valor: `${integerPart},${decimalPart}` });
-                        } else {
-                          setNewLaunch({ ...newLaunch, valor: integerPart });
-                        }
-                      }}
-                      onBlur={() => {
-                        if (!newLaunch.valor) return;
-                        if (!newLaunch.valor.includes(',')) {
-                          setNewLaunch({ ...newLaunch, valor: `${newLaunch.valor},00` });
-                        } else {
-                          const [int, dec] = newLaunch.valor.split(',');
-                          const paddedDec = (dec || '').padEnd(2, '0');
-                          setNewLaunch({ ...newLaunch, valor: `${int || '0'},${paddedDec}` });
-                        }
-                      }}
-                      placeholder="0,00"
-                      className="w-full pl-16 pr-4 py-4 text-3xl font-bold rounded-sm border border-border bg-background outline-none focus:outline-none focus:ring-0 focus:border-border transition-all placeholder:text-muted-foreground/30 text-foreground"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="space-y-1.5">
-                    <Label>Descrição operacional (opcional)</Label>
-                    <Input
-                      type="text"
-                      value={newLaunch.descricao}
-                      onChange={(e) => setNewLaunch({ ...newLaunch, descricao: e.target.value })}
-                      placeholder="Ex: Compra de golas higiênicas"
-                      className="rounded-sm"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label>Categoria do lançamento</Label>
-                    <Select value={newLaunch.categoria} onValueChange={(v) => v && setNewLaunch({ ...newLaunch, categoria: v as string })}>
-                      <SelectTrigger className="w-full rounded-sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {categoriasFinanceiras.filter(c => c.tipo === newLaunch.tipo).map(cat => (
-                          <SelectItem key={cat.id} value={cat.nome}>{cat.nome}</SelectItem>
-                        ))}
-                        {categoriasFinanceiras.filter(c => c.tipo === newLaunch.tipo).length === 0 && (
-                          <SelectItem value="Serviços">Serviços</SelectItem>
-                        )}
-                      </SelectContent>
-                    </Select>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNewCategoryType(newLaunch.tipo as 'entrada' | 'saida');
-                        setIsCategoryModalOpen(true);
-                      }}
-                      className="text-primary hover:text-primary/80 text-xs uppercase flex items-center gap-1 cursor-pointer"
-                    >
-                      <Settings className="w-3 h-3" /> Configurar Categorias
-                    </button>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label>Forma de pagamento</Label>
-                    <Select value={newLaunch.forma_pagamento} onValueChange={(v) => v && setNewLaunch({ ...newLaunch, forma_pagamento: v as any })}>
-                      <SelectTrigger className="w-full rounded-sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="dinheiro">Dinheiro</SelectItem>
-                        <SelectItem value="pix">Pix</SelectItem>
-                        <SelectItem value="cartao">Cartão de débito/crédito</SelectItem>
-                        <SelectItem value="outro">Outro método</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label>Data de registro</Label>
-                    <Input
-                      type="date"
-                      required
-                      value={newLaunch.data}
-                      onChange={(e) => setNewLaunch({ ...newLaunch, data: e.target.value })}
-                      className="rounded-sm"
-                    />
-                  </div>
-                </div>
-
-                {/* Optional linked product selection */}
-                {newLaunch.tipo === 'entrada' && (
-                  <div className="space-y-1.5">
-                    <Label>Abater 1 unidade do estoque deste produto? (opcional)</Label>
-                    <Select value={newLaunch.produto_id || 'none'} onValueChange={(v) => setNewLaunch({ ...newLaunch, produto_id: (!v || v === 'none') ? '' : (v as string) })}>
-                      <SelectTrigger className="w-full rounded-sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Não descontar venda de estoque</SelectItem>
-                        {produtos.map(p => (
-                          <SelectItem key={p.id} value={p.id}>{p.nome} (Estoque: {p.estoque} uni)</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                <div className="pt-2 border-t border-border">
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className={`w-full py-4 rounded-sm font-bold text-lg tracking-wide text-white transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-                      newLaunch.tipo === 'entrada'
-                        ? 'bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-900/30'
-                        : 'bg-red-600 hover:bg-red-500 shadow-lg shadow-red-900/30'
-                    }`}
-                  >
-                    {submitting ? 'Salvando...' : newLaunch.tipo === 'entrada' ? '↑ Registrar Entrada' : '↓ Registrar Saída'}
-                  </button>
-                </div>
-              </form>
- 
-              {/* Logs history complete */}
-              <div className="space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <h4 className="text-sm tracking-wide text-foreground font-semibold">Logs do Fluxo de Caixa (Histórico Completo)</h4>
+                <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
                     onClick={() => setIsCategoryModalOpen(true)}
-                    className="text-muted-foreground hover:text-primary hover:border-primary border border-border bg-background px-3 py-1.5 rounded-sm text-xs flex items-center gap-1.5 cursor-pointer self-start sm:self-auto transition"
+                    className="text-muted-foreground hover:text-primary hover:border-primary/50 border border-border bg-card px-3.5 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition shadow-sm"
                   >
-                    <Settings className="w-3.5 h-3.5" /> Ajustar Categorias
+                    <Settings className="w-4 h-4" /> Categorias
                   </button>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setShowFinanceForm(true);
+                      setTimeout(() => {
+                        const el = document.getElementById('finance-valor') as HTMLInputElement;
+                        if (el) el.focus();
+                      }, 100);
+                    }}
+                    className="font-bold text-xs uppercase tracking-wider px-4 py-2.5 rounded-xl shadow-md flex items-center gap-2 cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90 transition-all duration-300"
+                  >
+                    <Plus className="w-4 h-4" /> Registrar Movimentação
+                  </Button>
                 </div>
+              </div>
+
+              <FiltroBarbeiro
+                profissionais={profissionais}
+                valor={filtroProfissional}
+                onChange={setFiltroProfissional}
+                incluirCasa
+              />
+
+              {/* Modal Popup de Lançamento Financeiro Rápido */}
+              <AnimatePresence>
+                {showFinanceForm && (
+                  <div 
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in"
+                    onClick={() => setShowFinanceForm(false)}
+                  >
+                    <div 
+                      className="relative w-full max-w-xl bg-card border border-border rounded-2xl shadow-2xl overflow-hidden text-foreground space-y-5 p-6"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {/* Modal Header */}
+                      <div className="flex items-center justify-between border-b border-border pb-4">
+                        <div>
+                          <h3 className="text-lg font-bold tracking-tight text-foreground flex items-center gap-2">
+                            <Plus className="w-5 h-5 text-primary" /> Registrar Movimentação Financeira
+                          </h3>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Digite o valor e os detalhes do lançamento para atualizar o saldo instantaneamente
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowFinanceForm(false)}
+                          className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-full transition cursor-pointer"
+                          aria-label="Fechar"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+
+                      {/* Modal Form */}
+                      <form onSubmit={handleSaveFinanceLaunch} className="space-y-5">
+                        {/* Tipo toggle — Entrada vs Saída */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            id="finance-type-entrada"
+                            type="button"
+                            onClick={() => {
+                              setNewLaunch({ ...newLaunch, tipo: 'entrada' });
+                              setTimeout(() => (document.getElementById('finance-valor') as HTMLInputElement)?.focus(), 50);
+                            }}
+                            className={`py-3 rounded-xl font-bold text-sm tracking-wide border-2 transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                              newLaunch.tipo === 'entrada'
+                                ? 'bg-emerald-600 border-emerald-600 text-white shadow-md shadow-emerald-900/30'
+                                : 'bg-background border-border text-muted-foreground hover:border-emerald-600 hover:text-emerald-500'
+                            }`}
+                          >
+                            <TrendingUp className="w-4 h-4" /> ENTRADA (Receita)
+                          </button>
+                          <button
+                            id="finance-type-saida"
+                            type="button"
+                            onClick={() => {
+                              setNewLaunch({ ...newLaunch, tipo: 'saida' });
+                              setTimeout(() => (document.getElementById('finance-valor') as HTMLInputElement)?.focus(), 50);
+                            }}
+                            className={`py-3 rounded-xl font-bold text-sm tracking-wide border-2 transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                              newLaunch.tipo === 'saida'
+                                ? 'bg-red-600 border-red-600 text-white shadow-md shadow-red-900/30'
+                                : 'bg-background border-border text-muted-foreground hover:border-red-500 hover:text-red-500'
+                            }`}
+                          >
+                            <TrendingDown className="w-4 h-4" /> SAÍDA (Despesa)
+                          </button>
+                        </div>
+
+                        {/* Valor em destaque absoluto - autoFocus */}
+                        <div className="space-y-1.5">
+                          <Label className="text-xs uppercase tracking-wider font-bold text-muted-foreground">Valor (R$)</Label>
+                          <div className="relative">
+                            <span
+                              className={`absolute left-4 top-1/2 -translate-y-1/2 font-extrabold text-3xl select-none pointer-events-none ${
+                                newLaunch.tipo === 'entrada' ? 'text-emerald-500' : 'text-red-500'
+                              }`}
+                            >
+                              R$
+                            </span>
+                            <input
+                              id="finance-valor"
+                              type="text"
+                              inputMode="decimal"
+                              required
+                              autoFocus
+                              value={newLaunch.valor}
+                              onChange={(e) => {
+                                let inputVal = e.target.value;
+                                inputVal = inputVal.replace('.', ',');
+                                const parts = inputVal.split(',');
+                                if (parts.length > 2) return;
+                                const integerPart = parts[0].replace(/[^0-9]/g, '');
+                                let decimalPart = parts[1] !== undefined ? parts[1].replace(/[^0-9]/g, '').slice(0, 2) : undefined;
+                                
+                                if (decimalPart !== undefined) {
+                                  setNewLaunch({ ...newLaunch, valor: `${integerPart},${decimalPart}` });
+                                } else {
+                                  setNewLaunch({ ...newLaunch, valor: integerPart });
+                                }
+                              }}
+                              onBlur={() => {
+                                if (!newLaunch.valor) return;
+                                if (!newLaunch.valor.includes(',')) {
+                                  setNewLaunch({ ...newLaunch, valor: `${newLaunch.valor},00` });
+                                } else {
+                                  const [int, dec] = newLaunch.valor.split(',');
+                                  const paddedDec = (dec || '').padEnd(2, '0');
+                                  setNewLaunch({ ...newLaunch, valor: `${int || '0'},${paddedDec}` });
+                                }
+                              }}
+                              placeholder="0,00"
+                              className="w-full pl-16 pr-4 py-4 text-3xl font-extrabold rounded-xl border border-border bg-background outline-none focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all placeholder:text-muted-foreground/30 text-foreground"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-semibold">Descrição (opcional)</Label>
+                            <Input
+                              type="text"
+                              value={newLaunch.descricao}
+                              onChange={(e) => setNewLaunch({ ...newLaunch, descricao: e.target.value })}
+                              placeholder="Ex: Compra de golas higiênicas"
+                              className="rounded-xl"
+                            />
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-semibold">Categoria</Label>
+                            <Select value={newLaunch.categoria} onValueChange={(v) => v && setNewLaunch({ ...newLaunch, categoria: v as string })}>
+                              <SelectTrigger className="w-full rounded-xl">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {categoriasFinanceiras.filter(c => c.tipo === newLaunch.tipo).map(cat => (
+                                  <SelectItem key={cat.id} value={cat.nome}>{cat.nome}</SelectItem>
+                                ))}
+                                {categoriasFinanceiras.filter(c => c.tipo === newLaunch.tipo).length === 0 && (
+                                  <SelectItem value="Serviços">Serviços</SelectItem>
+                                )}
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-semibold">Forma de Pagamento</Label>
+                            <Select value={newLaunch.forma_pagamento} onValueChange={(v) => v && setNewLaunch({ ...newLaunch, forma_pagamento: v as any })}>
+                              <SelectTrigger className="w-full rounded-xl">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                                <SelectItem value="pix">Pix</SelectItem>
+                                <SelectItem value="cartao">Cartão de débito/crédito</SelectItem>
+                                <SelectItem value="outro">Outro método</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-semibold">Data</Label>
+                            <Input
+                              type="date"
+                              required
+                              value={newLaunch.data}
+                              onChange={(e) => setNewLaunch({ ...newLaunch, data: e.target.value })}
+                              className="rounded-xl"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Barbeiro receptor / pagador */}
+                        {profissionais.filter(p => p.ativo).length > 1 && (
+                          <div className="space-y-1.5">
+                            <Label className="text-xs font-semibold">
+                              {newLaunch.tipo === 'entrada' ? 'Venda de qual barbeiro?' : 'Despesa de qual barbeiro?'}
+                            </Label>
+                            <Select
+                              value={newLaunch.profissional_id || 'casa'}
+                              onValueChange={(v) => setNewLaunch({ ...newLaunch, profissional_id: v === 'casa' ? '' : (v as string) })}
+                            >
+                              <SelectTrigger className="w-full rounded-xl">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="casa">Barbearia (Sem barbeiro específico)</SelectItem>
+                                {profissionais.filter(p => p.ativo).map(p => (
+                                  <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+
+                        <div className="pt-2 border-t border-border flex items-center gap-3">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setShowFinanceForm(false)}
+                            className="w-1/3 py-3 rounded-xl text-xs uppercase font-bold cursor-pointer"
+                          >
+                            Cancelar
+                          </Button>
+                          <button
+                            type="submit"
+                            disabled={submitting}
+                            className={`w-2/3 py-3 rounded-xl font-bold text-sm tracking-wide text-white transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-md ${
+                              newLaunch.tipo === 'entrada'
+                                ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/30'
+                                : 'bg-red-600 hover:bg-red-500 shadow-red-900/30'
+                            }`}
+                          >
+                            {submitting ? 'Salvando...' : newLaunch.tipo === 'entrada' ? '↑ Confirmar Entrada' : '↓ Confirmar Saída'}
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                )}
+              </AnimatePresence>
+
+              {/* Logs history complete */}
+              <div className="space-y-4">
 
                 {/* Search Filters Row */}
                 <div className="bg-background border border-border p-4 rounded-sm grid grid-cols-1 sm:grid-cols-3 gap-4 items-end text-xs text-muted-foreground shadow-inner">

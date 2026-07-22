@@ -5,36 +5,30 @@ import {
   Sparkles,
   Clock,
   MapPin,
-  PhoneCall,
-  Mail,
-  ShieldCheck,
-  ArrowDown,
-  UserPlus,
   Flame,
   ShoppingBag,
   Clock3,
-  Lock,
-  Menu,
   X,
   User,
-  Settings,
   LogOut,
   Camera,
   Check,
   Calendar,
-  Upload,
-  Crown
+  CalendarCheck,
+  Star,
+  Crown,
+  ChevronDown,
+  ChevronUp,
+  Instagram,
+  ArrowRight
 } from 'lucide-react';
 import { Servico, Produto } from '../types.ts';
+import Logo from './Logo.tsx';
 import BookingWizard from './BookingWizard.tsx';
 import { signInWithGoogle } from '../lib/useAdminSession.ts';
 import { ThemeToggle } from './ThemeToggle.tsx';
 import { Button } from '@/components/ui/button.tsx';
-import { Input } from '@/components/ui/input.tsx';
-import { Label } from '@/components/ui/label.tsx';
-import { Badge } from '@/components/ui/badge.tsx';
-import { Card } from '@/components/ui/card.tsx';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog.tsx';
+import { WhatsAppFloatButton } from './WhatsAppFloatButton.tsx';
 
 interface VisitorLayoutProps {
   services: Servico[];
@@ -67,8 +61,11 @@ export default function VisitorLayout({
   const [showBookingPopup, setShowBookingPopup] = React.useState(false);
   const [preselectedService, setPreselectedService] = React.useState<Servico | null>(null);
   
+  // Display limits state for Services and Products
+  const [showAllServices, setShowAllServices] = React.useState(false);
+  const [showAllProducts, setShowAllProducts] = React.useState(false);
+
   // Tabs for user profile popover
-  const [activeProfileTab, setActiveProfileTab] = React.useState<'perfil' | 'agendamentos'>('perfil');
   const [clientBookings, setClientBookings] = React.useState<any[]>([]);
   const [loadingBookings, setLoadingBookings] = React.useState(false);
   
@@ -95,12 +92,6 @@ export default function VisitorLayout({
   const [editNome, setEditNome] = React.useState('');
   const [editTelefone, setEditTelefone] = React.useState('');
   const [editFoto, setEditFoto] = React.useState('');
-  const [profileSaveSuccess, setProfileSaveSuccess] = React.useState(false);
-  const [profileError, setProfileError] = React.useState('');
-
-  // O modal de "concluir registro" não é mais auto-aberto:
-  // com Supabase Auth, o telefone/telefone é coletado no signup.
-  // Se faltar, o cliente pode editar pelo botão "Editar Perfil".
 
   // Fetch client bookings by email & phone
   const fetchClientBookings = React.useCallback(async () => {
@@ -109,7 +100,6 @@ export default function VisitorLayout({
     try {
       const q = new URLSearchParams();
       if (loggedClient.email) q.append('email', loggedClient.email);
-      // Manda telefone SEM máscara pra match exato no banco
       if (loggedClient.telefone) q.append('telefone', loggedClient.telefone.replace(/\D/g, ''));
 
       const res = await fetch(`/api/agendamentos/cliente?${q.toString()}`);
@@ -182,52 +172,8 @@ export default function VisitorLayout({
       setEditTelefone('');
       setEditFoto('');
       setClientBookings([]);
-      setActiveProfileTab('perfil');
     }
   }, [loggedClient]);
-
-  const handleSaveProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!loggedClient) return;
-    try {
-      const telefoneDigits = editTelefone.replace(/\D/g, '');
-      const res = await fetch('/api/cliente/perfil', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          email: loggedClient.email,
-          nome: editNome,
-          telefone: telefoneDigits,
-          foto_url: editFoto
-        })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.profile) {
-          const updated = {
-            nome: data.profile.nome,
-            email: data.profile.email,
-            telefone: data.profile.telefone,
-            foto_url: data.profile.foto_url || ''
-          };
-          onClientLogin(updated);
-          try { localStorage.setItem('logged_client', JSON.stringify(updated)); } catch {}
-          setProfileSaveSuccess(true);
-          setTimeout(() => setProfileSaveSuccess(false), 2500);
-        } else {
-          setProfileError('Perfil não foi salvo: resposta inesperada do servidor.');
-        }
-      } else {
-        const err = await res.json().catch(() => ({}));
-        setProfileError(err.error || `Erro HTTP ${res.status} ao salvar perfil.`);
-      }
-    } catch (err) {
-      console.error("Error saving profile to server:", err);
-      setProfileError('Falha de rede ao salvar perfil.');
-    }
-  };
 
   const handleSaveNewRegistration = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -258,16 +204,10 @@ export default function VisitorLayout({
           onClientLogin(updated);
           try { localStorage.setItem('logged_client', JSON.stringify(updated)); } catch {}
           setShowRegistrationModal(false);
-        } else {
-          setProfileError('Cadastro não foi salvo: resposta inesperada.');
         }
-      } else {
-        const err = await res.json().catch(() => ({}));
-        setProfileError(err.error || `Erro HTTP ${res.status} ao cadastrar.`);
       }
     } catch (err) {
       console.error("Error creating new registration on server:", err);
-      setProfileError('Falha de rede ao cadastrar.');
     }
   };
 
@@ -293,13 +233,53 @@ export default function VisitorLayout({
     return !cortes.some(c => c.id === s.id) && !cuidados.some(c => c.id === s.id);
   });
 
+  // Services to render based on toggle limit
+  const displayedServices = showAllServices ? activeServices : activeServices.slice(0, 4);
+  const displayedProducts = showAllProducts ? activeProducts : activeProducts.slice(0, 4);
+
+  const reviews = [
+    {
+      name: "Carlos Eduardo",
+      text: "Melhor atendimento de Rio Verde! Encontrei meu barbeiro de confiança. Ambiente climatizado, pontualidade e o corte sempre fica exatamente como eu peço.",
+      role: "Empresário"
+    },
+    {
+      name: "Felipe Mendes",
+      text: "Atendimento diferenciado. Não é só um corte de cabelo, é toda uma experiência. A toalha quente na barba faz toda a diferença para quem tem pele sensível.",
+      role: "Advogado"
+    },
+    {
+      name: "Ricardo Alves",
+      text: "Eu tinha dificuldade em achar um lugar que acertasse o meu estilo. Na Detalhe, eles me deram uma consultoria antes de cortar. Resultado 100% aprovado.",
+      role: "Engenheiro"
+    }
+  ];
+
+  const steps = [
+    {
+      icon: <CalendarCheck className="w-7 h-7 text-primary" />,
+      title: "1. Agende online",
+      description: "Escolha o melhor dia e horário pelo nosso sistema de agendamento rápido em menos de 1 minuto."
+    },
+    {
+      icon: <Scissors className="w-7 h-7 text-primary" />,
+      title: "2. Chegue e relaxe",
+      description: "Seja atendido no horário marcado, tome uma bebida gelada e deixe o visual nas mãos de especialistas."
+    },
+    {
+      icon: <Star className="w-7 h-7 text-primary fill-primary/20" />,
+      title: "3. Saia renovado",
+      description: "Volte para a sua rotina com a confiança lá em cima e a aparência impecável que você merece."
+    }
+  ];
+
   const renderServiceRow = (s: Servico) => (
     <div 
       key={s.id} 
-      className="glass-panel-premium glass-panel-hover rounded-lg p-5 transition duration-300 shadow-xl flex flex-col sm:flex-row gap-5 items-start sm:items-center justify-between group"
+      className="glass-panel-premium glass-panel-hover rounded-xl p-5 transition-all duration-300 shadow-lg flex flex-col sm:flex-row gap-5 items-start sm:items-center justify-between group border border-border/60 hover:border-primary/40 bg-card/60 backdrop-blur-sm"
     >
-      <div className="flex gap-5 items-start">
-        <div className="w-18 h-18 bg-background rounded-md overflow-hidden shrink-0 border border-border relative group-hover:border-primary/40 transition duration-300">
+      <div className="flex gap-4 items-start">
+        <div className="w-16 h-16 bg-muted rounded-lg overflow-hidden shrink-0 border border-border/80 relative group-hover:border-primary/50 transition duration-300 shadow-sm">
           <img src={s.imagem_url} alt={s.nome} className="w-full h-full object-cover group-hover:scale-110 transition duration-500" referrerPolicy="no-referrer" />
         </div>
         <div className="space-y-1">
@@ -307,64 +287,70 @@ export default function VisitorLayout({
           <p className="text-muted-foreground text-xs line-clamp-2 leading-relaxed max-w-xl">{s.descricao}</p>
           
           <div className="flex items-center gap-3 pt-1">
-            <span className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 font-medium">
               <Clock className="w-3.5 h-3.5 text-primary" /> {s.duracao_minutos} min
             </span>
-            <span className="w-1 h-1 bg-muted rounded-full"></span>
-            <span className="text-xs font-bold uppercase tracking-wider text-primary bg-primary/10 px-2.5 py-0.5 rounded-md border border-primary/20 flex items-center gap-1">
+            <span className="w-1 h-1 bg-muted-foreground/30 rounded-full"></span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2.5 py-0.5 rounded-md border border-primary/20 flex items-center gap-1">
               <Sparkles className="w-3 h-3 text-primary" /> Toalha quente inclusa
             </span>
           </div>
         </div>
       </div>
 
-      <div className="sm:text-right w-full sm:w-auto pt-4 sm:pt-0 border-t sm:border-t-0 border-border flex sm:flex-col items-center sm:items-end justify-between gap-3 shrink-0">
-        <span className="font-semibold text-foreground text-2xl">
+      <div className="sm:text-right w-full sm:w-auto pt-3 sm:pt-0 border-t sm:border-t-0 border-border/60 flex sm:flex-col items-center sm:items-end justify-between gap-3 shrink-0">
+        <span className="font-bold text-foreground text-xl">
           {formatBRL(s.preco)}
         </span>
-        <a 
-          href="#agendar-sessao"
-          onClick={(e) => {
-            if ((window as any).selectBarberService) {
-              e.preventDefault();
-              (window as any).selectBarberService(s);
-            }
+        <button 
+          type="button"
+          onClick={() => {
+            setPreselectedService(s);
+            setShowBookingPopup(true);
           }}
-          className="text-xs uppercase tracking-widest font-bold text-primary hover:bg-primary hover:text-black flex items-center gap-1 bg-primary/5 px-4 py-2.5 rounded-md border border-primary/30 transition-all duration-300 shadow-md hover:shadow-primary/10 hover:scale-105 active:scale-95"
+          className="bg-gradient-to-r from-primary via-primary/90 to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground font-bold text-xs uppercase tracking-widest px-4 py-2.5 rounded-lg shadow-md shadow-primary/20 hover:shadow-primary/35 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center gap-1.5 cursor-pointer text-gold-glow"
         >
           Reservar corte
-        </a>
+        </button>
       </div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-background to-background text-foreground relative font-sans">
-      {/* Upper Navigation Bar */}
-      <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-md text-foreground border-b border-border shadow-sm">
+    <div className="min-h-screen bg-background text-foreground relative font-sans transition-colors duration-300 selection:bg-primary/20 selection:text-primary">
+      <WhatsAppFloatButton />
+      
+      {/* Upper Navigation Bar (Header Original mantido & aprimorado) */}
+      <header className="sticky top-0 z-40 bg-background/90 backdrop-blur-md text-foreground border-b border-border shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-3.5 min-w-0">
-            <div className="w-10 h-10 bg-gradient-to-br from-primary to-primary/80 rounded-md rotate-45 flex items-center justify-center text-primary-foreground shadow-lg shadow-primary/15 shrink-0 hover:rotate-[225deg] transition-all duration-700">
-              <span className="-rotate-45 text-primary-foreground font-bold text-xl flex items-center justify-center">
-                <Scissors className="w-4.5 h-4.5 text-primary-foreground" />
-              </span>
-            </div>
-            <div className="min-w-0">
-              <span className="font-semibold text-base xs:text-lg sm:text-xl lg:text-2xl tracking-wider sm:tracking-widest uppercase block text-foreground text-gold-glow">Detalhe Barbearia</span>
-              <span className="text-xs xs:text-xs text-primary uppercase tracking-[0.2em] sm:tracking-[0.28em] block">Style & Tradition</span>
-            </div>
+          <div className="flex items-center min-w-0">
+            <a href="#" className="flex items-center">
+              <Logo className="h-14 sm:h-16 md:h-20 lg:h-22 max-h-[72px] w-auto object-contain shrink-0 hover:scale-105 transition-transform duration-300" />
+            </a>
           </div>
           
-          <nav className="hidden md:flex items-center gap-8 text-xs uppercase tracking-[0.25em] font-bold text-foreground">
+          <nav className="hidden md:flex items-center gap-7 text-xs uppercase tracking-[0.2em] font-bold text-foreground">
+            <a href="#como-funciona" className="hover:text-primary transition-colors relative py-1 group/nav">
+              Como Funciona
+              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-primary group-hover/nav:w-full transition-all duration-300"></span>
+            </a>
+            <a href="#planos" className="hover:text-primary transition-colors relative py-1 group/nav">
+              Planos
+              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-primary group-hover/nav:w-full transition-all duration-300"></span>
+            </a>
             <a href="#servicos" className="hover:text-primary transition-colors relative py-1 group/nav">
               Serviços
               <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-primary group-hover/nav:w-full transition-all duration-300"></span>
             </a>
             <a href="#produtos" className="hover:text-primary transition-colors relative py-1 group/nav">
-              Produtos
+              Vitrine
               <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-primary group-hover/nav:w-full transition-all duration-300"></span>
             </a>
-            <a href="#informacoes" className="hover:text-primary transition-colors relative py-1 group/nav">
+            <a href="#depoimentos" className="hover:text-primary transition-colors relative py-1 group/nav">
+              Clientes
+              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-primary group-hover/nav:w-full transition-all duration-300"></span>
+            </a>
+            <a href="#localizacao" className="hover:text-primary transition-colors relative py-1 group/nav">
               Localização
               <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-primary group-hover/nav:w-full transition-all duration-300"></span>
             </a>
@@ -373,11 +359,15 @@ export default function VisitorLayout({
           <div className="flex items-center gap-2.5 md:gap-4 relative shrink-0">
             <ThemeToggle className="hidden sm:inline-flex" />
 
-            <Button onClick={() => { setPreselectedService(null); setShowBookingPopup(true); }} className="hidden md:inline-flex">
+            <button
+              type="button"
+              onClick={() => { setPreselectedService(null); setShowBookingPopup(true); }}
+              className="hidden md:inline-flex bg-gradient-to-r from-primary via-primary/90 to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground font-bold text-xs uppercase tracking-[0.18em] px-5 py-2.5 rounded-lg shadow-md shadow-primary/20 hover:shadow-primary/35 hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer text-gold-glow"
+            >
               Agende Já
-            </Button>
+            </button>
 
-            {/* Profile configuration popover (bolinha simples) */}
+            {/* Profile configuration popover */}
             <div className="relative shrink-0">
               {loggedClient ? (
                 <button
@@ -404,7 +394,7 @@ export default function VisitorLayout({
                 <button
                   type="button"
                   onClick={onAdminLoginClick}
-                  className="w-10 h-10 rounded-full border border-primary/30 flex items-center justify-center bg-primary/8 hover:bg-primary/20 transition text-primary hover:text-primary/80 cursor-pointer shrink-0 shadow-sm"
+                  className="w-10 h-10 rounded-full border border-primary/30 flex items-center justify-center bg-primary/10 hover:bg-primary/20 transition text-primary hover:text-primary/80 cursor-pointer shrink-0 shadow-sm"
                   title="Acesse sua área de cliente"
                   id="perfil-guest-btn"
                 >
@@ -412,20 +402,18 @@ export default function VisitorLayout({
                 </button>
               )}
 
-              {/* Pop de Perfil Modal / Dropdown */}
+              {/* Pop de Perfil Modal */}
               <AnimatePresence>
                 {showProfilePop && (
                   <>
-                    {/* Backdrop to close click-outside - on mobile we dim and blur for premium modal feeling */}
                     <div className="fixed inset-0 bg-black/60 md:bg-transparent backdrop-blur-[2px] md:backdrop-blur-none z-50 cursor-default" onClick={() => setShowProfilePop(false)} />
-                          <motion.div 
+                    <motion.div 
                       initial={{ opacity: 0, y: 10, scale: 0.95 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 10, scale: 0.95 }}
                       transition={{ duration: 0.15 }}
-                      className="fixed top-24 left-1/2 -translate-x-1/2 md:translate-x-0 md:translate-y-0 md:absolute md:top-auto md:left-auto md:right-0 md:mt-3 w-[calc(100vw-32px)] max-w-[350px] md:w-80 glass-panel-premium rounded-lg shadow-2xl p-5 md:p-6 z-55 text-left max-h-[85vh] md:max-h-none overflow-y-auto md:overflow-visible [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                      className="fixed top-24 left-1/2 -translate-x-1/2 md:translate-x-0 md:translate-y-0 md:absolute md:top-auto md:left-auto md:right-0 md:mt-3 w-[calc(100vw-32px)] max-w-[350px] md:w-80 glass-panel-premium rounded-xl shadow-2xl p-5 md:p-6 z-55 text-left max-h-[85vh] md:max-h-none overflow-y-auto"
                     >
-                      {/* Botão de Fechar (X) */}
                       <button
                         type="button"
                         onClick={() => setShowProfilePop(false)}
@@ -437,7 +425,6 @@ export default function VisitorLayout({
 
                       {loggedClient ? (
                         <div className="space-y-4 text-center">
-                          {/* Header info */}
                           <div className="flex items-center gap-3 border-b border-border pb-3.5">
                             <div className="w-12 h-12 rounded-full border border-primary overflow-hidden bg-background shrink-0 shadow-md">
                               {loggedClient.foto_url ? (
@@ -459,10 +446,11 @@ export default function VisitorLayout({
                               type="button"
                               onClick={() => {
                                 setShowProfilePop(false);
+                                setShowBookingsModal(true);
                               }}
-                              className="w-full bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-black font-sans text-xs uppercase tracking-widest font-black py-3 rounded-md text-center transition-all duration-300 cursor-pointer shadow-md"
+                              className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground font-sans text-xs uppercase tracking-widest font-bold py-3 rounded-lg text-center transition-all duration-300 cursor-pointer shadow-md text-gold-glow"
                             >
-                              Acessar Meu Painel VIP
+                              Ver Meus Agendamentos
                             </button>
                           </div>
 
@@ -473,7 +461,7 @@ export default function VisitorLayout({
                                 onClientLogout();
                                 setShowProfilePop(false);
                               }}
-                              className="w-full bg-background border border-border hover:border-red-200 dark:border-red-900/30 hover:bg-red-100 dark:bg-red-950/10 text-muted-foreground hover:text-red-600 dark:text-red-400 text-xs uppercase tracking-widest font-bold py-2 rounded-sm flex items-center justify-center gap-1.5 transition cursor-pointer"
+                              className="w-full bg-background border border-border hover:border-red-400/40 hover:bg-red-500/10 text-muted-foreground hover:text-red-500 text-xs uppercase tracking-widest font-bold py-2 rounded-lg flex items-center justify-center gap-1.5 transition cursor-pointer"
                             >
                               <LogOut className="w-3.5 h-3.5" /> Sair da conta
                             </button>
@@ -487,7 +475,7 @@ export default function VisitorLayout({
                           <div className="space-y-1">
                             <h4 className="text-sm font-semibold text-foreground">Área do Cliente</h4>
                             <p className="text-xs text-muted-foreground leading-relaxed max-w-[210px] mx-auto">
-                              Conecte sua conta do Google de forma descomplicada para agendar sessões e manter seus contatos atualizados.
+                              Conecte sua conta do Google para agendar sessões e consultar seus horários.
                             </p>
                           </div>
                           <button
@@ -497,18 +485,13 @@ export default function VisitorLayout({
                               setIsGoogleLoading(true);
                               try {
                                 const { error } = await signInWithGoogle();
-                                if (error) {
-                                  console.error('Login Google:', error.message);
-                                  return;
-                                }
-                                // signInWithOAuth redireciona — após o retorno,
-                                // App.tsx atualiza loggedClient via onAuthStateChange
+                                if (error) console.error('Login Google:', error.message);
                                 setShowProfilePop(false);
                               } finally {
                                 setIsGoogleLoading(false);
                               }
                             }}
-                            className="w-full py-2.5 bg-background hover:bg-accent border border-border hover:border-primary/40 text-muted-foreground disabled:opacity-50 text-xs font-bold uppercase tracking-widest rounded-sm transition duration-150 cursor-pointer flex items-center justify-center gap-1.5 shadow-md"
+                            className="w-full py-2.5 bg-background hover:bg-accent border border-border hover:border-primary/40 text-foreground disabled:opacity-50 text-xs font-bold uppercase tracking-widest rounded-lg transition duration-150 cursor-pointer flex items-center justify-center gap-2 shadow-md"
                           >
                             {isGoogleLoading ? (
                               <>
@@ -538,341 +521,582 @@ export default function VisitorLayout({
         </div>
       </header>
 
-      {/* Hero Banner Section */}
-      <section className="relative overflow-hidden py-24 sm:py-32 text-muted-foreground bg-gradient-to-b from-[#f7f2e8] via-[#faf8f4] to-background dark:from-zinc-950 dark:via-zinc-950 dark:to-zinc-950">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(197,160,89,0.10),transparent_55%)] dark:bg-[radial-gradient(circle_at_30%_30%,rgba(197,160,89,0.08),transparent_55%)] animate-pulse-slow pointer-events-none" />
+      {/* 1º Bloco: HERO SECTION (Integrada do Google AI Studio + Glow & Dark/Light) */}
+      <section className="relative min-h-0 sm:min-h-[75vh] flex items-center justify-center overflow-hidden bg-background py-10 sm:py-20 border-b border-border">
+        {/* Decorative ambient lighting */}
+        <div className="absolute inset-0 z-0 bg-[radial-gradient(circle_at_50%_30%,rgba(0,97,194,0.12),transparent_65%)] dark:bg-[radial-gradient(circle_at_50%_30%,rgba(41,155,255,0.14),transparent_65%)] pointer-events-none" />
+        <div className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat opacity-[0.03] dark:opacity-[0.05] pointer-events-none"
+             style={{ backgroundImage: "url('https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=2070&q=80')" }} />
         
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center relative z-10">
-          <div className="lg:col-span-7 space-y-6 text-left animate-fade-in">
-            <div className="inline-flex items-center gap-1.5 bg-primary/10 text-primary px-4 py-2 rounded-full border border-primary/20 text-xs font-bold uppercase tracking-[0.2em] shadow-inner">
-              <Flame className="w-3.5 h-3.5 text-primary" /> Estilo Premium, Navalha & Tradição
-            </div>
-            
-            <h1 className="font-normal text-4xl sm:text-5xl lg:text-7xl tracking-tight leading-[1.05] text-foreground">
-              Corte Perfeito <br />
-              <span className="text-primary">Sem Cadastro</span> e Sem Burocracia
-            </h1>
-            
-            <p className="text-muted-foreground text-sm sm:text-base leading-relaxed max-w-lg font-sans font-light">
-              Bem-vindo à <strong className="text-foreground">Detalhe Barbearia</strong>. Conforto de alto nível, massagem capilar, toalha quente aromática e café premium inclusos. Seu horário assegurado em menos de 1 minuto!
-            </p>
-
-            <div className="flex flex-col sm:flex-row gap-4 pt-4">
-              <button
-                type="button"
-                onClick={() => { setPreselectedService(null); setShowBookingPopup(true); }}
-                className="bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-black text-xs uppercase tracking-[0.2em] font-black px-7 py-4.5 rounded-md text-center shadow-lg shadow-primary/10 hover:shadow-primary/20 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center gap-2.5 cursor-pointer"
-              >
-                Escolher Horário Imperial <ArrowDown className="w-4 h-4 text-black animate-bounce" />
-              </button>
-              <a
-                href="#vip"
-                className="bg-background/60 hover:bg-card text-foreground border border-border hover:border-primary/40 text-xs uppercase tracking-[0.18em] font-bold px-7 py-4.5 rounded-md text-center transition-all duration-300 flex items-center justify-center gap-2 shadow-md hover:scale-105"
-              >
-                Ver Plano VIP <Sparkles className="w-4 h-4 text-primary" />
-              </a>
-            </div>
-
-            {/* Quick value badges */}
-            <div className="grid grid-cols-3 gap-4 pt-6 border-t border-border/60 max-w-md text-xs">
-              <div className="space-y-1">
-                <span className="text-primary font-bold text-lg text-gold-glow">Carlos S.</span>
-                <p className="text-muted-foreground text-[8.5px] uppercase tracking-widest">Barbeiro Único</p>
-              </div>
-              <div className="space-y-1">
-                <span className="text-primary font-bold text-lg text-gold-glow">Toalha Quente</span>
-                <p className="text-muted-foreground text-[8.5px] uppercase tracking-widest">Grátis no Corte</p>
-              </div>
-              <div className="space-y-1">
-                <span className="text-primary font-bold text-lg text-gold-glow">Sem Senha</span>
-                <p className="text-muted-foreground text-[8.5px] uppercase tracking-widest">Agende sem login</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Master Barber Callout Card */}
-          <div className="lg:col-span-5 relative">
-            <div className="absolute -inset-1.5 bg-gradient-to-r from-primary to-primary/60 rounded-lg blur-md opacity-25" />
-            <div className="relative glass-panel-premium p-8 rounded-lg space-y-4.5 shadow-2xl">
-              <div className="flex items-center gap-4">
-                <img 
-                  src="https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80" 
-                  alt="Emerson Santiago" 
-                  className="w-16 h-16 rounded-md border border-primary/40 object-cover shrink-0 shadow-md shadow-primary/5"
-                />
-                <div>
-                  <h3 className="font-bold text-lg text-foreground">Emerson Santiago</h3>
-                  <p className="text-primary text-xs">Dono & Master Barber</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">12 anos de experiência</p>
-                </div>
-              </div>
-              <p className="text-muted-foreground text-xs leading-relaxed font-light">
-                "Aqui, cada cliente recebe um atendimento focado e de alta precisão. Não divido minha atenção e cuido de cada detalhe com navalha afiada e produtos de primeira linha."
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Booking Section - full width blue background with popup trigger */}
-      <section id="agendar-sessao-section" className="relative bg-background py-16 sm:py-20 scroll-mt-20">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_50%,rgba(59,130,246,0.07),transparent_65%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_80%_20%,rgba(197,160,89,0.04),transparent_50%)]" />
-        <div className="max-w-7xl mx-auto px-2.5 xs:px-4 sm:px-6 lg:px-8 relative z-10 space-y-6">
-          <div className="text-center max-w-2xl mx-auto space-y-3 mb-8">
-            <h2 className="font-normal text-3xl sm:text-4xl text-foreground tracking-tight">
-              Agendar Horário Online
-            </h2>
-            <p className="text-muted-foreground text-xs font-sans max-w-lg mx-auto leading-relaxed">
-              Escolha seu serviço favorito, selecione o melhor dia e consulte os horários livres atualizados em tempo real para formalizar o atendimento.
-            </p>
-          </div>
-          
-          <div className="text-center">
-            <button
-              type="button"
-              onClick={() => { setPreselectedService(null); setShowBookingPopup(true); }}
-              className="bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-black text-sm uppercase tracking-[0.2em] font-black px-10 py-5 rounded-md text-center shadow-lg shadow-primary/10 hover:shadow-primary/20 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center gap-2.5 cursor-pointer mx-auto"
-            >
-              <Calendar className="w-5 h-5 text-black" /> Abrir Agendamento Online
-            </button>
-            <p className="text-muted-foreground/70 text-[10px] uppercase tracking-widest mt-3">Clique para agendar em segundos</p>
-          </div>
-        </div>
-      </section>
-
-      {/* Plano VIP — full-bleed */}
-      <section
-        id="vip"
-        className="relative scroll-mt-20 overflow-hidden bg-zinc-950 text-zinc-100 border-y border-primary/25"
-      >
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgba(197,160,89,0.16),transparent_55%)] pointer-events-none" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_80%_80%,rgba(197,160,89,0.08),transparent_50%)] pointer-events-none" />
-
-        <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-20">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-10">
-            <div className="space-y-5 max-w-xl">
-              <span className="inline-flex items-center gap-2 bg-primary/15 text-primary border border-primary/30 px-3.5 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.22em]">
-                <Crown className="w-3.5 h-3.5" /> VIP Imperial
-              </span>
-
-              <h2 className="font-normal text-3xl sm:text-4xl lg:text-5xl tracking-tight text-white leading-[1.1]">
-                Plano VIP com cortes, barba e sobrancelha{' '}
-                <span className="text-primary">ilimitados</span>
-              </h2>
-
-              <p className="text-zinc-400 text-sm leading-relaxed max-w-lg">
-                Assine o Plano VIP da Detalhe Barbearia e tenha atendimento recorrente sem taxas extras nos serviços elegíveis.
-              </p>
-
-              <ul className="space-y-2.5 text-sm text-zinc-300">
-                <li className="flex items-center gap-2.5">
-                  <Check className="w-4 h-4 text-primary shrink-0" /> Cortes de cabelo ilimitados
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <Check className="w-4 h-4 text-primary shrink-0" /> Barba ilimitada
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <Check className="w-4 h-4 text-primary shrink-0" /> Sobrancelhas ilimitadas
-                </li>
-                <li className="flex items-center gap-2.5">
-                  <Check className="w-4 h-4 text-primary shrink-0" /> Sem taxas extras nos serviços do plano
-                </li>
-              </ul>
-            </div>
-
-            <div className="w-full lg:w-auto lg:min-w-[280px]">
-              <div className="relative rounded-xl border border-primary/35 bg-zinc-900/80 p-7 shadow-2xl shadow-primary/10 backdrop-blur-sm">
-                <div className="absolute -inset-px rounded-xl bg-gradient-to-br from-primary/20 via-transparent to-primary/5 pointer-events-none" />
-                <div className="relative space-y-5">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500 font-bold mb-1">Mensalidade</p>
-                    <p className="text-4xl sm:text-5xl font-semibold text-white tracking-tight">
-                      R$&nbsp;120<span className="text-lg text-zinc-400 font-normal">/mês</span>
-                    </p>
-                  </div>
-                  <p className="text-xs text-zinc-400 leading-relaxed">
-                    Entre na sua conta para assinar. A confirmação da assinatura acontece no painel do cliente.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={onAdminLoginClick}
-                    className="w-full bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-black text-xs uppercase tracking-[0.2em] font-black px-6 py-4 rounded-md shadow-lg shadow-primary/15 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <Crown className="w-4 h-4" /> Assinar Plano VIP
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Dynamic Content Columns */}
-      <main className="max-w-7xl mx-auto px-2.5 xs:px-4 sm:px-6 lg:px-8 py-16 space-y-16">
-
-        {/* Info, Services, and Products Area below */}
-        <div className="max-w-5xl mx-auto w-full space-y-16 pt-12 border-t border-border">
-          {/* Services catalogue, Expediente, and product vitrine */}
-          <div className="space-y-16">
-            
-            {/* Services Box with Cortes, Cuidados, Serviços Subsections */}
-            <section id="servicos" className="space-y-12">
-              <div className="flex items-center justify-between border-b border-border pb-4">
-                <div>
-                  <h2 className="font-normal text-3xl text-foreground tracking-tight">Cortes & Cuidados</h2>
-                  <p className="text-muted-foreground text-xs mt-1">Serviços executados com toalha de vapor quente e lavagem final inclusas</p>
-                </div>
-                <span className="text-xs font-bold tracking-widest uppercase bg-muted text-primary border border-border px-3.5 py-1.5 rounded-sm">
-                  {activeServices.length} serviços
-                </span>
-              </div>
-
-              {/* Sub-section: Cortes */}
-              {cortes.length > 0 && (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 border-b border-border pb-2">
-                    <Scissors className="w-4 h-4 text-primary" />
-                    <h3 className="font-semibold text-lg text-foreground tracking-wide">Cortes</h3>
-                  </div>
-                  <div className="space-y-4">
-                    {cortes.map((s) => renderServiceRow(s))}
-                  </div>
-                </div>
-              )}
-
-              {/* Sub-section: Cuidados */}
-              {cuidados.length > 0 && (
-                <div className="space-y-4 pt-4">
-                  <div className="flex items-center gap-2 border-b border-border pb-2">
-                    <Sparkles className="w-4 h-4 text-primary" />
-                    <h3 className="font-semibold text-lg text-foreground tracking-wide">Cuidados</h3>
-                  </div>
-                  <div className="space-y-4">
-                    {cuidados.map((s) => renderServiceRow(s))}
-                  </div>
-                </div>
-              )}
-
-              {/* Sub-section: Serviços */}
-              {outrosServicos.length > 0 && (
-                <div className="space-y-4 pt-4">
-                  <div className="flex items-center gap-2 border-b border-border pb-2">
-                    <Clock3 className="w-4 h-4 text-primary" />
-                    <h3 className="font-semibold text-lg text-foreground tracking-wide">Outros Serviços</h3>
-                  </div>
-                  <div className="space-y-4">
-                    {outrosServicos.map((s) => renderServiceRow(s))}
-                  </div>
-                </div>
-              )}
-            </section>
-
-            {/* Expediente Imperial Block below Cortes & Cuidados */}
-            <section className="glass-panel-premium text-muted-foreground rounded-lg p-6 shadow-xl space-y-4">
-              <h3 className="font-normal text-lg flex items-center gap-2 text-primary border-b border-border/40 pb-3">
-                <Clock3 className="w-5 h-5 text-primary" /> Expediente Imperial
-              </h3>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs text-muted-foreground">
-                <div className="p-3 bg-background/40 border border-border/60 rounded-md space-y-1">
-                  <span className="font-semibold text-muted-foreground uppercase tracking-widest text-xs block">Segunda a Sexta:</span>
-                  <span className="text-foreground text-xs">09:00h às 19:00h</span>
-                </div>
-                <div className="p-3 bg-background/40 border border-border/60 rounded-md space-y-1">
-                  <span className="font-semibold text-muted-foreground uppercase tracking-widest text-xs block">Intervalo Almoço:</span>
-                  <span className="text-foreground text-xs">12:00h às 13:30h</span>
-                </div>
-                <div className="p-3 bg-background/40 border border-border/60 rounded-md space-y-1">
-                  <span className="font-semibold text-muted-foreground uppercase tracking-widest text-xs block">Sábado:</span>
-                  <span className="text-foreground text-xs">08:00h às 18:00h</span>
-                </div>
-                <div className="p-3 bg-background/40 border border-border/60 rounded-md space-y-1">
-                  <span className="font-semibold text-muted-foreground uppercase tracking-widest text-xs block">Domingos e Feriados:</span>
-                  <span className="text-muted-foreground text-xs">Fechado</span>
-                </div>
-              </div>
-            </section>
-
-            {/* Products Showroom */}
-            <section id="produtos" className="space-y-6">
-              <div className="flex items-center justify-between border-b border-border pb-4">
-                <div>
-                  <h2 className="font-normal text-3xl text-foreground tracking-tight">Vitrine & Produtos</h2>
-                  <p className="text-muted-foreground text-xs mt-1">Nossos cosméticos e finalizadores de uso profissional à venda na cadeira</p>
-                </div>
-                <span className="text-xs font-bold tracking-widest uppercase bg-muted text-primary border border-border px-3.5 py-1.5 rounded-md flex items-center gap-1">
-                  <ShoppingBag className="w-3.5 h-3.5" /> {activeProducts.length} itens
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {activeProducts.map((p) => (
-                  <div 
-                    key={p.id} 
-                    className="bg-card border border-border/10 hover:border-primary/30 hover:shadow-lg rounded-lg p-4 transition-all duration-300 shadow-md overflow-hidden flex flex-col justify-between group"
-                  >
-                    <div className="space-y-3">
-                      <div className="h-40 bg-muted rounded-md overflow-hidden border border-border relative">
-                        <img src={p.imagem_url} alt={p.nome} className="w-full h-full object-cover group-hover:scale-110 transition duration-500" />
-                        {p.estoque > 0 ? (
-                          <span className="absolute top-2 right-2 bg-primary/90 text-white border border-primary/50 text-xs uppercase tracking-wider font-bold px-2 py-0.5 rounded-sm shadow-md">
-                            Em Estoque
-                          </span>
-                        ) : (
-                          <span className="absolute top-2 right-2 bg-red-50 text-red-600 border border-red-200 text-xs uppercase tracking-wider font-bold px-2 py-0.5 rounded-sm shadow-sm">
-                            Esgotado
-                          </span>
-                        )}
-                      </div>
-                      
-                      <div className="space-y-1">
-                        <h3 className="font-bold text-foreground text-sm group-hover:text-primary transition-colors">{p.nome}</h3>
-                        <p className="text-muted-foreground text-xs leading-relaxed line-clamp-2">{p.descricao}</p>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
-                      <span className="font-semibold text-foreground text-base">
-                        {formatBRL(p.preco)}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {p.estoque} restantes
-                      </span>
-                    </div>
-                  </div>
+        <div className="relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="space-y-4 sm:space-y-6 max-w-4xl mx-auto"
+          >
+            {/* Rating Stars Badge (Acima do título) */}
+            <div className="inline-flex items-center gap-2 bg-muted/60 dark:bg-zinc-900/80 px-4 py-2 rounded-full border border-border/80 text-xs font-semibold shadow-sm">
+              <div className="flex space-x-1 text-amber-400">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Star key={star} className="w-4 h-4 fill-amber-400 text-amber-400" />
                 ))}
               </div>
-            </section>
-          </div>
-        </div>
-      </main>
+              <span className="text-muted-foreground font-medium text-xs">
+                Avaliação 5 estrelas no Google Maps
+              </span>
+            </div>
 
-      {/* Bottom Footer block */}
-      <footer className="border-t border-border bg-card py-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
-          <div className="flex items-center gap-3">
-            <div className="w-6 h-6 rounded-sm bg-primary/20 border border-primary/40 flex items-center justify-center font-bold text-[10px] text-primary">
-              DB
+            {/* Main Headline (Fonte Serif Elegante) */}
+            <h1 className="text-3xl sm:text-5xl md:text-7xl font-serif font-bold leading-[1.1] text-foreground tracking-tight">
+              Conquiste um <span className="text-primary text-gold-glow">visual impecável</span> sem abrir mão do conforto.
+            </h1>
+            
+            {/* Subtitle */}
+            <p className="text-sm sm:text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto font-light leading-relaxed">
+              Cortes modernos, alinhamento perfeito e um atendimento premium que renova não apenas sua imagem, mas sua confiança.
+            </p>
+            
+            {/* CTA Buttons with Gold Glow effect */}
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 pt-2 sm:pt-4">
+              <motion.button
+                type="button"
+                onClick={() => { setPreselectedService(null); setShowBookingPopup(true); }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-3.5 sm:py-4 bg-gradient-to-r from-primary via-primary/90 to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground font-bold text-sm sm:text-base rounded-xl shadow-lg shadow-primary/25 hover:shadow-primary/40 transition-all duration-300 text-gold-glow cursor-pointer"
+              >
+                <Calendar className="w-5 h-5 mr-2.5 text-primary-foreground" />
+                Agendar meu horário agora
+              </motion.button>
+
+              <a
+                href="#planos"
+                className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-3.5 sm:py-4 bg-card hover:bg-accent text-foreground font-semibold text-sm sm:text-base rounded-xl border border-border hover:border-primary/40 transition-all duration-300 shadow-sm hover:scale-105"
+              >
+                <Crown className="w-5 h-5 mr-2 text-primary" />
+                Ver Planos Mensais
+              </a>
             </div>
-            <div>
-              <p className="font-semibold text-foreground">Detalhe Barbearia</p>
-              <p className="text-xs text-muted-foreground">© 2026 Emerson Santiago. Todos os direitos reservados.</p>
-            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* 2º Bloco: COMO FUNCIONA (Integrado do Google AI Studio + Dark/Light) */}
+      <section id="como-funciona" className="py-12 sm:py-24 bg-card/40 border-b border-border scroll-mt-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16 space-y-3">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-serif font-bold text-foreground">
+              Como funciona
+            </h2>
+            <p className="text-muted-foreground text-base max-w-xl mx-auto font-light">
+              Três passos simples para você transformar a sua imagem.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12 relative">
+            {/* Connector line for desktop */}
+            <div className="hidden md:block absolute top-12 left-[15%] right-[15%] h-0.5 bg-border/60 z-0" />
+
+            {steps.map((step, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6, delay: index * 0.2 }}
+                className="relative z-10 flex flex-col items-center text-center glass-panel-premium rounded-2xl p-8 border border-border/60 bg-card/80 shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group"
+              >
+                <div className="w-20 h-20 bg-background border-2 border-primary/30 rounded-full flex items-center justify-center mb-6 shadow-md group-hover:border-primary group-hover:scale-110 transition duration-300">
+                  {step.icon}
+                </div>
+                <h3 className="text-xl font-bold text-foreground mb-3 font-serif">{step.title}</h3>
+                <p className="text-muted-foreground text-sm leading-relaxed max-w-xs font-light">{step.description}</p>
+              </motion.div>
+            ))}
           </div>
           
-          <div className="flex items-center gap-4 text-xs">
-            <a href="#servicos" className="hover:text-primary transition">Serviços</a>
-            <a href="#produtos" className="hover:text-primary transition">Vitrine</a>
+          <div className="mt-16 text-center">
+            <motion.button
+              type="button"
+              onClick={() => { setPreselectedService(null); setShowBookingPopup(true); }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="inline-flex items-center justify-center px-8 py-4 bg-gradient-to-r from-primary via-primary/90 to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground font-bold text-base rounded-xl shadow-lg shadow-primary/20 hover:shadow-primary/35 transition-all duration-300 text-gold-glow cursor-pointer"
+            >
+              Quero agendar meu horário
+            </motion.button>
+          </div>
+        </div>
+      </section>
+
+      {/* 3º Bloco: PLANOS MENSAIS (Integrado do Google AI Studio + Dark/Light) */}
+      <section id="planos" className="py-24 bg-background border-b border-border scroll-mt-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16 space-y-3">
+            <span className="inline-flex items-center gap-1.5 bg-primary/10 text-primary border border-primary/20 px-3.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+              <Crown className="w-3.5 h-3.5" /> Clube VIP
+            </span>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-serif font-bold text-foreground">
+              Nossos Planos Mensais
+            </h2>
+            <p className="text-muted-foreground text-base max-w-2xl mx-auto font-light">
+              Assine um de nossos planos e mantenha seu visual sempre impecável pagando um valor fixo por mês.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch">
+            {/* Plan 1: Essential */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+              className="relative flex flex-col bg-card/80 border border-border/80 rounded-2xl p-8 shadow-md hover:shadow-xl transition duration-300"
+            >
+              <div className="mb-4">
+                <h3 className="text-2xl font-serif font-bold text-foreground">Essential</h3>
+                <p className="text-xs text-muted-foreground mt-1">Cortes com frequência livre</p>
+              </div>
+              
+              <div className="my-4">
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">Por apenas</span>
+                <div className="flex items-baseline text-foreground">
+                  <span className="text-xl font-bold">R$</span>
+                  <span className="text-4xl sm:text-5xl font-extrabold tracking-tight mx-1">109</span>
+                  <span className="text-lg font-bold text-muted-foreground">,99</span>
+                  <span className="text-muted-foreground ml-1 text-xs font-medium">/mês</span>
+                </div>
+              </div>
+              
+              <p className="text-muted-foreground text-xs leading-relaxed mb-6 min-h-[60px]">
+                O essencial para manter seu visual sempre em dia. Ideal para quem deseja cortes ilimitados com praticidade e economia.
+              </p>
+              
+              <div className="flex-1 border-t border-border/60 pt-6">
+                <ul className="space-y-3 mb-8">
+                  <li className="flex items-center text-foreground text-sm">
+                    <Check className="w-4 h-4 text-emerald-500 mr-2.5 shrink-0" strokeWidth={3} />
+                    <span className="font-medium">Corte ilimitado</span>
+                  </li>
+                </ul>
+              </div>
+              
+              <button 
+                type="button"
+                onClick={onAdminLoginClick}
+                className="w-full py-3.5 px-6 rounded-xl font-bold text-xs uppercase tracking-wider bg-secondary hover:bg-secondary/80 text-secondary-foreground transition-all duration-300 mt-auto cursor-pointer border border-border"
+              >
+                Assinar Essential
+              </button>
+            </motion.div>
+
+            {/* Plan 2: Premium (Mais Escolhido) */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              className="relative flex flex-col bg-card border-2 border-primary/60 rounded-2xl p-8 shadow-xl shadow-primary/10 hover:shadow-primary/20 transition duration-300 md:-mt-2 md:mb-[-0.5rem]"
+            >
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-bold px-4 py-1 rounded-full text-xs uppercase tracking-wider shadow-md text-gold-glow">
+                Mais Escolhido
+              </div>
+              
+              <div className="mb-4 pt-2">
+                <h3 className="text-2xl font-serif font-bold text-primary flex items-center gap-1.5">
+                  Premium
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1">Cabelo e barba sempre perfeitos</p>
+              </div>
+              
+              <div className="my-4">
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">Por apenas</span>
+                <div className="flex items-baseline text-foreground">
+                  <span className="text-xl font-bold">R$</span>
+                  <span className="text-4xl sm:text-5xl font-extrabold tracking-tight mx-1 text-primary">159</span>
+                  <span className="text-lg font-bold text-muted-foreground">,99</span>
+                  <span className="text-muted-foreground ml-1 text-xs font-medium">/mês</span>
+                </div>
+              </div>
+              
+              <p className="text-muted-foreground text-xs leading-relaxed mb-6 min-h-[60px]">
+                Mais estilo e cuidado em cada visita. Perfeito para quem gosta de manter o cabelo e a barba sempre impecáveis.
+              </p>
+              
+              <div className="flex-1 border-t border-border/60 pt-6">
+                <ul className="space-y-3 mb-8">
+                  <li className="flex items-center text-foreground text-sm">
+                    <Check className="w-4 h-4 text-emerald-500 mr-2.5 shrink-0" strokeWidth={3} />
+                    <span className="font-medium">Corte ilimitado</span>
+                  </li>
+                  <li className="flex items-center text-foreground text-sm">
+                    <Check className="w-4 h-4 text-emerald-500 mr-2.5 shrink-0" strokeWidth={3} />
+                    <span className="font-medium">Barba ilimitada</span>
+                  </li>
+                </ul>
+              </div>
+              
+              <button 
+                type="button"
+                onClick={onAdminLoginClick}
+                className="w-full py-3.5 px-6 rounded-xl font-bold text-xs uppercase tracking-wider bg-gradient-to-r from-primary via-primary/90 to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground transition-all duration-300 shadow-md shadow-primary/20 text-gold-glow cursor-pointer"
+              >
+                Assinar Premium
+              </button>
+            </motion.div>
+
+            {/* Plan 3: Exclusive */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="relative flex flex-col bg-card/80 border border-border/80 rounded-2xl p-8 shadow-md hover:shadow-xl transition duration-300"
+            >
+              <div className="mb-4">
+                <h3 className="text-2xl font-serif font-bold text-foreground flex items-center justify-between">
+                  Exclusive
+                  <Star className="w-5 h-5 fill-amber-400 text-amber-400" />
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1">Experiência VIP completa</p>
+              </div>
+              
+              <div className="my-4">
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">Por apenas</span>
+                <div className="flex items-baseline text-foreground">
+                  <span className="text-xl font-bold">R$</span>
+                  <span className="text-4xl sm:text-5xl font-extrabold tracking-tight mx-1">199</span>
+                  <span className="text-lg font-bold text-muted-foreground">,99</span>
+                  <span className="text-muted-foreground ml-1 text-xs font-medium">/mês</span>
+                </div>
+              </div>
+              
+              <p className="text-muted-foreground text-xs leading-relaxed mb-6 min-h-[60px]">
+                A experiência mais completa da barbearia. O máximo em cuidado, estilo e exclusividade para qualquer ocasião.
+              </p>
+              
+              <div className="flex-1 border-t border-border/60 pt-6">
+                <ul className="space-y-3 mb-8">
+                  <li className="flex items-center text-foreground text-sm">
+                    <Check className="w-4 h-4 text-emerald-500 mr-2.5 shrink-0" strokeWidth={3} />
+                    <span className="font-medium">Corte ilimitado</span>
+                  </li>
+                  <li className="flex items-center text-foreground text-sm">
+                    <Check className="w-4 h-4 text-emerald-500 mr-2.5 shrink-0" strokeWidth={3} />
+                    <span className="font-medium">Barba ilimitada</span>
+                  </li>
+                  <li className="flex items-center text-foreground text-sm">
+                    <Check className="w-4 h-4 text-emerald-500 mr-2.5 shrink-0" strokeWidth={3} />
+                    <span className="font-medium">Sobrancelha ilimitada</span>
+                  </li>
+                  <li className="flex items-center text-foreground text-sm">
+                    <Check className="w-4 h-4 text-emerald-500 mr-2.5 shrink-0" strokeWidth={3} />
+                    <span className="font-medium">Penteado ilimitado</span>
+                  </li>
+                </ul>
+              </div>
+              
+              <button 
+                type="button"
+                onClick={onAdminLoginClick}
+                className="w-full py-3.5 px-6 rounded-xl font-bold text-xs uppercase tracking-wider bg-secondary hover:bg-secondary/80 text-secondary-foreground transition-all duration-300 mt-auto cursor-pointer border border-border"
+              >
+                Assinar Exclusive
+              </button>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* Main Dynamic Content Container: Services & Products (com limite configurável) */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 space-y-20">
+        
+        {/* Services Box with Limited items view */}
+        <section id="servicos" className="space-y-8 scroll-mt-20">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border pb-4 gap-2">
+            <div>
+              <h2 className="font-serif font-bold text-3xl text-foreground tracking-tight">Cortes & Cuidados</h2>
+              <p className="text-muted-foreground text-xs mt-1">Serviços executados com toalha de vapor quente e lavagem final inclusas</p>
+            </div>
+            <span className="text-xs font-bold tracking-widest uppercase bg-muted text-primary border border-border px-3.5 py-1.5 rounded-lg shrink-0 self-start sm:self-auto">
+              {activeServices.length} opções disponíveis
+            </span>
+          </div>
+
+          <div className="space-y-4">
+            {displayedServices.map((s) => renderServiceRow(s))}
+          </div>
+
+          {/* Toggle button if activeServices count exceeds displayed limit */}
+          {activeServices.length > 4 && (
+            <div className="text-center pt-2">
+              <button
+                type="button"
+                onClick={() => setShowAllServices(!showAllServices)}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-card hover:bg-accent border border-border hover:border-primary/40 rounded-xl text-xs font-bold uppercase tracking-wider text-foreground transition duration-300 shadow-sm cursor-pointer"
+              >
+                {showAllServices ? (
+                  <>Ver menos opções <ChevronUp className="w-4 h-4 text-primary" /></>
+                ) : (
+                  <>Ver catálogo completo ({activeServices.length} serviços) <ChevronDown className="w-4 h-4 text-primary" /></>
+                )}
+              </button>
+            </div>
+          )}
+        </section>
+
+        {/* Expediente Imperial Block */}
+        <section className="glass-panel-premium text-muted-foreground rounded-2xl p-6 sm:p-8 shadow-xl space-y-4 border border-border bg-card/60">
+          <h3 className="font-serif font-bold text-xl flex items-center gap-2.5 text-primary border-b border-border/60 pb-3">
+            <Clock3 className="w-5 h-5 text-primary" /> Expediente Imperial
+          </h3>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+            <div className="p-3.5 bg-background/50 border border-border/60 rounded-xl space-y-1">
+              <span className="font-bold text-muted-foreground uppercase tracking-wider text-[10px] block">Segunda a Sexta:</span>
+              <span className="text-foreground font-semibold">09:00h às 19:00h</span>
+            </div>
+            <div className="p-3.5 bg-background/50 border border-border/60 rounded-xl space-y-1">
+              <span className="font-bold text-muted-foreground uppercase tracking-wider text-[10px] block">Intervalo Almoço:</span>
+              <span className="text-foreground font-semibold">12:00h às 13:30h</span>
+            </div>
+            <div className="p-3.5 bg-background/50 border border-border/60 rounded-xl space-y-1">
+              <span className="font-bold text-muted-foreground uppercase tracking-wider text-[10px] block">Sábado:</span>
+              <span className="text-foreground font-semibold">08:00h às 18:00h</span>
+            </div>
+            <div className="p-3.5 bg-background/50 border border-border/60 rounded-xl space-y-1">
+              <span className="font-bold text-muted-foreground uppercase tracking-wider text-[10px] block">Domingos e Feriados:</span>
+              <span className="text-muted-foreground font-semibold">Fechado</span>
+            </div>
+          </div>
+        </section>
+
+        {/* Products Showroom with Limited items view */}
+        <section id="produtos" className="space-y-8 scroll-mt-20">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border pb-4 gap-2">
+            <div>
+              <h2 className="font-serif font-bold text-3xl text-foreground tracking-tight">Vitrine & Produtos</h2>
+              <p className="text-muted-foreground text-xs mt-1">Cosméticos e finalizadores de uso profissional</p>
+            </div>
+            <span className="text-xs font-bold tracking-widest uppercase bg-muted text-primary border border-border px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 shrink-0 self-start sm:self-auto">
+              <ShoppingBag className="w-3.5 h-3.5" /> {activeProducts.length} itens
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {displayedProducts.map((p) => (
+              <div 
+                key={p.id} 
+                className="bg-card border border-border/70 hover:border-primary/40 rounded-2xl p-4 transition-all duration-300 shadow-md hover:shadow-xl flex flex-col justify-between group overflow-hidden"
+              >
+                <div className="space-y-3">
+                  <div className="h-44 bg-muted rounded-xl overflow-hidden border border-border/60 relative">
+                    <img src={p.imagem_url} alt={p.nome} className="w-full h-full object-cover group-hover:scale-110 transition duration-500" referrerPolicy="no-referrer" />
+                    {p.estoque > 0 ? (
+                      <span className="absolute top-2.5 right-2.5 bg-primary/90 text-primary-foreground border border-primary/50 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md shadow-md">
+                        Em Estoque
+                      </span>
+                    ) : (
+                      <span className="absolute top-2.5 right-2.5 bg-red-500/90 text-white border border-red-400 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md shadow-md">
+                        Esgotado
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <h3 className="font-bold text-foreground text-base group-hover:text-primary transition-colors">{p.nome}</h3>
+                    <p className="text-muted-foreground text-xs leading-relaxed line-clamp-2">{p.descricao}</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-border/60 flex items-center justify-between">
+                  <span className="font-bold text-foreground text-lg">
+                    {formatBRL(p.preco)}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground font-medium">
+                    {p.estoque} unidades
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Toggle button for Products */}
+          {activeProducts.length > 4 && (
+            <div className="text-center pt-2">
+              <button
+                type="button"
+                onClick={() => setShowAllProducts(!showAllProducts)}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-card hover:bg-accent border border-border hover:border-primary/40 rounded-xl text-xs font-bold uppercase tracking-wider text-foreground transition duration-300 shadow-sm cursor-pointer"
+              >
+                {showAllProducts ? (
+                  <>Ver menos produtos <ChevronUp className="w-4 h-4 text-primary" /></>
+                ) : (
+                  <>Ver todos os produtos ({activeProducts.length} itens) <ChevronDown className="w-4 h-4 text-primary" /></>
+                )}
+              </button>
+            </div>
+          )}
+        </section>
+
+      </main>
+
+      {/* 4º Bloco: O QUE NOSSOS CLIENTES DIZEM (Integrado do Google AI Studio) */}
+      <section id="depoimentos" className="py-24 bg-card/40 border-y border-border scroll-mt-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16 space-y-3">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-serif font-bold text-foreground">
+              O que nossos clientes dizem
+            </h2>
+            <p className="text-muted-foreground text-base max-w-xl mx-auto font-light">
+              Não acredite apenas em nós. Veja quem já transformou o visual conosco.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {reviews.map((review, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5, delay: index * 0.1 }}
+                className="bg-card p-8 rounded-2xl border border-border/80 shadow-md hover:shadow-xl transition-all duration-300 flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex space-x-1 mb-6 text-amber-400">
+                    {[...Array(5)].map((_, i) => (
+                      <Star key={i} className="w-5 h-5 fill-amber-400 text-amber-400" />
+                    ))}
+                  </div>
+                  <p className="text-muted-foreground italic mb-8 leading-relaxed text-sm">
+                    "{review.text}"
+                  </p>
+                </div>
+
+                <div className="flex items-center pt-4 border-t border-border/60">
+                  <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center text-primary font-serif font-bold text-xl border border-primary/30 shrink-0">
+                    {review.name.charAt(0)}
+                  </div>
+                  <div className="ml-4">
+                    <h4 className="text-foreground font-bold text-sm">{review.name}</h4>
+                    <span className="text-muted-foreground text-xs font-medium">{review.role}</span>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 5º Bloco: LOCALIZAÇÃO */}
+      <section id="localizacao" className="py-20 bg-background scroll-mt-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+          <div className="text-center max-w-xl mx-auto space-y-2 mb-8">
+            <h2 className="font-serif font-bold text-3xl sm:text-4xl text-foreground">Localização</h2>
+            <p className="text-muted-foreground text-xs">Venha nos visitar, estamos te esperando em Rio Verde - GO</p>
+          </div>
+
+          <div className="glass-panel-premium rounded-2xl p-6 sm:p-8 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-6 border border-border bg-card/60">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/30 flex items-center justify-center shrink-0 text-primary">
+                <MapPin className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-bold text-foreground text-base">Detalhe Barbearia</h3>
+                <p className="text-muted-foreground text-xs mt-1 leading-relaxed max-w-md">
+                  R. Osório Coelho de Moraes, 1745 - Jardim Goiás, Rio Verde - GO, 75901-020, Brasil
+                </p>
+              </div>
+            </div>
+            <a
+              href="https://maps.app.goo.gl/89FiBkKVk3f4rxQa8"
+              target="_blank"
+              rel="noreferrer"
+              className="shrink-0 bg-gradient-to-r from-primary via-primary/90 to-primary/80 text-primary-foreground text-xs uppercase tracking-widest font-bold px-6 py-3.5 rounded-xl flex items-center gap-2 shadow-md hover:shadow-primary/30 transition text-gold-glow"
+            >
+              <MapPin className="w-4 h-4" /> Ver no Google Maps <ArrowRight className="w-4 h-4" />
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* 6º Bloco: FINAL CTA (Integrado do Google AI Studio + Glow) */}
+      <section className="relative py-24 overflow-hidden bg-card/60 border-t border-border">
+        <div className="absolute inset-0 z-0 bg-[radial-gradient(circle_at_50%_50%,rgba(0,97,194,0.1),transparent_70%)] pointer-events-none" />
+        
+        <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-6">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="space-y-6"
+          >
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-serif font-bold text-foreground">
+              Chegou a hora de dar um <span className="text-primary text-gold-glow">upgrade</span> no visual.
+            </h2>
+            <p className="text-base sm:text-lg text-muted-foreground max-w-xl mx-auto font-light">
+              Não deixe sua imagem para depois. Agende agora e experimente o padrão Detalhe Barbearia.
+            </p>
+            
+            <motion.button
+              type="button"
+              onClick={() => { setPreselectedService(null); setShowBookingPopup(true); }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="inline-flex items-center justify-center px-10 py-5 bg-gradient-to-r from-primary via-primary/90 to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground font-bold rounded-xl text-lg shadow-xl shadow-primary/25 hover:shadow-primary/40 transition-all duration-300 text-gold-glow cursor-pointer"
+            >
+              <Calendar className="w-6 h-6 mr-3" />
+              Agendar meu horário agora
+            </motion.button>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* FOOTER OFICIAL (Integrado do Google AI Studio + Responsivo) */}
+      <footer className="bg-card border-t border-border py-12 text-center text-muted-foreground">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+          <div className="flex flex-col items-center justify-center">
+            <span className="text-2xl font-serif font-bold text-foreground tracking-widest uppercase mb-4 text-gold-glow">
+              Detalhe <span className="text-primary">Barbearia</span>
+            </span>
+            
+            <div className="flex space-x-6 my-4">
+              <a href="#" className="text-muted-foreground hover:text-primary transition-colors p-2 rounded-full hover:bg-muted">
+                <span className="sr-only">Instagram</span>
+                <Instagram className="w-5 h-5" />
+              </a>
+              <a 
+                href="https://maps.app.goo.gl/89FiBkKVk3f4rxQa8" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="text-muted-foreground hover:text-primary transition-colors p-2 rounded-full hover:bg-muted"
+              >
+                <span className="sr-only">Localização</span>
+                <MapPin className="w-5 h-5" />
+              </a>
+            </div>
+            
+            <p className="flex items-center justify-center text-xs text-muted-foreground font-medium">
+              <MapPin className="w-3.5 h-3.5 mr-1.5 text-primary" />
+              Rio Verde, GO - Brasil
+            </p>
+          </div>
+          
+          <div className="pt-6 border-t border-border/60 text-xs text-muted-foreground">
+            <p>&copy; {new Date().getFullYear()} Detalhe Barbearia. Todos os direitos reservados.</p>
           </div>
         </div>
       </footer>
+
+      {/* Modals & Registration Popups */}
 
       {/* Central User Registration Modal */}
       <AnimatePresence>
         {showRegistrationModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -880,12 +1104,11 @@ export default function VisitorLayout({
               className="fixed inset-0 bg-black/85 backdrop-blur-md"
             />
 
-            {/* Modal Card */}
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="relative w-full max-w-sm bg-card border border-border rounded-sm shadow-2xl p-6 md:p-8 z-10 text-left space-y-5"
+              className="relative w-full max-w-sm bg-card border border-border rounded-xl shadow-2xl p-6 md:p-8 z-10 text-left space-y-5"
             >
               <div className="text-center space-y-1.5 pb-1">
                 <div className="w-12 h-12 rounded-full border border-primary overflow-hidden bg-background mx-auto flex items-center justify-center text-muted-foreground mb-1">
@@ -895,7 +1118,7 @@ export default function VisitorLayout({
                     <User className="w-6 h-6 text-muted-foreground" />
                   )}
                 </div>
-                <h3 className="font-normal text-lg text-foreground">Concluir seu Registro</h3>
+                <h3 className="font-semibold text-lg text-foreground">Concluir seu Registro</h3>
                 <p className="text-xs text-muted-foreground uppercase tracking-widest leading-relaxed">
                   Insira seus dados para salvar seu perfil
                 </p>
@@ -911,7 +1134,7 @@ export default function VisitorLayout({
                       placeholder="Ex: Emerson Santiago"
                       value={editNome}
                       onChange={(e) => setEditNome(e.target.value)}
-                      className="w-full bg-background border border-border rounded-sm px-3 py-2 text-foreground text-xs focus:outline-none focus:border-primary"
+                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-foreground text-xs focus:outline-none focus:border-primary"
                     />
                   </div>
 
@@ -920,20 +1143,20 @@ export default function VisitorLayout({
                     <input 
                       type="text" 
                       required
-                      placeholder="Ex: (11) 98765-4321"
+                      placeholder="Ex: (64) 98765-4321"
                       value={editTelefone}
                       onChange={(e) => setEditTelefone(e.target.value)}
-                      className="w-full bg-background border border-border rounded-sm px-3 py-2 text-foreground text-xs focus:outline-none focus:border-primary"
+                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-foreground text-xs focus:outline-none focus:border-primary"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground block">Foto de Perfil (Arraste ou Selecione):</label>
+                    <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground block">Foto de Perfil:</label>
                     <div 
                       onDragOver={handleDragOver}
                       onDragLeave={handleDragLeave}
                       onDrop={handleDrop}
-                      className={`relative w-full border border-dashed rounded-sm p-4 text-center flex flex-col items-center justify-center transition cursor-pointer ${isDragging ? 'border-primary bg-primary/5' : 'border-border bg-background/60 hover:border-primary/40'}`}
+                      className={`relative w-full border border-dashed rounded-lg p-4 text-center flex flex-col items-center justify-center transition cursor-pointer ${isDragging ? 'border-primary bg-primary/5' : 'border-border bg-background/60 hover:border-primary/40'}`}
                     >
                       <input 
                         type="file" 
@@ -956,29 +1179,25 @@ export default function VisitorLayout({
                         <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                           Arraste sua foto aqui ou Clique
                         </span>
-                        <span className="text-[7.5px] text-muted-foreground">
-                          JPG, PNG ou WEBP
-                        </span>
                       </div>
                     </div>
                   </div>
-
                 </div>
 
-                <div className="pt-4 border-t border-border flex items-center gap-4">
+                <div className="pt-4 border-t border-border flex items-center gap-3">
                   <button
                     type="button"
                     onClick={() => {
                       onClientLogout();
                       setShowRegistrationModal(false);
                     }}
-                    className="flex-1 bg-card border border-border hover:border-red-200 dark:border-red-900 hover:bg-red-100 dark:bg-red-950/20 text-muted-foreground hover:text-red-600 dark:text-red-400 text-xs uppercase tracking-widest font-bold px-3 py-3 rounded-sm transition cursor-pointer text-center"
+                    className="flex-1 bg-card border border-border hover:border-red-400/40 hover:bg-red-500/10 text-muted-foreground hover:text-red-500 text-xs uppercase tracking-widest font-bold px-3 py-3 rounded-lg transition cursor-pointer text-center"
                   >
                     Sair
                   </button>
                   <button
                     type="submit"
-                    className="flex-[2] bg-primary hover:bg-primary/80 text-black font-sans text-xs uppercase tracking-widest font-bold px-3 py-3 rounded-sm text-center transition cursor-pointer shadow-lg animate-pulse"
+                    className="flex-[2] bg-primary hover:bg-primary/90 text-primary-foreground text-xs uppercase tracking-widest font-bold px-3 py-3 rounded-lg text-center transition cursor-pointer shadow-lg"
                   >
                     Salvar e Avançar
                   </button>
@@ -991,7 +1210,6 @@ export default function VisitorLayout({
         {/* Central Bookings Modal */}
         {showBookingsModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            {/* Backdrop to close modal */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -1000,25 +1218,23 @@ export default function VisitorLayout({
               className="fixed inset-0 bg-black/85 backdrop-blur-md cursor-pointer"
             />
 
-            {/* Modal Card */}
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="relative w-full max-w-md bg-card border border-border rounded-sm shadow-2xl p-6 md:p-8 z-10 text-left space-y-5"
+              className="relative w-full max-w-md bg-card border border-border rounded-xl shadow-2xl p-6 md:p-8 z-10 text-left space-y-5"
             >
-              {/* Close Button X */}
               <button
                 type="button"
                 onClick={() => setShowBookingsModal(false)}
-                className="absolute top-4 right-4 text-muted-foreground hover:text-white transition cursor-pointer p-1.5 rounded-sm hover:bg-accent border border-transparent hover:border-border"
+                className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition cursor-pointer p-1.5 rounded-lg hover:bg-accent border border-transparent hover:border-border"
                 title="Fechar"
               >
                 <X className="w-4 h-4" />
               </button>
 
               <div className="space-y-1 pb-1">
-                <h3 className="font-normal text-xl text-foreground flex items-center gap-2">
+                <h3 className="font-semibold text-xl text-foreground flex items-center gap-2">
                   <Calendar className="w-5 h-5 text-primary" /> Meus Agendamentos
                 </h3>
                 <p className="text-xs text-muted-foreground uppercase tracking-widest leading-relaxed">
@@ -1026,7 +1242,7 @@ export default function VisitorLayout({
                 </p>
               </div>
 
-              <div className="space-y-3.5 max-h-[350px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-stone-850">
+              <div className="space-y-3.5 max-h-[350px] overflow-y-auto pr-1">
                 {loadingBookings ? (
                   <div className="text-center py-8 space-y-2">
                     <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
@@ -1053,11 +1269,11 @@ export default function VisitorLayout({
                     return (
                       <div 
                         key={b.id} 
-                        className="p-4 bg-background/90 border border-border rounded-sm hover:border-primary/40 transition space-y-3"
+                        className="p-4 bg-background border border-border/80 rounded-xl hover:border-primary/40 transition space-y-3"
                       >
                         <div className="flex justify-between items-start gap-2">
                           <div className="space-y-1">
-                            <span className="text-[8.5px] font-bold uppercase text-primary bg-primary/10 px-2 py-0.5 rounded-sm">
+                            <span className="text-[9px] font-bold uppercase text-primary bg-primary/10 px-2 py-0.5 rounded-md">
                               Código: {b.id}
                             </span>
                             <h5 className="font-bold text-sm text-foreground mt-1">
@@ -1065,24 +1281,24 @@ export default function VisitorLayout({
                             </h5>
                           </div>
                           
-                          <span className={`text-xs font-extrabold uppercase px-2 py-0.5 rounded-full tracking-wider ${
+                          <span className={`text-xs font-bold uppercase px-2 py-0.5 rounded-full tracking-wider ${
                             b.status === 'confirmado' ? 'bg-primary/20 text-primary border border-primary/35' :
-                            b.status === 'agendado' ? 'bg-amber-100 dark:bg-amber-950/20 text-amber-500 border border-amber-200 dark:border-amber-900/40' :
-                            b.status === 'concluido' ? 'bg-emerald-100 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/40' :
+                            b.status === 'agendado' ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30' :
+                            b.status === 'concluido' ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30' :
                             'bg-card text-muted-foreground border border-border'
                           }`}>
                             {b.status}
                           </span>
                         </div>
                         
-                        <div className="pt-2 text-xs text-muted-foreground border-t border-border/85 flex items-center justify-between">
+                        <div className="pt-2 text-xs text-muted-foreground border-t border-border/60 flex items-center justify-between">
                           <span className="flex items-center gap-1.5">
                             <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                            Data: <span className="text-foreground">{formattedDate}</span>
+                            Data: <span className="text-foreground font-medium">{formattedDate}</span>
                           </span>
-                          <span className="flex items-primary gap-1.5 font-bold">
+                          <span className="flex items-center gap-1.5 font-bold">
                             <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-                            Horário: <span className="text-primary">{formattedTime}H</span>
+                            Horário: <span className="text-primary">{formattedTime}h</span>
                           </span>
                         </div>
                       </div>
@@ -1095,7 +1311,7 @@ export default function VisitorLayout({
                 <button
                   type="button"
                   onClick={() => setShowBookingsModal(false)}
-                  className="w-full bg-background hover:bg-card border border-border hover:border-primary/40 text-muted-foreground text-xs uppercase tracking-widest font-bold py-3 rounded-sm flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  className="w-full bg-background hover:bg-card border border-border hover:border-primary/40 text-muted-foreground text-xs uppercase tracking-widest font-bold py-3 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" /> Fechar Janela
                 </button>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Calendar, Clock, User, Phone, CheckCircle, ArrowRight, ArrowLeft, Scissors, Printer, FileText, X } from 'lucide-react';
-import { Servico } from '../types.ts';
+import { Servico, Profissional } from '../types.ts';
 import { signInWithGoogle } from '../lib/useAdminSession.ts';
 
 interface BookingWizardProps {
@@ -47,15 +47,48 @@ export default function BookingWizard({
     return false;
   }, [loggedClient]);
 
-  const isServiceEligibleForVip = (nome: string) => {
+  const clientPlan = React.useMemo(() => {
+    if (loggedClient?.observacoes) {
+      try {
+        if (loggedClient.observacoes.trim().startsWith('{')) {
+          const parsed = JSON.parse(loggedClient.observacoes);
+          return (parsed.subscription?.plan || '').toLowerCase();
+        }
+      } catch {}
+    }
+    return '';
+  }, [loggedClient]);
+
+  // Espelha server/storage.ts (getPlanCategorias/getServiceCategorias/isServiceEligibleForPlan) —
+  // preview client-side apenas; o preço cobrado de verdade é sempre calculado no servidor.
+  const getPlanCategorias = (plan: string): string[] => {
+    if (plan === 'exclusive') return ['corte', 'barba', 'sobrancelha', 'penteado'];
+    if (plan === 'premium') return ['corte', 'barba'];
+    if (plan === 'essential') return ['corte'];
+    return [];
+  };
+
+  const getServiceCategorias = (nome: string): string[] => {
     const n = nome.toLowerCase();
     const isSpecial = n.includes('pintura') || n.includes('selagem') || n.includes('progressiva') || n.includes('quimica') || n.includes('luzes') || n.includes('colora');
-    const isEligible = n.includes('corte') || n.includes('cabelo') || n.includes('barba') || n.includes('sobrancelha');
-    return isEligible && !isSpecial;
+    if (isSpecial) return [];
+    const categorias: string[] = [];
+    if (n.includes('corte') || n.includes('cabelo')) categorias.push('corte');
+    if (n.includes('barba')) categorias.push('barba');
+    if (n.includes('sobrancelha')) categorias.push('sobrancelha');
+    if (n.includes('penteado')) categorias.push('penteado');
+    return categorias;
+  };
+
+  const isServiceEligibleForPlan = (nome: string, plan: string) => {
+    const categoriasServico = getServiceCategorias(nome);
+    if (categoriasServico.length === 0) return false;
+    const categoriasPlano = getPlanCategorias(plan);
+    return categoriasServico.every(c => categoriasPlano.includes(c));
   };
 
   const getServicePrice = (s: Servico) => {
-    if (isVip && isServiceEligibleForVip(s.nome)) {
+    if (isVip && isServiceEligibleForPlan(s.nome, clientPlan)) {
       return 0;
     }
     return s.preco;
@@ -66,6 +99,8 @@ export default function BookingWizard({
 
   const [step, setStep] = useState(1);
   const [selectedServices, setSelectedServices] = useState<Servico[]>([]);
+  const [profissionais, setProfissionais] = useState<Profissional[]>([]);
+  const [selectedProfissional, setSelectedProfissional] = useState<Profissional | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [availableSlots, setAvailableSlots] = useState<SlotState[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<string>('');
@@ -173,13 +208,25 @@ export default function BookingWizard({
     setSelectedDate(`${yyyy}-${mm}-${dd}`);
   }, []);
 
-  // Fetch free slots on-the-fly when date or services changes
+  // Carrega os barbeiros da barbearia. Se só existe um, já deixa selecionado
+  // para o cliente não ter que escolher numa lista de uma opção só.
   useEffect(() => {
-    if (selectedServices.length > 0 && selectedDate) {
+    fetch('/api/profissionais')
+      .then(res => res.ok ? res.json() : [])
+      .then((data: Profissional[]) => {
+        setProfissionais(data);
+        if (data.length === 1) setSelectedProfissional(data[0]);
+      })
+      .catch(() => setProfissionais([]));
+  }, []);
+
+  // Fetch free slots on-the-fly when date, services or barber changes
+  useEffect(() => {
+    if (selectedServices.length > 0 && selectedDate && selectedProfissional) {
       setLoadingSlots(true);
       setErrorMsg('');
       const servicesIdParam = selectedServices.map(s => s.id).join(',');
-      fetch(`/api/horarios-livres?data=${selectedDate}&servico_id=${servicesIdParam}&all=true`)
+      fetch(`/api/horarios-livres?data=${selectedDate}&servico_id=${servicesIdParam}&profissional_id=${selectedProfissional.id}&all=true`)
         .then((res) => {
           if (!res.ok) throw new Error('Falha ao buscar horários.');
           return res.json();
@@ -194,7 +241,7 @@ export default function BookingWizard({
         })
         .finally(() => setLoadingSlots(false));
     }
-  }, [selectedServices, selectedDate]);
+  }, [selectedServices, selectedDate, selectedProfissional]);
 
   // Prefill name & phone from Google account profile in step 4
   useEffect(() => {
@@ -283,11 +330,15 @@ export default function BookingWizard({
       setErrorMsg('Por favor, selecione pelo menos um serviço para continuar.');
       return;
     }
-    if (step === 2 && !selectedDate) {
+    if (step === 2 && !selectedProfissional) {
+      setErrorMsg('Por favor, escolha com qual barbeiro você quer ser atendido.');
+      return;
+    }
+    if (step === 3 && !selectedDate) {
       setErrorMsg('Por favor, selecione uma data válida.');
       return;
     }
-    if (step === 3 && !selectedSlot) {
+    if (step === 4 && !selectedSlot) {
       setErrorMsg('Por favor, selecione um horário disponível.');
       return;
     }
@@ -325,6 +376,7 @@ export default function BookingWizard({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           servico_id: servicesIdParam,
+          profissional_id: selectedProfissional?.id,
           data: selectedDate,
           horario: selectedSlot,
           nome_cliente: nomeCliente,
@@ -340,8 +392,8 @@ export default function BookingWizard({
       }
 
       setSuccessBooking(resData);
-      setStep(5);
-      onBookingSuccess();
+      setStep(6);
+      try { window.dispatchEvent(new CustomEvent('agendamento-criado')); } catch {}
     } catch (err: any) {
       setErrorMsg(err.message || 'Erro inesperado na reserva.');
     } finally {
@@ -364,6 +416,8 @@ export default function BookingWizard({
     const servicesIdParam = selectedServices.map(s => s.id).join(',');
     localStorage.setItem('pending_booking', JSON.stringify({
       servico_id: servicesIdParam,
+      profissional_id: selectedProfissional?.id,
+      profissionalNome: selectedProfissional?.nome,
       data: selectedDate,
       horario: selectedSlot,
       nome_cliente: nomeCliente,
@@ -379,6 +433,8 @@ export default function BookingWizard({
   const resetWizard = () => {
     setStep(1);
     setSelectedServices([]);
+    // com um barbeiro só, mantém a escolha automática
+    setSelectedProfissional(profissionais.length === 1 ? profissionais[0] : null);
     setSelectedSlot('');
     setNomeCliente('');
     setTelefoneCliente('');
@@ -497,7 +553,7 @@ export default function BookingWizard({
               </div>
               <div class="row">
                 <span class="label">Profissional:</span>
-                <span class="value">Emerson Santiago</span>
+                <span class="value">${selectedProfissional?.nome ?? '-'}</span>
               </div>
               <div class="row">
                 <span class="label">Serviços:</span>
@@ -573,7 +629,7 @@ export default function BookingWizard({
           <div className="flex items-center gap-2 shrink-0">
             <div className="hidden xs:flex items-center gap-1.5 bg-primary/10 text-primary px-3 py-1.5 rounded-full border border-primary/25 text-xs sm:text-xs uppercase tracking-wider shrink-0 font-bold">
               <span className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse"></span>
-              {step === 5 ? 'Concluído' : `Etapa ${step} de 4`}
+              {step === 6 ? 'Concluído' : `Etapa ${step} de 5`}
             </div>
             
             {/* Close Button on Mobile Full Screen or Popup Mode */}
@@ -591,11 +647,11 @@ export default function BookingWizard({
         </div>
 
         {/* Progress Bar */}
-        {step < 5 && (
+        {step < 6 && (
           <div className="w-full bg-slate-100 h-1 shrink-0">
             <div 
               className="bg-gradient-to-r from-primary to-primary/70 h-full transition-all duration-300" 
-              style={{ width: `${(step / 4) * 100}%` }}
+              style={{ width: `${(step / 5) * 100}%` }}
             />
           </div>
         )}
@@ -709,9 +765,112 @@ export default function BookingWizard({
             </motion.div>
           )}
 
+          {/* ETAPA 2 — escolha do barbeiro. Vem antes da data porque o
+              horário livre depende de quem vai atender. */}
           {step === 2 && (
             <motion.div
               key="step2"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-4"
+            >
+              <div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-slate-200 pb-3 mb-4">
+                  <p className="text-xs text-slate-500 text-left">Escolha seu barbeiro</p>
+                </div>
+
+                <div className="max-md:h-auto max-md:max-h-none h-[210px] xs:h-[250px] sm:h-[310px] md:h-[400px] md:max-h-[48vh] overflow-y-auto overscroll-contain pr-1.5 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent">
+                  {profissionais.length === 0 ? (
+                    <p className="text-xs text-slate-500 py-8 text-center">
+                      Nenhum barbeiro disponível no momento.
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {profissionais.map((p) => {
+                        const isSelected = selectedProfissional?.id === p.id;
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedProfissional(p);
+                              setSelectedSlot('');
+                              setErrorMsg('');
+                            }}
+                            className={`text-left p-5 rounded-md border transition-all duration-300 relative flex items-start gap-4 cursor-pointer group/card ${
+                              isSelected
+                                ? 'bg-primary/15 border-primary shadow-md shadow-primary/20'
+                                : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200'
+                            }`}
+                          >
+                            {p.avatar_url ? (
+                              <img
+                                src={p.avatar_url}
+                                alt={p.nome}
+                                className="w-14 h-14 rounded-md object-cover shrink-0 border border-slate-200"
+                              />
+                            ) : (
+                              <div className="w-14 h-14 rounded-md bg-slate-200 flex items-center justify-center shrink-0">
+                                <User className="w-6 h-6 text-slate-400" />
+                              </div>
+                            )}
+
+                            <div className="min-w-0 flex-1">
+                              <h4 className="font-semibold text-slate-900 text-sm group-hover/card:text-primary transition-colors">
+                                {p.nome}
+                              </h4>
+                              {p.bio && (
+                                <p className="text-slate-600 text-xs mt-1.5 leading-relaxed font-light line-clamp-3">
+                                  {p.bio}
+                                </p>
+                              )}
+                              <div className="mt-3 pt-3 border-t border-slate-200 text-xs uppercase tracking-wider">
+                                {isSelected ? (
+                                  <span className="bg-primary text-primary-foreground rounded-md px-2 py-0.5 text-xs font-black">
+                                    ✓ Selecionado
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-500 group-hover/card:text-slate-700 transition text-xs font-bold">
+                                    Escolher
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Desktop-only Footer inside step 2 */}
+              <div className="hidden md:block space-y-4 mt-6">
+                <div className="pt-4 border-t border-slate-200 flex justify-between">
+                  <button
+                    type="button"
+                    onClick={handleBackStep}
+                    className="text-slate-600 hover:text-slate-900 text-xs uppercase tracking-widest font-bold px-6 py-3.5 rounded-md flex items-center justify-center gap-2 cursor-pointer transition"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" /> Voltar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleNextStep}
+                    disabled={!selectedProfissional}
+                    className="bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-black disabled:opacity-50 text-xs uppercase tracking-widest font-black px-6 py-3.5 rounded-md flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-primary/10 transition-all duration-300 hover:scale-105 active:scale-95"
+                  >
+                    Continuar <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {step === 3 && (
+            <motion.div
+              key="step3"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
@@ -829,9 +988,9 @@ export default function BookingWizard({
             </motion.div>
           )}
 
-          {step === 3 && (
+          {step === 4 && (
             <motion.div
-              key="step3"
+              key="step4"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
@@ -934,9 +1093,9 @@ export default function BookingWizard({
             </motion.div>
           )}
 
-          {step === 4 && (
+          {step === 5 && (
             <motion.div
-              key="step4"
+              key="step5"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
@@ -992,6 +1151,9 @@ export default function BookingWizard({
                     <div>Duração Total:</div>
                     <div className="font-semibold text-right text-slate-900">{totalDuracao} minutos</div>
 
+                    <div>Barbeiro:</div>
+                    <div className="font-semibold text-right text-slate-900">{selectedProfissional?.nome ?? '—'}</div>
+
                     <div>Data:</div>
                     <div className="font-semibold text-right text-slate-900">{selectedDate.split('-').reverse().join('/')}</div>
 
@@ -1035,9 +1197,9 @@ export default function BookingWizard({
             </motion.div>
           )}
 
-          {step === 5 && successBooking && (
+          {step === 6 && successBooking && (
             <motion.div
-              key="step5"
+              key="step6"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               className="text-center py-6 space-y-5 animate-fade-in"
@@ -1055,9 +1217,9 @@ export default function BookingWizard({
 
               <div className="bg-slate-50 border border-slate-200 p-5 rounded-lg max-w-sm mx-auto text-xs space-y-2.5 text-left shadow-md">
                 <div className="text-xs uppercase tracking-widest text-primary font-bold mb-1.5">Detalhes do Voucher:</div>
-                <div className="flex justify-between border-b border-slate-200/40 pb-1.5"><span className="text-slate-500">Código:</span> <span className="font-bold text-primary">{successBooking.id}</span></div>
+                <div className="flex justify-between border-b border-slate-200/40 pb-1.5"><span className="text-slate-500">Código:</span> <span className="font-bold text-primary">{successBooking.codigo || successBooking.id}</span></div>
                 <div className="flex justify-between border-b border-slate-200/40 pb-1.5"><span className="text-slate-500">Cliente:</span> <span className="font-semibold text-slate-900">{nomeCliente}</span></div>
-                <div className="flex justify-between border-b border-slate-200/40 pb-1.5"><span className="text-slate-500">Profissional:</span> <span className="font-semibold text-slate-900">Emerson Santiago</span></div>
+                <div className="flex justify-between border-b border-slate-200/40 pb-1.5"><span className="text-slate-500">Profissional:</span> <span className="font-semibold text-slate-900">{selectedProfissional?.nome ?? '—'}</span></div>
                 <div className="flex justify-between border-b border-slate-200/40 pb-1.5"><span className="text-slate-500">Serviços:</span> <span className="font-semibold text-slate-900 text-right max-w-[170px] break-words">{selectedServices.map(s => s.nome).join(' + ')}</span></div>
                 <div className="flex justify-between border-b border-slate-200/40 pb-1.5"><span className="text-slate-500">Quando:</span> <span className="font-bold text-primary">{selectedDate.split('-').reverse().join('/')} às {selectedSlot}h</span></div>
                 <div className="flex justify-between pb-0.5"><span className="text-slate-500">Duração Total:</span> <span className="font-semibold text-slate-900">{totalDuracao} minutos</span></div>
@@ -1074,10 +1236,20 @@ export default function BookingWizard({
                 </button>
                 <button
                   type="button"
+                  onClick={() => {
+                    resetWizard();
+                    onBookingSuccess();
+                  }}
+                  className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white text-xs uppercase tracking-widest font-bold px-6 py-3.5 rounded-md transition-all duration-300 cursor-pointer flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-900/20"
+                >
+                  <CheckCircle className="w-4 h-4" /> Ver meus agendamentos
+                </button>
+                <button
+                  type="button"
                   onClick={resetWizard}
                   className="w-full sm:w-auto bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-black text-xs uppercase tracking-widest font-black px-6 py-3.5 rounded-md transition-all duration-300 cursor-pointer flex items-center justify-center gap-1.5 shadow-lg shadow-primary/10 hover:scale-105 active:scale-95"
                 >
-                  Fazer outro agendamento
+                  Novo Agendamento
                 </button>
               </div>
             </motion.div>
@@ -1086,10 +1258,10 @@ export default function BookingWizard({
       </div>
 
         {/* Global Wizard Navigation Footer (Always pinned at the bottom) */}
-        {step < 5 && (
+        {step < 6 && (
           <div className="md:hidden shrink-0 bg-slate-100/90 border-t border-slate-200/80 p-4 xs:p-5 sm:px-6 sm:py-5 space-y-3.5 z-20 backdrop-blur-md">
             {/* The Luxury Selected Services Banner */}
-            {selectedServices.length > 0 && step < 4 && (
+            {selectedServices.length > 0 && step < 5 && (
               <div className="p-4 bg-slate-50 border border-slate-200 text-slate-800 rounded-md">
                 <span className="text-slate-500 text-xs uppercase tracking-wider block text-left">
                   SERVIÇOS ESCOLHIDOS:
@@ -1117,25 +1289,26 @@ export default function BookingWizard({
                 <button
                   type="button"
                   onClick={handleBackStep}
-                  disabled={step === 4 && submitting}
+                  disabled={step === 5 && submitting}
                   className="flex-1 border border-slate-200 text-slate-500 hover:bg-accent hover:text-white text-xs uppercase tracking-widest font-bold py-3.5 px-5 rounded-md flex items-center justify-center gap-1.5 transition cursor-pointer"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" /> Voltar
                 </button>
               )}
               <button
-                type={step === 4 ? "submit" : "button"}
-                form={step === 4 ? "booking-wizard-form" : undefined}
-                onClick={step === 4 ? undefined : handleNextStep}
+                type={step === 5 ? "submit" : "button"}
+                form={step === 5 ? "booking-wizard-form" : undefined}
+                onClick={step === 5 ? undefined : handleNextStep}
                 disabled={
                   (step === 1 && selectedServices.length === 0) ||
-                  (step === 2 && !selectedDate) ||
-                  (step === 3 && !selectedSlot) ||
-                  (step === 4 && submitting)
+                  (step === 2 && !selectedProfissional) ||
+                  (step === 3 && !selectedDate) ||
+                  (step === 4 && !selectedSlot) ||
+                  (step === 5 && submitting)
                 }
                 className="flex-1 bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-black disabled:opacity-40 disabled:cursor-not-allowed text-xs uppercase tracking-widest font-black py-3.5 px-5 rounded-md flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-primary/10 transition duration-350 active:scale-95"
               >
-                {step === 4 ? (
+                {step === 5 ? (
                   submitting ? 'Reservando...' : <>Confirmar & Agendar <CheckCircle className="w-3.5 h-3.5 text-black" /></>
                 ) : (
                   <>Continuar <ArrowRight className="w-3.5 h-3.5" /></>

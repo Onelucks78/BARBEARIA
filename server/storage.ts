@@ -9,14 +9,65 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import { isSupabaseConfigured, anonClient, serviceClient } from './supabase.ts';
 import { loadDB, saveDB, calculateAvailableSlots, calculateAllSlotsWithAvailability } from './database.ts';
 import {
-  Barbeiro, Servico, Produto, Cliente, Agendamento,
-  DashboardStats, LancamentoFinanceiro
+  Barbeiro, Profissional, Servico, Produto, Cliente, Agendamento,
+  DashboardStats, LancamentoFinanceiro, Expediente, Bloqueio, CategoriaFinanceira
 } from '../src/types.ts';
 
 // ---------- HELPERS ----------
 function sb(): SupabaseClient | null {
   if (!isSupabaseConfigured()) return null;
   return serviceClient() ?? anonClient();
+}
+
+export function getTodayLocalDateString(): string {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export async function purgeOldAgendamentos(barbeiroId?: string): Promise<void> {
+  const todayStr = getTodayLocalDateString();
+  const cutoff = `${todayStr}T00:00:00`;
+  const client = sb();
+  if (client) {
+    try {
+      let q = client.from('agendamentos').delete().lt('inicio_em', cutoff);
+      if (barbeiroId) q = q.eq('barbeiro_id', barbeiroId);
+      await q;
+    } catch (err) {
+      console.error('[purgeOldAgendamentos] Erro ao excluir agendamentos antigos:', err);
+    }
+  } else {
+    try {
+      const db = loadDB();
+      const beforeCount = db.agendamentos.length;
+      db.agendamentos = db.agendamentos.filter(a => a.inicio_em >= cutoff);
+      if (db.agendamentos.length !== beforeCount) {
+        saveDB(db);
+      }
+    } catch (err) {
+      console.error('[purgeOldAgendamentos db.json]', err);
+    }
+  }
+}
+
+function formatNameFromEmail(email: string): string {
+  if (!email) return 'Cliente';
+  const rawPart = email.split('@')[0] || '';
+  const cleaned = rawPart.replace(/[0-9]+/g, ' ').replace(/[\._\-]+/g, ' ');
+  const words = cleaned.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return 'Cliente';
+  return words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+}
+
+function cleanClientName(name: string | undefined, email: string): string {
+  if (!name || name.includes('@') || name.includes('.com') || name.includes('.') || name.includes('_') || name.includes('-')) {
+    const raw = (name && !name.includes('@')) ? name : email;
+    return formatNameFromEmail(raw);
+  }
+  return name;
 }
 
 // Converte linha do Supabase pra shape que o front já espera.
@@ -75,6 +126,7 @@ function rowToAgendamento(r: any): Agendamento {
   return {
     id: r.codigo ?? r.id, // devolve o #000001 visível quando existir
     barbeiro_id: r.barbeiro_id,
+    profissional_id: r.profissional_id,
     servico_id: r.servico_id,
     cliente_id: r.cliente_id,
     nome_cliente: r.nome_cliente,
@@ -156,10 +208,12 @@ export async function getAvailableSlots(
   slug: string,
   data: string,
   servicoId: string,
+  profissionalId: string,
   all: boolean = false
 ): Promise<{ horario: string; disponivel: boolean; motivo?: string }[]> {
   const client = sb();
   if (!client) {
+    // Caminho dev/db.json: não tem múltiplos profissionais, ignora o filtro.
     const slots = all
       ? calculateAllSlotsWithAvailability(data, servicoId)
       : calculateAvailableSlots(data, servicoId);
@@ -173,6 +227,7 @@ export async function getAvailableSlots(
     p_slug: slug,
     p_data: data,
     p_servico_ids: servicoId, // string CSV, ou UUID único
+    p_profissional_id: profissionalId,
     p_all: all
   });
   if (error) throw error;
@@ -183,7 +238,7 @@ export async function getAvailableSlots(
   }));
 }
 
-// ---------- HELPER DE ASSINATURA VIP ----------
+// ---------- HELPER DE ASSINATURA / PLANOS ----------
 export function isClientVip(observacoes?: string): boolean {
   if (observacoes) {
     try {
@@ -196,16 +251,54 @@ export function isClientVip(observacoes?: string): boolean {
   return false;
 }
 
-export function isServiceEligibleForVip(nome: string): boolean {
+// Extrai o plano (essential | premium | exclusive) empacotado nas observações do cliente
+export function getClientPlan(observacoes?: string): string {
+  if (observacoes) {
+    try {
+      if (observacoes.trim().startsWith('{')) {
+        const parsed = JSON.parse(observacoes);
+        return (parsed.subscription?.plan || '').toLowerCase();
+      }
+    } catch {}
+  }
+  return '';
+}
+
+// Categorias inclusas em cada tier — cada tier é um superset estrito do anterior
+export function getPlanCategorias(plan: string): string[] {
+  const p = (plan || '').toLowerCase();
+  if (p === 'exclusive') return ['corte', 'barba', 'sobrancelha', 'penteado'];
+  if (p === 'premium') return ['corte', 'barba'];
+  if (p === 'essential') return ['corte'];
+  return [];
+}
+
+// Categorias que um serviço toca (pode tocar mais de uma, ex: combo "Cabelo + Barba + Sobrancelha").
+// Serviços químicos/especiais nunca se qualificam para nenhum plano.
+export function getServiceCategorias(nome: string): string[] {
   const n = nome.toLowerCase();
   const isSpecial = n.includes('pintura') || n.includes('selagem') || n.includes('progressiva') || n.includes('quimica') || n.includes('luzes') || n.includes('colora');
-  const isEligible = n.includes('corte') || n.includes('cabelo') || n.includes('barba') || n.includes('sobrancelha');
-  return isEligible && !isSpecial;
+  if (isSpecial) return [];
+  const categorias: string[] = [];
+  if (n.includes('corte') || n.includes('cabelo')) categorias.push('corte');
+  if (n.includes('barba')) categorias.push('barba');
+  if (n.includes('sobrancelha')) categorias.push('sobrancelha');
+  if (n.includes('penteado')) categorias.push('penteado');
+  return categorias;
+}
+
+// Um serviço só é gratuito no plano se TODAS as categorias que ele toca estiverem inclusas no tier
+export function isServiceEligibleForPlan(nome: string, plan: string): boolean {
+  const categoriasServico = getServiceCategorias(nome);
+  if (categoriasServico.length === 0) return false;
+  const categoriasPlano = getPlanCategorias(plan);
+  return categoriasServico.every(c => categoriasPlano.includes(c));
 }
 
 // ---------- CRIAÇÃO DE AGENDAMENTO ----------
 export interface CreateBookingInput {
   servico_id: string;
+  profissional_id: string;
   data: string;
   horario: string;
   nome_cliente: string;
@@ -223,6 +316,17 @@ export async function createBooking(slug: string, input: CreateBookingInput): Pr
 
   const barbeiro = await getBarbeiroBySlug(slug);
   if (!barbeiro) throw Object.assign(new Error('Barbearia não encontrada.'), { status: 404 });
+
+  // O barbeiro escolhido tem que ser DESTA barbearia e estar ativo.
+  // Sem essa checagem dá para agendar com profissional de outra barbearia.
+  const { data: prof, error: profErr } = await client
+    .from('profissionais').select('id')
+    .eq('id', input.profissional_id)
+    .eq('barbeiro_id', barbeiro.id)
+    .eq('ativo', true)
+    .maybeSingle();
+  if (profErr) throw profErr;
+  if (!prof) throw Object.assign(new Error('Barbeiro não encontrado ou indisponível.'), { status: 404 });
 
   // Resolve/cria cliente para obter o ID
   let resolvedClienteId: string | null = input.cliente_id ?? null;
@@ -259,6 +363,7 @@ export async function createBooking(slug: string, input: CreateBookingInput): Pr
   }
 
   const isVip = clientRecord ? isClientVip(clientRecord.observacoes) : false;
+  const clientPlan = clientRecord ? getClientPlan(clientRecord.observacoes) : '';
 
   // Suporta combo: "uuid,uuid"
   const ids = input.servico_id.includes(',') ? input.servico_id.split(',') : [input.servico_id];
@@ -272,7 +377,7 @@ export async function createBooking(slug: string, input: CreateBookingInput): Pr
   }
 
   const totalPreco = servicos.reduce((s, x) => {
-    if (isVip && isServiceEligibleForVip(x.nome)) {
+    if (isVip && isServiceEligibleForPlan(x.nome, clientPlan)) {
       return s + 0;
     }
     return s + Number(x.preco);
@@ -290,6 +395,7 @@ export async function createBooking(slug: string, input: CreateBookingInput): Pr
   // Insere — EXCLUDE constraint vai rejeitar conflito se houver
   const { data: ag, error: agErr } = await client.from('agendamentos').insert({
     barbeiro_id: barbeiro.id,
+    profissional_id: input.profissional_id,
     servico_id: input.servico_id,
     cliente_id: resolvedClienteId,
     nome_cliente: input.nome_cliente,
@@ -302,8 +408,10 @@ export async function createBooking(slug: string, input: CreateBookingInput): Pr
   }).select('*').single();
 
   if (agErr) {
+    // 23P01 = EXCLUDE violado: aquele BARBEIRO já tem horário sobreposto.
+    // Outro barbeiro no mesmo horário é permitido e não cai aqui.
     if (agErr.code === '23P01') {
-      throw Object.assign(new Error('Desculpe, este horário acabou de ser reservado. Escolha outro.'), { status: 400 });
+      throw Object.assign(new Error('Desculpe, este horário acabou de ser reservado com este barbeiro. Escolha outro.'), { status: 400 });
     }
     throw agErr;
   }
@@ -329,6 +437,7 @@ export async function updateBookingStatus(
 
 // ---------- AGENDAMENTOS DO CLIENTE (Meus Agendamentos) ----------
 export async function listClientBookings(email?: string, telefone?: string): Promise<Agendamento[]> {
+  await purgeOldAgendamentos();
   const client = sb();
   if (!client) {
     // Fallback db.json (dev/preview)
@@ -419,7 +528,7 @@ export async function upsertClientProfile(input: {
       c = {
         id: `c-auto-${Date.now()}`,
         barbeiro_id: 'b-1',
-        nome: input.nome || input.email.split('@')[0],
+        nome: cleanClientName(input.nome, input.email),
         telefone: input.telefone || '',
         email: input.email,
         data_nascimento: null,
@@ -456,7 +565,7 @@ export async function upsertClientProfile(input: {
     const { data, error } = await client.from('clientes').insert({
       barbeiro_id: bar.id,
       email: input.email,
-      nome: input.nome || input.email.split('@')[0],
+      nome: cleanClientName(input.nome, input.email),
       telefone: input.telefone || '',
       foto_url: input.foto_url || '',
       observacoes: input.observacoes || 'Cliente auto-cadastrado'
@@ -467,12 +576,18 @@ export async function upsertClientProfile(input: {
 }
 
 // ---------- FINANCEIRO (Fluxo de Caixa) ----------
-export async function listLancamentos(barbeiroId: string): Promise<LancamentoFinanceiro[] | null> {
+// profissionalId: undefined = sem filtro; null = só os da casa; uuid = daquele barbeiro
+export async function listLancamentos(
+  barbeiroId: string,
+  profissionalId?: string | null
+): Promise<LancamentoFinanceiro[] | null> {
   const client = sb();
   if (!client) return null;
-  const { data, error } = await client.from('lancamentos_financeiros').select('*')
-    .eq('barbeiro_id', barbeiroId).eq('excluido', false)
-    .order('data', { ascending: false });
+  let q = client.from('lancamentos_financeiros').select('*')
+    .eq('barbeiro_id', barbeiroId).eq('excluido', false);
+  if (profissionalId === null) q = q.is('profissional_id', null);
+  else if (profissionalId) q = q.eq('profissional_id', profissionalId);
+  const { data, error } = await q.order('data', { ascending: false });
   if (error) throw error;
   return (data ?? []) as LancamentoFinanceiro[];
 }
@@ -485,14 +600,19 @@ export async function createLancamento(barbeiroId: string, input: {
   forma_pagamento: 'dinheiro' | 'pix' | 'cartao' | 'outro';
   data: string;
   produto_id?: string | null;
+  profissional_id?: string | null;
 }): Promise<LancamentoFinanceiro | null> {
   const client = sb();
   if (!client) return null;
 
   const descricao = input.descricao?.trim() || (input.tipo === 'entrada' ? 'entrada' : 'saída');
 
+  // Venda de produto é receita da casa, nunca atribuída a um barbeiro.
+  const profissionalId = input.produto_id ? null : (input.profissional_id ?? null);
+
   const { data, error } = await client.from('lancamentos_financeiros').insert({
     barbeiro_id: barbeiroId,
+    profissional_id: profissionalId,
     tipo: input.tipo,
     descricao,
     valor: input.valor,
@@ -533,6 +653,7 @@ export async function patchLancamento(barbeiroId: string, id: string, patch: {
   categoria?: string;
   forma_pagamento?: 'dinheiro' | 'pix' | 'cartao' | 'outro';
   data?: string;
+  profissional_id?: string | null;
 }): Promise<LancamentoFinanceiro | null> {
   const client = sb();
   if (!client) return null;
@@ -552,6 +673,10 @@ export async function patchLancamento(barbeiroId: string, id: string, patch: {
   if (patch.categoria !== undefined) updatePayload.categoria = patch.categoria;
   if (patch.forma_pagamento !== undefined) updatePayload.forma_pagamento = patch.forma_pagamento;
   if (patch.data !== undefined) updatePayload.data = patch.data;
+  // Produto continua sendo da casa mesmo se mandarem um barbeiro no patch.
+  if (patch.profissional_id !== undefined) {
+    updatePayload.profissional_id = existing.produto_id ? null : patch.profissional_id;
+  }
 
   const { data, error } = await client.from('lancamentos_financeiros')
     .update(updatePayload).eq('id', id)
@@ -565,16 +690,18 @@ export async function getDashboardStats(
   barbeiroId: string,
   startDate?: string,
   endDate?: string,
-  isToday?: boolean
+  isToday?: boolean,
+  profissionalId?: string
 ): Promise<DashboardStats | null> {
   const client = sb();
   if (!client) return null;
 
   // Busca agendamentos concluídos no intervalo
-  let agQ = client.from('agendamentos').select('id, codigo, servico_id, inicio_em, status, preco_cobrado')
+  let agQ = client.from('agendamentos').select('id, codigo, servico_id, profissional_id, inicio_em, status, preco_cobrado')
     .eq('barbeiro_id', barbeiroId).eq('status', 'concluido');
   if (startDate) agQ = agQ.gte('inicio_em', startDate);
   if (endDate) agQ = agQ.lte('inicio_em', endDate); // endDate já vem com hora do frontend (ex: 2026-07-19T23:59:59.999Z)
+  if (profissionalId) agQ = agQ.eq('profissional_id', profissionalId);
   const { data: concluidos, error: agErr } = await agQ;
   if (agErr) throw agErr;
 
@@ -584,6 +711,7 @@ export async function getDashboardStats(
     .eq('barbeiro_id', barbeiroId).eq('excluido', false);
   if (startDate) lfQ = lfQ.gte('data', startDate.split('T')[0]);
   if (endDateOnly) lfQ = lfQ.lte('data', endDateOnly);
+  if (profissionalId) lfQ = lfQ.eq('profissional_id', profissionalId);
   const { data: lancamentos, error: lfErr } = await lfQ;
   if (lfErr) throw lfErr;
 
@@ -612,14 +740,19 @@ export async function getDashboardStats(
   const lucro = (faturamento + produtos + outrasEntradas) - despesas;
 
   // Counts
-  const { count: agendadosCount } = await client.from('agendamentos')
+  let agendadosQ = client.from('agendamentos')
     .select('id', { count: 'exact', head: true })
     .eq('barbeiro_id', barbeiroId)
     .in('status', ['agendado', 'confirmado']);
-  const { count: concluidosCount } = await client.from('agendamentos')
+  if (profissionalId) agendadosQ = agendadosQ.eq('profissional_id', profissionalId);
+  const { count: agendadosCount } = await agendadosQ;
+
+  let concluidosQ = client.from('agendamentos')
     .select('id', { count: 'exact', head: true })
     .eq('barbeiro_id', barbeiroId)
     .eq('status', 'concluido');
+  if (profissionalId) concluidosQ = concluidosQ.eq('profissional_id', profissionalId);
+  const { count: concluidosCount } = await concluidosQ;
 
   // --- Build dailyChartData (same logic as db.json path in server.ts) ---
   const hourlyKeys = ['08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00'];
@@ -682,6 +815,38 @@ export async function getDashboardStats(
       };
     });
 
+  // --- Quebra de faturamento por barbeiro no período ---
+  // Receita de serviço vem dos agendamentos concluídos; entradas manuais
+  // atribuídas somam junto. Produto e despesa da casa caem em "Barbearia".
+  const { data: profs } = await client.from('profissionais')
+    .select('id, nome').eq('barbeiro_id', barbeiroId).order('ordem');
+  const nomePorId = new Map<string, string>((profs ?? []).map((p: any) => [p.id, p.nome]));
+
+  const acc = new Map<string, { receita: number; atendimentos: number }>();
+  const bump = (key: string, receita: number, atendeu: boolean) => {
+    const cur = acc.get(key) ?? { receita: 0, atendimentos: 0 };
+    cur.receita += receita;
+    if (atendeu) cur.atendimentos += 1;
+    acc.set(key, cur);
+  };
+
+  for (const a of completed) {
+    bump(a.profissional_id ?? '__casa__', Number(a.preco_cobrado), true);
+  }
+  for (const l of lista) {
+    if (l.tipo !== 'entrada' || l.agendamento_id !== null) continue;
+    bump(l.profissional_id ?? '__casa__', Number(l.valor), false);
+  }
+
+  const porProfissional = [...acc.entries()]
+    .map(([key, v]) => ({
+      profissional_id: key === '__casa__' ? null : key,
+      nome: key === '__casa__' ? 'Barbearia' : (nomePorId.get(key) ?? 'Barbeiro removido'),
+      receita: Number(v.receita.toFixed(2)),
+      atendimentos: v.atendimentos
+    }))
+    .sort((a, b) => b.receita - a.receita);
+
   return {
     faturamento,
     outrasEntradas,
@@ -691,21 +856,27 @@ export async function getDashboardStats(
     agendadosCount: agendadosCount ?? 0,
     concluidosCount: concluidosCount ?? 0,
     dailyChartData,
+    porProfissional,
     history: lista.sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? '')) as LancamentoFinanceiro[]
   };
 }
 // ---------- ADMIN: AGENDAMENTOS ----------
-export async function listAgendamentosAdmin(barbeiroId: string): Promise<Agendamento[]> {
+export async function listAgendamentosAdmin(
+  barbeiroId: string,
+  profissionalId?: string
+): Promise<Agendamento[]> {
+  await purgeOldAgendamentos(barbeiroId);
   const client = sb();
   if (!client) {
     const db = loadDB();
     return [...db.agendamentos].sort((a, b) => a.inicio_em.localeCompare(b.inicio_em));
   }
-  const { data, error } = await client
+  let q = client
     .from('agendamentos')
     .select('*')
-    .eq('barbeiro_id', barbeiroId)
-    .order('inicio_em', { ascending: true });
+    .eq('barbeiro_id', barbeiroId);
+  if (profissionalId) q = q.eq('profissional_id', profissionalId);
+  const { data, error } = await q.order('inicio_em', { ascending: true });
   if (error) throw error;
   return (data ?? []).map(rowToAgendamento);
 }
@@ -856,8 +1027,284 @@ export async function updateCliente(id: string, barbeiroId: string, patch: Parti
   const { data, error } = await client.from('clientes')
     .update({ ...patch, updated_at: new Date().toISOString() })
     .eq('id', id).eq('barbeiro_id', barbeiroId).select('*').single();
-  if (error || !data) return null;
+  // PGRST116 = "no rows returned" (linha não existe/não pertence a esse barbeiro) — é o único
+  // caso que deve virar "não encontrado". Qualquer outro erro (ex: valor inválido pra uma
+  // coluna) precisa estourar de verdade, senão vira um 404 enganoso.
+  if (error) {
+    if (error.code === 'PGRST116') return null;
+    throw error;
+  }
+  if (!data) return null;
   return rowToCliente(data);
+}
+
+// ---------- ADMIN: EXPEDIENTES / BLOQUEIOS ----------
+function rowToExpediente(r: any): Expediente {
+  return {
+    id: r.id,
+    barbeiro_id: r.barbeiro_id,
+    profissional_id: r.profissional_id,
+    dia_semana: r.dia_semana,
+    hora_inicio: typeof r.hora_inicio === 'string' ? r.hora_inicio.slice(0, 5) : r.hora_inicio,
+    hora_fim: typeof r.hora_fim === 'string' ? r.hora_fim.slice(0, 5) : r.hora_fim,
+    intervalo_inicio: typeof r.intervalo_inicio === 'string' ? r.intervalo_inicio.slice(0, 5) : r.intervalo_inicio,
+    intervalo_fim: typeof r.intervalo_fim === 'string' ? r.intervalo_fim.slice(0, 5) : r.intervalo_fim,
+    ativo: r.ativo,
+    created_at: r.created_at,
+    updated_at: r.updated_at
+  };
+}
+
+function rowToBloqueio(r: any): Bloqueio {
+  return {
+    id: r.id,
+    barbeiro_id: r.barbeiro_id,
+    profissional_id: r.profissional_id ?? null,
+    data: r.data,
+    hora_inicio: typeof r.hora_inicio === 'string' ? r.hora_inicio.slice(0, 5) : r.hora_inicio,
+    hora_fim: typeof r.hora_fim === 'string' ? r.hora_fim.slice(0, 5) : r.hora_fim,
+    motivo: r.motivo ?? '',
+    created_at: r.created_at,
+    updated_at: r.updated_at
+  };
+}
+
+// ---------- ADMIN: PROFISSIONAIS (equipe) ----------
+function rowToProfissional(r: any): Profissional {
+  return {
+    id: r.id,
+    barbeiro_id: r.barbeiro_id,
+    nome: r.nome,
+    avatar_url: r.avatar_url ?? null,
+    telefone: r.telefone ?? '',
+    bio: r.bio ?? '',
+    ativo: r.ativo,
+    ordem: r.ordem ?? 0,
+    created_at: r.created_at,
+    updated_at: r.updated_at
+  };
+}
+
+// Usado pelo admin (todos) e pelo site público (só ativos, via slug)
+export async function listProfissionais(
+  barbeiroIdOrSlug: string,
+  somenteAtivos = false
+): Promise<Profissional[]> {
+  const client = sb();
+  if (!client) return [];
+  const barbeiroId = await resolveBarbeiroId(barbeiroIdOrSlug);
+  if (!barbeiroId) return [];
+  let q = client.from('profissionais').select('*').eq('barbeiro_id', barbeiroId);
+  if (somenteAtivos) q = q.eq('ativo', true);
+  const { data, error } = await q.order('ordem', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(rowToProfissional);
+}
+
+export async function createProfissional(barbeiroId: string, payload: {
+  nome: string; telefone?: string; bio?: string; avatar_url?: string;
+}): Promise<Profissional> {
+  const client = sb();
+  if (!client) throw new Error('Supabase not configured');
+
+  const maxOrdem = await client.from('profissionais').select('ordem')
+    .eq('barbeiro_id', barbeiroId).order('ordem', { ascending: false }).limit(1);
+  const nextOrdem = ((maxOrdem.data?.[0]?.ordem ?? 0) as number) + 1;
+
+  const { data, error } = await client.from('profissionais').insert({
+    barbeiro_id: barbeiroId,
+    nome: payload.nome,
+    telefone: payload.telefone ?? '',
+    bio: payload.bio ?? '',
+    avatar_url: payload.avatar_url ?? null,
+    ordem: nextOrdem
+  }).select('*').single();
+  if (error || !data) throw error ?? new Error('Erro ao criar barbeiro');
+
+  // Sem expediente o barbeiro nunca aparece com horário livre — falha silenciosa
+  // e confusa. Copia o expediente de quem já existe na barbearia, INCLUINDO
+  // o intervalo de almoço.
+  const { data: modelo } = await client.from('expedientes')
+    .select('profissional_id, dia_semana, hora_inicio, hora_fim, intervalo_inicio, intervalo_fim, ativo')
+    .eq('barbeiro_id', barbeiroId)
+    .neq('profissional_id', data.id)
+    .order('profissional_id')
+    .order('dia_semana');
+
+  if (modelo && modelo.length > 0) {
+    const primeiro = modelo[0].profissional_id;
+    const base = modelo.filter((e: any) => e.profissional_id === primeiro);
+    await client.from('expedientes').insert(
+      base.map((e: any) => ({
+        barbeiro_id: barbeiroId,
+        profissional_id: data.id,
+        dia_semana: e.dia_semana,
+        hora_inicio: e.hora_inicio,
+        hora_fim: e.hora_fim,
+        intervalo_inicio: e.intervalo_inicio,
+        intervalo_fim: e.intervalo_fim,
+        ativo: e.ativo
+      }))
+    );
+  }
+
+  return rowToProfissional(data);
+}
+
+export async function updateProfissional(id: string, barbeiroId: string, patch: Partial<{
+  nome: string; telefone: string; bio: string; avatar_url: string | null; ativo: boolean; ordem: number;
+}>): Promise<Profissional | null> {
+  const client = sb();
+  if (!client) return null;
+  const { data, error } = await client.from('profissionais')
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq('id', id).eq('barbeiro_id', barbeiroId)
+    .select('*').single();
+  if (error) {
+    if (error.code === 'PGRST116') return null;
+    throw error;
+  }
+  if (!data) return null;
+  return rowToProfissional(data);
+}
+
+export async function listConfiguracoes(barbeiroId: string): Promise<{ expedientes: Expediente[]; bloqueios: Bloqueio[] }> {
+  const client = sb();
+  if (!client) throw new Error('Supabase not configured');
+  const [{ data: exp, error: expErr }, { data: bloq, error: bloqErr }] = await Promise.all([
+    client.from('expedientes').select('*').eq('barbeiro_id', barbeiroId).order('dia_semana', { ascending: true }),
+    client.from('bloqueios').select('*').eq('barbeiro_id', barbeiroId).order('data', { ascending: true })
+  ]);
+  if (expErr) throw expErr;
+  if (bloqErr) throw bloqErr;
+  return {
+    expedientes: (exp ?? []).map(rowToExpediente),
+    bloqueios: (bloq ?? []).map(rowToBloqueio)
+  };
+}
+
+export async function updateExpediente(id: string, barbeiroId: string, patch: Partial<{
+  hora_inicio: string; hora_fim: string; intervalo_inicio: string | null; intervalo_fim: string | null; ativo: boolean;
+}>): Promise<Expediente | null> {
+  const client = sb();
+  if (!client) return null;
+  const { data, error } = await client.from('expedientes')
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq('id', id).eq('barbeiro_id', barbeiroId).select('*').single();
+  if (error) {
+    if (error.code === 'PGRST116') return null;
+    throw error;
+  }
+  if (!data) return null;
+  return rowToExpediente(data);
+}
+
+// profissionalId ausente = aplica a todos os barbeiros da barbearia
+export async function applyDefaultInterval(
+  barbeiroId: string,
+  intervaloInicio: string | null,
+  intervaloFim: string | null,
+  profissionalId?: string
+): Promise<void> {
+  const client = sb();
+  if (!client) throw new Error('Supabase not configured');
+  let q = client.from('expedientes')
+    .update({ intervalo_inicio: intervaloInicio, intervalo_fim: intervaloFim, updated_at: new Date().toISOString() })
+    .eq('barbeiro_id', barbeiroId);
+  if (profissionalId) q = q.eq('profissional_id', profissionalId);
+  const { error } = await q;
+  if (error) throw error;
+}
+
+// profissional_id null = feriado, fecha a barbearia toda
+export async function createBloqueio(barbeiroId: string, payload: {
+  data: string; hora_inicio?: string | null; hora_fim?: string | null; motivo: string;
+  profissional_id?: string | null;
+}): Promise<Bloqueio> {
+  const client = sb();
+  if (!client) throw new Error('Supabase not configured');
+
+  // Bloqueio de um barbeiro específico só vale se ele for desta barbearia
+  if (payload.profissional_id) {
+    const { data: prof } = await client.from('profissionais').select('id')
+      .eq('id', payload.profissional_id).eq('barbeiro_id', barbeiroId).maybeSingle();
+    if (!prof) throw Object.assign(new Error('Barbeiro não encontrado.'), { status: 404 });
+  }
+
+  const { data, error } = await client.from('bloqueios').insert({
+    barbeiro_id: barbeiroId,
+    profissional_id: payload.profissional_id ?? null,
+    data: payload.data,
+    hora_inicio: payload.hora_inicio ?? null,
+    hora_fim: payload.hora_fim ?? null,
+    motivo: payload.motivo
+  }).select('*').single();
+  if (error || !data) throw error ?? new Error('Erro ao criar bloqueio');
+  return rowToBloqueio(data);
+}
+
+export async function deleteBloqueio(id: string, barbeiroId: string): Promise<boolean> {
+  const client = sb();
+  if (!client) return false;
+  const { error, count } = await client.from('bloqueios')
+    .delete({ count: 'exact' })
+    .eq('id', id).eq('barbeiro_id', barbeiroId);
+  if (error) throw error;
+  return (count ?? 0) > 0;
+}
+
+// ---------- ADMIN: CATEGORIAS FINANCEIRAS ----------
+function rowToCategoria(r: any): CategoriaFinanceira {
+  return {
+    id: r.id,
+    nome: r.nome,
+    tipo: r.tipo,
+    created_at: r.created_at,
+    updated_at: r.updated_at
+  };
+}
+
+export async function listCategoriasFinanceiras(barbeiroId: string): Promise<CategoriaFinanceira[]> {
+  const client = sb();
+  if (!client) throw new Error('Supabase not configured');
+  const { data, error } = await client.from('categorias_financeiras')
+    .select('*').eq('barbeiro_id', barbeiroId).order('nome', { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map(rowToCategoria);
+}
+
+export async function createCategoriaFinanceira(barbeiroId: string, nome: string, tipo: 'entrada' | 'saida'): Promise<CategoriaFinanceira> {
+  const client = sb();
+  if (!client) throw new Error('Supabase not configured');
+  const { data, error } = await client.from('categorias_financeiras')
+    .insert({ barbeiro_id: barbeiroId, nome, tipo })
+    .select('*').single();
+  if (error || !data) throw error ?? new Error('Erro ao criar categoria');
+  return rowToCategoria(data);
+}
+
+export async function updateCategoriaFinanceira(id: string, barbeiroId: string, patch: Partial<{ nome: string; tipo: 'entrada' | 'saida' }>): Promise<CategoriaFinanceira | null> {
+  const client = sb();
+  if (!client) return null;
+  const { data, error } = await client.from('categorias_financeiras')
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq('id', id).eq('barbeiro_id', barbeiroId).select('*').single();
+  if (error) {
+    if (error.code === 'PGRST116') return null;
+    throw error;
+  }
+  if (!data) return null;
+  return rowToCategoria(data);
+}
+
+export async function deleteCategoriaFinanceira(id: string, barbeiroId: string): Promise<boolean> {
+  const client = sb();
+  if (!client) return false;
+  const { error, count } = await client.from('categorias_financeiras')
+    .delete({ count: 'exact' })
+    .eq('id', id).eq('barbeiro_id', barbeiroId);
+  if (error) throw error;
+  return (count ?? 0) > 0;
 }
 
 export async function deleteCliente(id: string, barbeiroId: string): Promise<boolean> {

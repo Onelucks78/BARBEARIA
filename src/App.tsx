@@ -9,6 +9,23 @@ import AuthModal from './components/AuthModal.tsx';
 import { useAdminSession, signOut } from './lib/useAdminSession.ts';
 import { supabase } from './lib/supabase.ts';
 
+function formatNameFromEmail(email: string): string {
+  if (!email) return 'Cliente';
+  const rawPart = email.split('@')[0] || '';
+  const cleaned = rawPart.replace(/[0-9]+/g, ' ').replace(/[\._\-]+/g, ' ');
+  const words = cleaned.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return 'Cliente';
+  return words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+}
+
+function cleanClientName(name: string | undefined, email: string): string {
+  if (!name || name.includes('@') || name.includes('.com') || name.includes('.') || name.includes('_') || name.includes('-')) {
+    const raw = (name && !name.includes('@')) ? name : email;
+    return formatNameFromEmail(raw);
+  }
+  return name;
+}
+
 export default function App() {
   const adminSession = useAdminSession();
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -38,7 +55,7 @@ export default function App() {
       const meta = session.user.user_metadata as any;
       const email = session.user.email || '';
       const fromSession = {
-        nome: meta?.nome || email.split('@')[0] || '',
+        nome: cleanClientName(meta?.nome || meta?.full_name, email),
         email,
         telefone: meta?.telefone || '',
         foto_url: meta?.avatar_url || meta?.picture
@@ -85,10 +102,11 @@ export default function App() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         servico_id: pending.servico_id,
+        profissional_id: pending.profissional_id,
         data: pending.data,
         horario: pending.horario,
-        nome_cliente: pending.nome_cliente,
-        telefone_cliente: pending.telefone_cliente,
+        nome_cliente: loggedClient.nome || pending.nome_cliente,
+        telefone_cliente: loggedClient.telefone || pending.telefone_cliente || '',
         observacao: pending.observacao || '',
         cliente_email: loggedClient.email
       })
@@ -96,7 +114,14 @@ export default function App() {
       if (res.ok) {
         localStorage.removeItem('pending_booking');
         const data = await res.json();
-        setPendingBookingSuccess(data);
+        setPendingBookingSuccess({
+          ...data,
+          profissionalNome: pending.profissionalNome,
+          servicesNames: pending.servicesNames,
+          totalPreco: pending.totalPreco,
+          totalDuracao: pending.totalDuracao
+        });
+        try { window.dispatchEvent(new CustomEvent('agendamento-criado')); } catch {}
       } else {
         pendingBookedRef.current = false;
       }
@@ -254,12 +279,26 @@ export default function App() {
               <div className="bg-muted/40 border border-border rounded-sm p-4 text-xs space-y-2 text-left">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Código:</span>
-                  <span className="font-bold text-primary">{pendingBookingSuccess.id}</span>
+                  <span className="font-bold text-primary">{pendingBookingSuccess.codigo || pendingBookingSuccess.id}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Cliente:</span>
-                  <span className="font-semibold text-foreground">{loggedClient?.nome}</span>
+                  <span className="font-semibold text-foreground">{loggedClient?.nome || pendingBookingSuccess.nome_cliente}</span>
                 </div>
+                {pendingBookingSuccess.profissionalNome && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Profissional:</span>
+                    <span className="font-semibold text-foreground">{pendingBookingSuccess.profissionalNome}</span>
+                  </div>
+                )}
+                {pendingBookingSuccess.servicesNames && pendingBookingSuccess.servicesNames.length > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Serviço(s):</span>
+                    <span className="font-semibold text-foreground text-right max-w-[180px] break-words">
+                      {pendingBookingSuccess.servicesNames.join(' + ')}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Quando:</span>
                   <span className="font-bold text-foreground">
@@ -271,6 +310,14 @@ export default function App() {
                     })()}
                   </span>
                 </div>
+                {pendingBookingSuccess.totalPreco !== undefined && (
+                  <div className="flex justify-between border-t border-border/50 pt-2 font-bold">
+                    <span className="text-muted-foreground">Valor:</span>
+                    <span className="text-primary font-bold">
+                      {pendingBookingSuccess.totalPreco === 0 ? 'Grátis (Plano VIP)' : `R$ ${Number(pendingBookingSuccess.totalPreco).toFixed(2).replace('.', ',')}`}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <button

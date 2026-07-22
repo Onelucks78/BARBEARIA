@@ -281,6 +281,7 @@ const INITIAL_DB: DBState = {
     {
       id: 'ex-0',
       barbeiro_id: 'b-1',
+      profissional_id: 'p-1',
       dia_semana: 0, // Domingo
       hora_inicio: '09:00',
       hora_fim: '13:00',
@@ -293,6 +294,7 @@ const INITIAL_DB: DBState = {
     {
       id: 'ex-1',
       barbeiro_id: 'b-1',
+      profissional_id: 'p-1',
       dia_semana: 1, // Segunda
       hora_inicio: '09:00',
       hora_fim: '19:00',
@@ -305,6 +307,7 @@ const INITIAL_DB: DBState = {
     {
       id: 'ex-2',
       barbeiro_id: 'b-1',
+      profissional_id: 'p-1',
       dia_semana: 2, // Terça
       hora_inicio: '09:00',
       hora_fim: '19:00',
@@ -317,6 +320,7 @@ const INITIAL_DB: DBState = {
     {
       id: 'ex-3',
       barbeiro_id: 'b-1',
+      profissional_id: 'p-1',
       dia_semana: 3, // Quarta
       hora_inicio: '09:00',
       hora_fim: '19:00',
@@ -329,6 +333,7 @@ const INITIAL_DB: DBState = {
     {
       id: 'ex-4',
       barbeiro_id: 'b-1',
+      profissional_id: 'p-1',
       dia_semana: 4, // Quinta
       hora_inicio: '09:00',
       hora_fim: '19:00',
@@ -341,6 +346,7 @@ const INITIAL_DB: DBState = {
     {
       id: 'ex-5',
       barbeiro_id: 'b-1',
+      profissional_id: 'p-1',
       dia_semana: 5, // Sexta
       hora_inicio: '09:00',
       hora_fim: '19:00',
@@ -353,6 +359,7 @@ const INITIAL_DB: DBState = {
     {
       id: 'ex-6',
       barbeiro_id: 'b-1',
+      profissional_id: 'p-1',
       dia_semana: 6, // Sábado
       hora_inicio: '08:00',
       hora_fim: '18:00',
@@ -367,6 +374,7 @@ const INITIAL_DB: DBState = {
     {
       id: 'bl-1',
       barbeiro_id: 'b-1',
+      profissional_id: 'p-1',
       data: '2026-06-15', // Exemplo de folga programada
       hora_inicio: null, // Dia inteiro
       hora_fim: null,
@@ -377,6 +385,7 @@ const INITIAL_DB: DBState = {
     {
       id: 'bl-2',
       barbeiro_id: 'b-1',
+      profissional_id: 'p-1',
       data: '2026-06-20',
       hora_inicio: '15:00', // Bloqueio parcial
       hora_fim: '17:00',
@@ -442,6 +451,7 @@ function populateSeedHistory() {
       const booking: Agendamento = {
         id: `a-past-${i}-${idx}`,
         barbeiro_id: 'b-1',
+        profissional_id: 'p-1',
         servico_id: srv.id,
         cliente_id: cli.id,
         nome_cliente: cli.nome,
@@ -461,6 +471,7 @@ function populateSeedHistory() {
         lancamentos.push({
           id: `lf-appt-${booking.id}`,
           barbeiro_id: 'b-1',
+          profissional_id: 'p-1',
           tipo: 'entrada',
           descricao: `Serviço: ${srv.nome} - Cliente: ${cli.nome}`,
           valor: srv.preco,
@@ -480,6 +491,7 @@ function populateSeedHistory() {
       lancamentos.push({
         id: `lf-exp-${i}-1`,
         barbeiro_id: 'b-1',
+        profissional_id: 'p-1',
         tipo: 'saida',
         descricao: 'Suprimentos da Barbearia (Gola higiênica e lâminas)',
         valor: 120.00,
@@ -497,6 +509,7 @@ function populateSeedHistory() {
       lancamentos.push({
         id: `lf-prod-${i}`,
         barbeiro_id: 'b-1',
+        profissional_id: 'p-1',
         tipo: 'entrada',
         descricao: 'Venda de Produto: Pomada Modeladora Matte',
         valor: 45.00,
@@ -515,6 +528,7 @@ function populateSeedHistory() {
   lancamentos.push({
     id: 'lf-fixed-rent',
     barbeiro_id: 'b-1',
+    profissional_id: 'p-1',
     tipo: 'saida',
     descricao: 'Aluguel Comercial do Ponto',
     valor: 1500.00,
@@ -530,6 +544,7 @@ function populateSeedHistory() {
   lancamentos.push({
     id: 'lf-fixed-energy',
     barbeiro_id: 'b-1',
+    profissional_id: 'p-1',
     tipo: 'saida',
     descricao: 'Conta de Energia Elétrica e Água',
     valor: 350.00,

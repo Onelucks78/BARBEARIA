@@ -4,6 +4,7 @@ loadEnv({ path: '.env.local', override: true });
 
 import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
+import { randomUUID } from 'crypto';
 import { createServer as createViteServer } from 'vite';
 import { 
   loadDB, 
@@ -26,6 +27,7 @@ import { isSupabaseConfigured, serviceClient, anonClient, setSupabaseOffline } f
 import { validate } from './server/validation.ts';
 import { schemas } from './server/schemas.ts';
 import * as storage from './server/storage.ts';
+import * as stripe from './server/stripe.ts';
 
 // Authenticate middleware
 // (substituído por server/auth.ts que verifica JWT real do Supabase)
@@ -52,6 +54,8 @@ async function startServer() {
   const PORT = Number(process.env.PORT) || 3000;
 
   // Body parsers
+  // Stripe webhook precisa do body RAW (antes do json parser)
+  app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
@@ -68,55 +72,310 @@ async function startServer() {
     });
   });
 
-  // --- STRIPE WEBHOOK (MOCK / API) ---
+  // --- STRIPE WEBHOOK ---
   app.post('/api/stripe/webhook', async (req, res) => {
+    const sig = req.headers['stripe-signature'] as string;
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    if (!sig || !webhookSecret) {
+      console.warn('[Stripe Webhook] Assinatura ou webhook secret ausente.');
+      return res.status(400).json({ error: 'Assinatura ausente.' });
+    }
+
+    const stripeClient = stripe.getStripeClientForWebhook();
+    if (!stripeClient) {
+      console.warn('[Stripe Webhook] Stripe não configurado.');
+      return res.status(500).json({ error: 'Stripe não configurado.' });
+    }
+
+    let event: any;
     try {
-      const { customer_email, amount } = req.body;
-      const valor = amount ? Number(amount) / 100 : 150.00;
-      
-      const db = loadDB();
-      const firstBarber = db.barbeiros[0];
-      const barbeiroId = firstBarber ? firstBarber.id : 'b-1';
-      const splitDate = new Date().toISOString().split('T')[0];
-      
-      if (isSupabaseConfigured()) {
-        const client = serviceClient();
-        if (client) {
-          const { data: barb } = await client.from('barbeiros').select('id').eq('ativo', true).limit(1).single();
-          const targetBarbeiroId = barb ? barb.id : barbeiroId;
-          
-          const { error } = await client.from('lancamentos_financeiros').insert({
-            barbeiro_id: targetBarbeiroId,
-            tipo: 'entrada',
-            descricao: customer_email ? `Assinatura Stripe: ${customer_email}` : 'Assinatura Stripe Recorrente (Confirmada)',
-            valor,
-            categoria: 'Plano',
-            forma_pagamento: 'outro',
-            data: splitDate
-          });
-          if (error) throw error;
+      event = stripeClient.webhooks.constructEvent(req.body, sig, webhookSecret);
+    } catch (err: any) {
+      console.error('[Stripe Webhook] Assinatura inválida:', err.message);
+      return res.status(400).json({ error: `Assinatura inválida: ${err.message}` });
+    }
+
+    try {
+      switch (event.type) {
+        case 'checkout.session.completed': {
+          const session = event.data.object;
+          const email = session.customer_details?.email || session.metadata?.cliente_email;
+          const plan = session.subscription
+            ? (session.metadata?.plan || (session.metadata as any)?.plan || 'essential')
+            : 'essential';
+          const valor = (session.amount_total || 0) / 100;
+
+          await registrarAssinatura(email, plan, valor, session.id);
+          console.log(`[Stripe] Checkout concluído: ${email} → ${plan}`);
+          break;
         }
-      } else {
-        db.lancamentos_financeiros.push({
-          id: `lf-stripe-${Date.now()}`,
-          barbeiro_id: barbeiroId,
-          tipo: 'entrada',
-          descricao: customer_email ? `Assinatura Stripe: ${customer_email}` : 'Assinatura Stripe Recorrente (Confirmada)',
-          valor,
-          categoria: 'Plano',
-          forma_pagamento: 'outro',
-          agendamento_id: null,
-          produto_id: null,
-          data: splitDate,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        });
-        saveDB(db);
+
+        case 'invoice.paid': {
+          const invoice = event.data.object;
+          const email = invoice.customer_email;
+          const valor = (invoice.amount_paid || 0) / 100;
+          const plan = (invoice.subscription_details?.metadata?.plan
+            || invoice.metadata?.plan
+            || 'essential') as string;
+
+          if (email && invoice.billing_reason === 'subscription_cycle') {
+            await registrarAssinatura(email, plan, valor, invoice.id);
+            console.log(`[Stripe] Pagamento recorrente: ${email} → ${plan} (R$${valor.toFixed(2)})`);
+          }
+          break;
+        }
+
+        case 'customer.subscription.updated': {
+          const sub = event.data.object;
+          const customerId = sub.customer as string;
+          const plan = (sub.metadata?.plan || 'essential') as string;
+
+          const stripeClient2 = stripe.getStripeClientForWebhook();
+          if (stripeClient2) {
+            const customer = await stripeClient2.customers.retrieve(customerId);
+            if (customer && !customer.deleted && customer.email) {
+              const email = customer.email;
+              const client = serviceClient();
+              if (client) {
+                const { data: clientes } = await client.from('clientes').select('id, observacoes').eq('email', email).limit(1);
+                if (clientes && clientes.length > 0) {
+                  const cliente = clientes[0];
+                  const obs = storage.isClientVip(cliente.observacoes)
+                    ? JSON.parse(cliente.observacoes || '{}')
+                    : {};
+                  obs.subscription = {
+                    status: sub.status === 'active' ? 'ativo' : sub.status === 'past_due' ? 'inadimplente' : 'cancelado',
+                    plan,
+                    stripeCustomerId: customerId,
+                    stripeSubscriptionId: sub.id,
+                    currentPeriodEnd: new Date(sub.current_period_end * 1000).toISOString(),
+                    updatedAt: new Date().toISOString()
+                  };
+                  await client.from('clientes').update({ observacoes: JSON.stringify(obs) }).eq('id', cliente.id);
+                  console.log(`[Stripe] Assinatura atualizada: ${email} → status=${sub.status} plan=${plan}`);
+                }
+              }
+            }
+          }
+          break;
+        }
+
+        case 'customer.subscription.deleted': {
+          const sub = event.data.object;
+          const customerId = sub.customer as string;
+          const stripeClient3 = stripe.getStripeClientForWebhook();
+          if (stripeClient3) {
+            const customer = await stripeClient3.customers.retrieve(customerId);
+            if (customer && !customer.deleted && customer.email) {
+              const client = serviceClient();
+              if (client) {
+                const { data: clientes } = await client.from('clientes').select('id, observacoes').eq('email', customer.email).limit(1);
+                if (clientes && clientes.length > 0) {
+                  const cliente = clientes[0];
+                  let obs: any = {};
+                  try {
+                    if (cliente.observacoes && cliente.observacoes.trim().startsWith('{')) {
+                      obs = JSON.parse(cliente.observacoes);
+                    }
+                  } catch { obs = {}; }
+                  if (obs.subscription) {
+                    obs.subscription.status = 'cancelado';
+                    obs.subscription.updatedAt = new Date().toISOString();
+                    await client.from('clientes').update({ observacoes: JSON.stringify(obs) }).eq('id', cliente.id);
+                    console.log(`[Stripe] Assinatura cancelada: ${customer.email}`);
+                  }
+                }
+              }
+            }
+          }
+          break;
+        }
+
+        default:
+          console.log(`[Stripe] Evento ignorado: ${event.type}`);
       }
+
       res.json({ received: true });
     } catch (err: any) {
       console.error('[Stripe Webhook Error]', err);
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  async function registrarAssinatura(email: string | undefined, plan: string, valor: number, referenceId: string) {
+    if (!email) return;
+    const splitDate = new Date().toISOString().split('T')[0];
+
+    if (isSupabaseConfigured()) {
+      const client = serviceClient();
+      if (!client) return;
+
+      const { data: barb } = await client.from('barbeiros').select('id').eq('ativo', true).limit(1).single();
+      const barbeiroId = barb?.id || 'b-1';
+
+      await client.from('lancamentos_financeiros').insert({
+        barbeiro_id: barbeiroId,
+        profissional_id: null,
+        tipo: 'entrada',
+        descricao: `Assinatura Stripe (${plan}): ${email}`,
+        valor,
+        categoria: 'Plano',
+        forma_pagamento: 'outro',
+        data: splitDate
+      });
+
+      const { data: clientes } = await client.from('clientes').select('id, observacoes').eq('email', email).limit(1);
+      if (clientes && clientes.length > 0) {
+        const cliente = clientes[0];
+        let obs: any = {};
+        try {
+          if (cliente.observacoes && cliente.observacoes.trim().startsWith('{')) {
+            obs = JSON.parse(cliente.observacoes);
+          }
+        } catch { obs = {}; }
+        obs.subscription = {
+          status: 'ativo',
+          plan,
+          stripeReferenceId: referenceId,
+          updatedAt: new Date().toISOString()
+        };
+        await client.from('clientes').update({ observacoes: JSON.stringify(obs) }).eq('id', cliente.id);
+      }
+      return;
+    }
+
+    const db = loadDB();
+    const barbeiroId = db.barbeiros[0]?.id || 'b-1';
+    db.lancamentos_financeiros.push({
+      id: `lf-stripe-${Date.now()}`,
+      barbeiro_id: barbeiroId,
+      profissional_id: null,
+      tipo: 'entrada',
+      descricao: `Assinatura Stripe (${plan}): ${email}`,
+      valor,
+      categoria: 'Plano',
+      forma_pagamento: 'outro',
+      agendamento_id: null,
+      produto_id: null,
+      data: splitDate,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    });
+
+    const cliente = db.clientes.find(c => c.email && c.email.toLowerCase() === email.toLowerCase());
+    if (cliente) {
+      let obs: any = {};
+      try {
+        if (cliente.observacoes && cliente.observacoes.trim().startsWith('{')) {
+          obs = JSON.parse(cliente.observacoes);
+        }
+      } catch { obs = {}; }
+      obs.subscription = {
+        status: 'ativo',
+        plan,
+        stripeReferenceId: referenceId,
+        updatedAt: new Date().toISOString()
+      };
+      cliente.observacoes = JSON.stringify(obs);
+    }
+    saveDB(db);
+  }
+
+  // --- STRIPE: LISTAR PLANOS ---
+  app.get('/api/stripe/plans', (req, res) => {
+    res.json(stripe.getPlanos());
+  });
+
+  // --- STRIPE: CRIAR CHECKOUT SESSION ---
+  app.post('/api/stripe/create-checkout-session', async (req, res) => {
+    try {
+      const { planId, email, nome } = req.body as { planId: string; email: string; nome: string };
+      if (!planId || !email) {
+        return res.status(400).json({ error: 'planId e email são obrigatórios.' });
+      }
+
+      const appUrl = process.env.APP_URL || `http://localhost:${PORT}`;
+      const result = await stripe.createCheckoutSession({
+        planId,
+        clienteEmail: email,
+        clienteNome: nome || email,
+        successUrl: `${appUrl}/planos/sucesso?session_id={CHECKOUT_SESSION_ID}`,
+        cancelUrl: `${appUrl}/planos`
+      });
+
+      if (result.error) {
+        return res.status(400).json({ error: result.error });
+      }
+
+      res.json({ url: result.url });
+    } catch (err: any) {
+      console.error('[Stripe] Erro ao criar checkout:', err);
+      res.status(500).json({ error: 'Erro ao criar sessão de checkout.' });
+    }
+  });
+
+  // --- STRIPE: CUSTOMER PORTAL ---
+  app.get('/api/stripe/portal', async (req, res) => {
+    try {
+      const email = req.query.email as string;
+      if (!email) {
+        return res.status(400).json({ error: 'Parâmetro email é obrigatório.' });
+      }
+
+      const appUrl = process.env.APP_URL || `http://localhost:${PORT}`;
+      const result = await stripe.createPortalSession({
+        customerEmail: email,
+        returnUrl: `${appUrl}/planos`
+      });
+
+      if (result.error) {
+        return res.status(400).json({ error: result.error });
+      }
+
+      res.json({ url: result.url });
+    } catch (err: any) {
+      console.error('[Stripe] Erro ao criar portal:', err);
+      res.status(500).json({ error: 'Erro ao criar portal do cliente.' });
+    }
+  });
+
+  // --- STRIPE: STATUS DA ASSINATURA DO CLIENTE ---
+  app.get('/api/stripe/subscription', async (req, res) => {
+    try {
+      const email = req.query.email as string;
+      if (!email) {
+        return res.status(400).json({ error: 'Parâmetro email é obrigatório.' });
+      }
+
+      if (isSupabaseConfigured()) {
+        const client = serviceClient();
+        if (client) {
+          const { data: clientes } = await client.from('clientes').select('observacoes').eq('email', email).limit(1);
+          if (clientes && clientes.length > 0 && storage.isClientVip(clientes[0].observacoes)) {
+            return res.json({
+              ativo: true,
+              plan: storage.getClientPlan(clientes[0].observacoes),
+              observacoes: clientes[0].observacoes
+            });
+          }
+        }
+        return res.json({ ativo: false });
+      }
+
+      const db = loadDB();
+      const cliente = db.clientes.find(c => c.email && c.email.toLowerCase() === email.toLowerCase());
+      if (cliente && storage.isClientVip(cliente.observacoes)) {
+        return res.json({
+          ativo: true,
+          plan: storage.getClientPlan(cliente.observacoes),
+          observacoes: cliente.observacoes
+        });
+      }
+      res.json({ ativo: false });
+    } catch (err: any) {
+      console.error('[Stripe] Erro ao buscar assinatura:', err);
+      res.status(500).json({ error: 'Erro ao buscar assinatura.' });
     }
   });
 
@@ -131,6 +390,18 @@ async function startServer() {
     } catch (error) {
       console.error(error);
       res.status(500).json({ error: 'Erro ao buscar serviços.' });
+    }
+  });
+
+  // 1b. Get Active Professionals (barbeiros que atendem)
+  app.get('/api/profissionais', async (req, res) => {
+    try {
+      const slug = (req.query.slug as string) || 'imperial';
+      const profissionais = await storage.listProfissionais(slug, true);
+      res.json(profissionais);
+    } catch (error) {
+      console.error('[GET /api/profissionais]', error);
+      res.status(500).json({ error: 'Erro ao buscar barbeiros.' });
     }
   });
 
@@ -150,10 +421,12 @@ async function startServer() {
   // Query params: slug=barbearia, data=YYYY-MM-DD, servico_id=ID, all=true|false
   app.get('/api/horarios-livres', validate(schemas.freeSlotsQuery, 'query'), async (req, res) => {
     try {
-      const { data, servico_id, all } = req.query as { data: string; servico_id: string; all?: string };
+      const { data, servico_id, profissional_id, all } = req.query as {
+        data: string; servico_id: string; profissional_id: string; all?: string;
+      };
       // slug default = imperial (back-compat com db.json)
       const slug = (req.query.slug as string) || 'imperial';
-      const slots = await storage.getAvailableSlots(slug, data, servico_id, all === 'true');
+      const slots = await storage.getAvailableSlots(slug, data, servico_id, profissional_id, all === 'true');
       res.json(slots);
     } catch (error) {
       console.error(error);
@@ -221,6 +494,7 @@ async function startServer() {
     try {
       const body = req.body as {
         servico_id: string;
+        profissional_id: string;
         data: string;
         horario: string;
         nome_cliente: string;
@@ -254,23 +528,26 @@ async function startServer() {
         return res.status(404).json({ error: 'Nenhum serviço encontrado/ativo.' });
       }
 
-      // Check if client is VIP
+      // Check if client is VIP and get their subscription plan
       let isVip = false;
+      let clientPlan = '';
       const emailToMatch = body.cliente_email || (body.cliente_id && body.cliente_id.includes('@') ? body.cliente_id : null);
       if (emailToMatch) {
         const existing = db.clientes.find(c => c.email && c.email.toLowerCase() === emailToMatch.toLowerCase());
         if (existing && storage.isClientVip(existing.observacoes)) {
           isVip = true;
+          clientPlan = storage.getClientPlan(existing.observacoes);
         }
       } else if (body.cliente_id) {
         const existing = db.clientes.find(c => c.id === body.cliente_id);
         if (existing && storage.isClientVip(existing.observacoes)) {
           isVip = true;
+          clientPlan = storage.getClientPlan(existing.observacoes);
         }
       }
 
       const totalPreco = selected_servicos.reduce((sum, s) => {
-        if (isVip && storage.isServiceEligibleForVip(s.nome)) {
+        if (isVip && storage.isServiceEligibleForPlan(s.nome, clientPlan)) {
           return sum + 0;
         }
         return sum + s.preco;
@@ -324,6 +601,7 @@ async function startServer() {
       const novoAgendamento: Agendamento = {
         id: bookingCodeId,
         barbeiro_id: 'b-1',
+        profissional_id: body.profissional_id,
         servico_id: body.servico_id,
         cliente_id: resolvedClienteId,
         nome_cliente: body.nome_cliente,
@@ -441,14 +719,17 @@ async function startServer() {
   // Query param: period = 'all' | 'last_30_days' | 'this_month' | 'today'
   app.get('/api/admin/dashboard', requireAdmin, validate(schemas.dashboardQuery, 'query'), async (req: AuthRequest, res) => {
     try {
-      const { start_date, end_date, is_today } = req.query as { start_date?: string; end_date?: string; is_today?: string };
+      const { start_date, end_date, is_today, profissional_id } = req.query as {
+        start_date?: string; end_date?: string; is_today?: string; profissional_id?: string;
+      };
 
       if (isSupabaseConfigured() && req.barbeiroId) {
         const stats = await storage.getDashboardStats(
           req.barbeiroId,
           start_date,
           end_date,
-          is_today === 'true'
+          is_today === 'true',
+          profissional_id
         );
         if (stats) return res.json(stats);
       }
@@ -608,6 +889,7 @@ async function startServer() {
         agendadosCount,
         concluidosCount,
         dailyChartData,
+        porProfissional: [], // db.json (dev) não modela múltiplos barbeiros
         history: lancamentosFiltered.sort((a, b) => b.created_at.localeCompare(a.created_at))
       };
 
@@ -622,7 +904,8 @@ async function startServer() {
   app.get('/api/admin/agendamentos', requireAdmin, async (req: AuthRequest, res) => {
     try {
       if (isSupabaseConfigured() && req.barbeiroId) {
-        const list = await storage.listAgendamentosAdmin(req.barbeiroId);
+        const profissionalId = req.query.profissional_id as string | undefined;
+        const list = await storage.listAgendamentosAdmin(req.barbeiroId, profissionalId);
         return res.json(list);
       }
       const db = loadDB();
@@ -667,30 +950,6 @@ async function startServer() {
       if (patch.observacao !== undefined) original.observacao = patch.observacao;
       original.updated_at = new Date().toISOString();
 
-      if (patch.status === 'concluido' && previousStatus !== 'concluido') {
-        const exists = db.lancamentos_financeiros.find(l => l.agendamento_id === id);
-        if (!exists) {
-          const srv = db.servicos.find(s => s.id === original.servico_id);
-          const splitDate = original.inicio_em.split('T')[0];
-          db.lancamentos_financeiros.push({
-            id: `lf-auto-${Date.now()}`,
-            barbeiro_id: 'b-1',
-            tipo: 'entrada',
-            descricao: `${srv ? srv.nome : 'Serviço de Corte'} - Cliente: ${original.nome_cliente}`,
-            valor: original.preco_cobrado,
-            categoria: 'Serviço de Corte',
-            forma_pagamento: 'pix',
-            agendamento_id: id,
-            produto_id: null,
-            data: splitDate,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          });
-        }
-      }
-      if (previousStatus === 'concluido' && patch.status && patch.status !== 'concluido') {
-        db.lancamentos_financeiros = db.lancamentos_financeiros.filter(l => l.agendamento_id !== id);
-      }
       saveDB(db);
       res.json(original);
     } catch (error) {
@@ -701,6 +960,49 @@ async function startServer() {
 
 
   // 3. SERVICES CRUD (Prevent actual deleting, just flip active flag / deativar)
+  // Upload de imagem decorativa (serviços/produtos) para o Supabase Storage (bucket "imagens")
+  app.post('/api/admin/upload-imagem', requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { dataUrl, pasta } = req.body;
+      const match = typeof dataUrl === 'string' ? dataUrl.match(/^data:(image\/(jpeg|png|webp));base64,(.+)$/) : null;
+      if (!match) {
+        return res.status(400).json({ error: 'Imagem inválida. Envie um arquivo JPEG, PNG ou WebP.' });
+      }
+
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        const client = serviceClient();
+        if (client) {
+          try {
+            const mime = match[1];
+            const ext = mime === 'image/jpeg' ? 'jpg' : mime.split('/')[1];
+            const buffer = Buffer.from(match[3], 'base64');
+            const pastasPermitidas = ['servicos', 'produtos', 'profissionais'];
+            const folder = pastasPermitidas.includes(pasta) ? pasta : 'servicos';
+            const filePath = `${folder}/${req.barbeiroId}/${randomUUID()}.${ext}`;
+
+            const { error: uploadError } = await client.storage
+              .from('imagens')
+              .upload(filePath, buffer, { contentType: mime, upsert: true });
+
+            if (!uploadError) {
+              const { data } = client.storage.from('imagens').getPublicUrl(filePath);
+              return res.json({ url: data.publicUrl });
+            }
+            console.warn('[Storage] Upload no Supabase falhou, usando dataUrl fallback:', uploadError.message);
+          } catch (storageErr: any) {
+            console.warn('[Storage] Exceção no upload Supabase, usando dataUrl fallback:', storageErr.message);
+          }
+        }
+      }
+
+      // Fallback gracioso (funciona sempre sem depender do bucket do Supabase):
+      return res.json({ url: dataUrl });
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao processar imagem.' });
+    }
+  });
+
   app.get('/api/admin/servicos', requireAdmin, async (req: AuthRequest, res) => {
     try {
       if (isSupabaseConfigured() && req.barbeiroId) {
@@ -900,7 +1202,7 @@ async function startServer() {
       }
 
       if (isSupabaseConfigured() && req.barbeiroId) {
-        const novo = await storage.createCliente(req.barbeiroId, { nome, telefone, email, data_nascimento, observacoes });
+        const novo = await storage.createCliente(req.barbeiroId, { nome, telefone, email, data_nascimento: data_nascimento || null, observacoes });
         return res.status(201).json(novo);
       }
 
@@ -919,9 +1221,9 @@ async function startServer() {
       db.clientes.push(novo);
       saveDB(db);
       res.status(201).json(novo);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      res.status(500).json({ error: 'Erro ao criar cliente.' });
+      res.status(500).json({ error: error?.message || 'Erro ao criar cliente.' });
     }
   });
 
@@ -935,7 +1237,7 @@ async function startServer() {
           ...(nome !== undefined && { nome }),
           ...(telefone !== undefined && { telefone }),
           ...(email !== undefined && { email }),
-          ...(data_nascimento !== undefined && { data_nascimento }),
+          ...(data_nascimento !== undefined && { data_nascimento: data_nascimento || null }),
           ...(observacoes !== undefined && { observacoes }),
           ...(ativo !== undefined && { ativo: Boolean(ativo) })
         });
@@ -955,9 +1257,9 @@ async function startServer() {
       item.updated_at = new Date().toISOString();
       saveDB(db);
       res.json(item);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      res.status(500).json({ error: 'Erro ao atualizar cliente.' });
+      res.status(500).json({ error: error?.message || 'Erro ao atualizar cliente.' });
     }
   });
 
@@ -988,7 +1290,10 @@ async function startServer() {
   app.get('/api/admin/financeiro', requireAdmin, async (req: AuthRequest, res) => {
     try {
       if (isSupabaseConfigured() && req.barbeiroId) {
-        const list = await storage.listLancamentos(req.barbeiroId);
+        // profissional_id=casa filtra só os lançamentos sem barbeiro
+        const raw = req.query.profissional_id as string | undefined;
+        const filtro = raw === 'casa' ? null : raw;
+        const list = await storage.listLancamentos(req.barbeiroId, filtro);
         if (list) return res.json(list);
       }
       const db = loadDB();
@@ -1002,7 +1307,7 @@ async function startServer() {
 
   app.post('/api/admin/financeiro', requireAdmin, validate(schemas.createLancamento), async (req: AuthRequest, res) => {
     try {
-      let { tipo, descricao, valor, categoria, forma_pagamento, data, produto_id } = req.body;
+      let { tipo, descricao, valor, categoria, forma_pagamento, data, produto_id, profissional_id } = req.body;
       if (!tipo || !valor || !forma_pagamento || !data) {
         return res.status(400).json({ error: 'Tipo, valor, forma de pagamento e data são obrigatórios.' });
       }
@@ -1017,7 +1322,8 @@ async function startServer() {
 
       if (isSupabaseConfigured() && req.barbeiroId) {
         const novo = await storage.createLancamento(req.barbeiroId, {
-          tipo, descricao, valor: Number(valor), categoria, forma_pagamento, data, produto_id
+          tipo, descricao, valor: Number(valor), categoria, forma_pagamento, data, produto_id,
+          profissional_id
         });
         if (novo) return res.status(201).json(novo);
       }
@@ -1035,6 +1341,8 @@ async function startServer() {
       const novo: LancamentoFinanceiro = {
         id: `lf-${Date.now()}`,
         barbeiro_id: 'b-1',
+        // venda de produto é da casa; senão respeita o barbeiro escolhido
+        profissional_id: produto_id ? null : (profissional_id ?? null),
         tipo,
         descricao,
         valor: Number(valor),
@@ -1085,11 +1393,12 @@ async function startServer() {
   app.patch('/api/admin/financeiro/:id', requireAdmin, validate(schemas.patchLancamento), async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const { tipo, descricao, valor, categoria, forma_pagamento, data } = req.body;
+      const { tipo, descricao, valor, categoria, forma_pagamento, data, profissional_id } = req.body;
 
       if (isSupabaseConfigured() && req.barbeiroId) {
         const item = await storage.patchLancamento(req.barbeiroId, id, {
-          tipo, descricao, valor: valor !== undefined ? Number(valor) : undefined, categoria, forma_pagamento, data
+          tipo, descricao, valor: valor !== undefined ? Number(valor) : undefined, categoria, forma_pagamento, data,
+          profissional_id
         });
         if (item) return res.json(item);
       }
@@ -1121,18 +1430,22 @@ async function startServer() {
 
   // --- FINANCIAL CATEGORIES CRUD ---
   // Get all categories
-  app.get('/api/admin/categorias-financeiras', requireAdmin, (req, res) => {
+  app.get('/api/admin/categorias-financeiras', requireAdmin, async (req: AuthRequest, res) => {
     try {
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        const list = await storage.listCategoriasFinanceiras(req.barbeiroId);
+        return res.json(list);
+      }
       const db = loadDB();
       res.json(db.categorias_financeiras || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      res.status(500).json({ error: 'Erro ao buscar categorias financeiras.' });
+      res.status(500).json({ error: error?.message || 'Erro ao buscar categorias financeiras.' });
     }
   });
 
   // Create a category
-  app.post('/api/admin/categorias-financeiras', requireAdmin, validate(schemas.createCategoria), (req, res) => {
+  app.post('/api/admin/categorias-financeiras', requireAdmin, validate(schemas.createCategoria), async (req: AuthRequest, res) => {
     try {
       const { nome, tipo } = req.body;
       if (!nome || !tipo) {
@@ -1142,9 +1455,21 @@ async function startServer() {
         return res.status(400).json({ error: 'Tipo inválido. Deve ser entrada ou saida.' });
       }
 
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        try {
+          const nova = await storage.createCategoriaFinanceira(req.barbeiroId, nome, tipo);
+          return res.status(201).json(nova);
+        } catch (err: any) {
+          if (err?.code === '23505') {
+            return res.status(400).json({ error: 'Já existe uma categoria com este nome para este tipo.' });
+          }
+          throw err;
+        }
+      }
+
       const db = loadDB();
       // Avoid duplicate names for same type
-      const exists = db.categorias_financeiras.some(c => 
+      const exists = db.categorias_financeiras.some(c =>
         c.nome.toLowerCase() === nome.toLowerCase() && c.tipo === tipo
       );
       if (exists) {
@@ -1162,17 +1487,38 @@ async function startServer() {
       db.categorias_financeiras.push(nova);
       saveDB(db);
       res.status(201).json(nova);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      res.status(500).json({ error: 'Erro ao criar categoria financeira.' });
+      res.status(500).json({ error: error?.message || 'Erro ao criar categoria financeira.' });
     }
   });
 
   // Edit a category
-  app.patch('/api/admin/categorias-financeiras/:id', requireAdmin, (req, res) => {
+  app.patch('/api/admin/categorias-financeiras/:id', requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
       const { nome, tipo } = req.body;
+
+      if (tipo !== undefined && tipo !== 'entrada' && tipo !== 'saida') {
+        return res.status(400).json({ error: 'Tipo inválido. Deve ser entrada ou saida.' });
+      }
+
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        try {
+          const updated = await storage.updateCategoriaFinanceira(id, req.barbeiroId, {
+            ...(nome !== undefined && { nome }),
+            ...(tipo !== undefined && { tipo })
+          });
+          if (!updated) return res.status(404).json({ error: 'Categoria não encontrada.' });
+          return res.json(updated);
+        } catch (err: any) {
+          if (err?.code === '23505') {
+            return res.status(400).json({ error: 'Já existe uma categoria com este nome.' });
+          }
+          throw err;
+        }
+      }
+
       const db = loadDB();
       const index = db.categorias_financeiras.findIndex(c => c.id === id);
       if (index === -1) {
@@ -1182,7 +1528,7 @@ async function startServer() {
       const item = db.categorias_financeiras[index];
       if (nome !== undefined) {
         // Check for duplicates
-        const exists = db.categorias_financeiras.some(c => 
+        const exists = db.categorias_financeiras.some(c =>
           c.id !== id && c.nome.toLowerCase() === nome.toLowerCase() && c.tipo === (tipo || item.tipo)
         );
         if (exists) {
@@ -1191,25 +1537,29 @@ async function startServer() {
         item.nome = nome;
       }
       if (tipo !== undefined) {
-        if (tipo !== 'entrada' && tipo !== 'saida') {
-          return res.status(400).json({ error: 'Tipo inválido. Deve ser entrada ou saida.' });
-        }
         item.tipo = tipo;
       }
       item.updated_at = new Date().toISOString();
 
       saveDB(db);
       res.json(item);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      res.status(500).json({ error: 'Erro ao editar categoria financeira.' });
+      res.status(500).json({ error: error?.message || 'Erro ao editar categoria financeira.' });
     }
   });
 
   // Delete a category
-  app.delete('/api/admin/categorias-financeiras/:id', requireAdmin, (req, res) => {
+  app.delete('/api/admin/categorias-financeiras/:id', requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
+
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        const ok = await storage.deleteCategoriaFinanceira(id, req.barbeiroId);
+        if (!ok) return res.status(404).json({ error: 'Categoria não encontrada.' });
+        return res.json({ success: true, message: 'Categoria financeira excluída.' });
+      }
+
       const db = loadDB();
       const index = db.categorias_financeiras.findIndex(c => c.id === id);
       if (index === -1) {
@@ -1219,28 +1569,83 @@ async function startServer() {
       db.categorias_financeiras.splice(index, 1);
       saveDB(db);
       res.json({ success: true, message: 'Categoria financeira excluída.' });
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      res.status(500).json({ error: 'Erro ao excluir categoria financeira.' });
+      res.status(500).json({ error: error?.message || 'Erro ao excluir categoria financeira.' });
     }
   });
 
 
-  // 7. EXPEDIENTE & BLOCKS GET/POST
-  app.get('/api/admin/configuracoes', requireAdmin, (req, res) => {
-    const db = loadDB();
-    res.json({
-      expedientes: db.expedientes.sort((a,b) => a.dia_semana - b.dia_semana),
-      bloqueios: db.bloqueios.sort((a,b) => a.data.localeCompare(b.data))
-    });
+  // 6b. EQUIPE (profissionais) CRUD
+  // Não existe DELETE de propósito: agendamentos.profissional_id é NOT NULL e
+  // apagar quebraria o histórico financeiro. Desativar (ativo=false) esconde
+  // dos novos agendamentos e preserva tudo que já passou.
+  app.get('/api/admin/profissionais', requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      if (!req.barbeiroId) return res.status(401).json({ error: 'Não autenticado.' });
+      const list = await storage.listProfissionais(req.barbeiroId);
+      res.json(list);
+    } catch (error) {
+      console.error('[GET /api/admin/profissionais]', error);
+      res.status(500).json({ error: 'Erro ao carregar a equipe.' });
+    }
   });
 
-  // Edit expediente day
-  app.post('/api/admin/expedientes/intervalo-padrao', requireAdmin, validate(schemas.patchIntervaloPadrao), (req, res) => {
+  app.post('/api/admin/profissionais', requireAdmin, validate(schemas.createProfissional), async (req: AuthRequest, res) => {
+    try {
+      if (!req.barbeiroId) return res.status(401).json({ error: 'Não autenticado.' });
+      const { nome, telefone, bio, avatar_url } = req.body;
+      const novo = await storage.createProfissional(req.barbeiroId, { nome, telefone, bio, avatar_url });
+      res.status(201).json(novo);
+    } catch (error: any) {
+      console.error('[POST /api/admin/profissionais]', error);
+      res.status(error?.status || 500).json({ error: error?.message || 'Erro ao criar barbeiro.' });
+    }
+  });
+
+  app.patch('/api/admin/profissionais/:id', requireAdmin, validate(schemas.patchProfissional), async (req: AuthRequest, res) => {
+    try {
+      if (!req.barbeiroId) return res.status(401).json({ error: 'Não autenticado.' });
+      const atualizado = await storage.updateProfissional(req.params.id, req.barbeiroId, req.body);
+      if (!atualizado) return res.status(404).json({ error: 'Barbeiro não encontrado.' });
+      res.json(atualizado);
+    } catch (error: any) {
+      console.error('[PATCH /api/admin/profissionais/:id]', error);
+      res.status(error?.status || 500).json({ error: error?.message || 'Erro ao atualizar barbeiro.' });
+    }
+  });
+
+  // 7. EXPEDIENTE & BLOCKS GET/POST
+  app.get('/api/admin/configuracoes', requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        const config = await storage.listConfiguracoes(req.barbeiroId);
+        return res.json(config);
+      }
+      const db = loadDB();
+      res.json({
+        expedientes: db.expedientes.sort((a,b) => a.dia_semana - b.dia_semana),
+        bloqueios: db.bloqueios.sort((a,b) => a.data.localeCompare(b.data))
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'Erro ao carregar configurações.' });
+    }
+  });
+
+  // Apply default lunch interval to every weekday
+  app.post('/api/admin/expedientes/intervalo-padrao', requireAdmin, validate(schemas.patchIntervaloPadrao), async (req: AuthRequest, res) => {
     try {
       const { intervalo_inicio, intervalo_fim } = req.body;
-      const db = loadDB();
+      // sem profissional_id = aplica a todos os barbeiros da barbearia
+      const profissionalId = req.query.profissional_id as string | undefined;
 
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        await storage.applyDefaultInterval(req.barbeiroId, intervalo_inicio || null, intervalo_fim || null, profissionalId);
+        return res.json({ success: true, message: 'Intervalo padrão atualizado para todos os dias.' });
+      }
+
+      const db = loadDB();
       db.expedientes.forEach(ex => {
         ex.intervalo_inicio = intervalo_inicio || null;
         ex.intervalo_fim = intervalo_fim || null;
@@ -1249,19 +1654,31 @@ async function startServer() {
 
       saveDB(db);
       res.json({ success: true, message: 'Intervalo padrão atualizado para todos os dias.' });
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      res.status(500).json({ error: 'Erro ao cadastrar o intervalo padrão.' });
+      res.status(500).json({ error: error?.message || 'Erro ao cadastrar o intervalo padrão.' });
     }
   });
 
   // Edit expediente day
-  app.patch('/api/admin/expedientes/:id', requireAdmin, validate(schemas.patchExpediente), (req, res) => {
+  app.patch('/api/admin/expedientes/:id', requireAdmin, validate(schemas.patchExpediente), async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
       const { hora_inicio, hora_fim, intervalo_inicio, intervalo_fim, ativo } = req.body;
-      const db = loadDB();
 
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        const updated = await storage.updateExpediente(id, req.barbeiroId, {
+          ...(hora_inicio !== undefined && { hora_inicio }),
+          ...(hora_fim !== undefined && { hora_fim }),
+          ...(intervalo_inicio !== undefined && { intervalo_inicio }),
+          ...(intervalo_fim !== undefined && { intervalo_fim }),
+          ...(ativo !== undefined && { ativo: Boolean(ativo) })
+        });
+        if (!updated) return res.status(404).json({ error: 'Configuração de expediente não encontrada.' });
+        return res.json(updated);
+      }
+
+      const db = loadDB();
       const item = db.expedientes.find(ex => ex.id === id);
       if (!item) return res.status(404).json({ error: 'Configuração de expediente não encontrada.' });
 
@@ -1274,24 +1691,33 @@ async function startServer() {
 
       saveDB(db);
       res.json(item);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      res.status(500).json({ error: 'Erro ao atualizar horário de expediente.' });
+      res.status(500).json({ error: error?.message || 'Erro ao atualizar horário de expediente.' });
     }
   });
 
   // Add block
-  app.post('/api/admin/bloqueios', requireAdmin, validate(schemas.createBloqueio), (req, res) => {
+  app.post('/api/admin/bloqueios', requireAdmin, validate(schemas.createBloqueio), async (req: AuthRequest, res) => {
     try {
-      const { data, hora_inicio, hora_fim, motivo } = req.body;
+      const { data, hora_inicio, hora_fim, motivo, profissional_id } = req.body;
       if (!data || !motivo) {
         return res.status(400).json({ error: 'Data e motivo do bloqueio são obrigatórios.' });
+      }
+
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        const novo = await storage.createBloqueio(req.barbeiroId, {
+          data, hora_inicio: hora_inicio || null, hora_fim: hora_fim || null, motivo,
+          profissional_id: profissional_id ?? null
+        });
+        return res.status(201).json(novo);
       }
 
       const db = loadDB();
       const novo: Bloqueio = {
         id: `bl-${Date.now()}`,
         barbeiro_id: 'b-1',
+        profissional_id: profissional_id ?? null,
         data,
         hora_inicio: hora_inicio || null,
         hora_fim: hora_fim || null,
@@ -1303,18 +1729,24 @@ async function startServer() {
       db.bloqueios.push(novo);
       saveDB(db);
       res.status(201).json(novo);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      res.status(500).json({ error: 'Erro ao criar bloqueio.' });
+      res.status(500).json({ error: error?.message || 'Erro ao criar bloqueio.' });
     }
   });
 
   // Delete block
-  app.delete('/api/admin/bloqueios/:id', requireAdmin, (req, res) => {
+  app.delete('/api/admin/bloqueios/:id', requireAdmin, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
-      const db = loadDB();
 
+      if (isSupabaseConfigured() && req.barbeiroId) {
+        const ok = await storage.deleteBloqueio(id, req.barbeiroId);
+        if (!ok) return res.status(404).json({ error: 'Bloqueio não encontrado.' });
+        return res.json({ success: true, message: 'Bloqueio removido com sucesso.' });
+      }
+
+      const db = loadDB();
       const originalLength = db.bloqueios.length;
       db.bloqueios = db.bloqueios.filter(b => b.id !== id);
 
@@ -1324,9 +1756,9 @@ async function startServer() {
 
       saveDB(db);
       res.json({ success: true, message: 'Bloqueio removido com sucesso.' });
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      res.status(500).json({ error: 'Erro ao remover bloqueio.' });
+      res.status(500).json({ error: error?.message || 'Erro ao remover bloqueio.' });
     }
   });
 

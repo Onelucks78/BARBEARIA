@@ -12,6 +12,10 @@ const date = z.string()
   .refine(s => /^\d{4}-\d{2}-\d{2}/.test(s), 'Data deve começar com YYYY-MM-DD.')
   .transform(s => s.slice(0, 10)); // aceita "YYYY-MM-DD" e "YYYY-MM-DDTHH:MM:SS..." → normaliza
 const time = z.string().regex(/^\d{2}:\d{2}/, 'Horário deve ser HH:MM.');
+const imageUrl = z.string().refine(
+  val => !val || val.startsWith('http://') || val.startsWith('https://') || val.startsWith('data:image/') || val.startsWith('/'),
+  { message: 'URL de imagem inválida.' }
+).nullable().optional();
 
 export const schemas = {
   // ---------- AUTH ----------
@@ -37,12 +41,14 @@ export const schemas = {
   freeSlotsQuery: z.object({
     data: date,
     servico_id: z.string().min(1),
+    profissional_id: z.string().uuid('Selecione um barbeiro.'),
     all: z.enum(['true', 'false']).optional()
   }),
 
   // ---------- AGENDAMENTO (visitante) ----------
   createBooking: z.object({
     servico_id: z.string().min(1), // aceita UUID único, CSV ou id legado
+    profissional_id: z.string().uuid('Selecione um barbeiro.'),
     data: date,
     horario: time,
     nome_cliente: z.string().min(2).max(120),
@@ -55,7 +61,7 @@ export const schemas = {
     email: z.string().email(),
     nome: z.string().min(2).max(120).optional(),
     telefone: phone.optional(),
-    foto_url: z.string().url().optional()
+    foto_url: imageUrl
   }),
 
   // ---------- ADMIN: SERVIÇOS ----------
@@ -64,14 +70,14 @@ export const schemas = {
     descricao: z.string().max(500).default(''),
     preco: z.number().nonnegative(),
     duracao_minutos: z.number().int().positive().max(600),
-    imagem_url: z.string().url().optional()
+    imagem_url: imageUrl
   }),
   patchService: z.object({
     nome: z.string().min(2).max(120).optional(),
     descricao: z.string().max(500).optional(),
     preco: z.number().nonnegative().optional(),
     duracao_minutos: z.number().int().positive().max(600).optional(),
-    imagem_url: z.string().url().optional(),
+    imagem_url: imageUrl,
     ativo: z.boolean().optional(),
     ordem: z.number().int().optional()
   }).refine(o => Object.keys(o).length > 0, 'Payload vazio.'),
@@ -82,14 +88,14 @@ export const schemas = {
     descricao: z.string().max(500).default(''),
     preco: z.number().nonnegative(),
     estoque: z.number().int().nonnegative(),
-    imagem_url: z.string().url().optional()
+    imagem_url: imageUrl
   }),
   patchProduct: z.object({
     nome: z.string().min(2).max(120).optional(),
     descricao: z.string().max(500).optional(),
     preco: z.number().nonnegative().optional(),
     estoque: z.number().int().nonnegative().optional(),
-    imagem_url: z.string().url().optional(),
+    imagem_url: imageUrl,
     ativo: z.boolean().optional(),
     ordem: z.number().int().optional()
   }).refine(o => Object.keys(o).length > 0, 'Payload vazio.'),
@@ -119,6 +125,7 @@ export const schemas = {
   }).refine(o => Object.keys(o).length > 0, 'Payload vazio.'),
 
   // ---------- ADMIN: FINANCEIRO ----------
+  // profissional_id null/ausente = lançamento da casa (produto, aluguel, despesa)
   createLancamento: z.object({
     tipo: z.enum(['entrada','saida']),
     descricao: z.string().max(500).optional(),
@@ -126,7 +133,8 @@ export const schemas = {
     categoria: z.string().max(120).optional(),
     forma_pagamento: z.enum(['dinheiro','pix','cartao','outro']),
     data: date,
-    produto_id: z.string().uuid().optional()
+    produto_id: z.string().uuid().optional(),
+    profissional_id: z.string().uuid().nullable().optional()
   }),
   patchLancamento: z.object({
     tipo: z.enum(['entrada','saida']).optional(),
@@ -134,7 +142,8 @@ export const schemas = {
     valor: z.number().nonnegative().optional(),
     categoria: z.string().max(120).optional(),
     forma_pagamento: z.enum(['dinheiro','pix','cartao','outro']).optional(),
-    data: date.optional()
+    data: date.optional(),
+    profissional_id: z.string().uuid().nullable().optional()
   }).refine(o => Object.keys(o).length > 0, 'Payload vazio.'),
 
   // ---------- ADMIN: CATEGORIAS FINANCEIRAS ----------
@@ -159,17 +168,36 @@ export const schemas = {
     intervalo_inicio: time.nullable().optional(),
     intervalo_fim: time.nullable().optional()
   }),
+  // profissional_id null/ausente = fecha a barbearia toda (feriado)
   createBloqueio: z.object({
     data: date,
     hora_inicio: time.nullable().optional(),
     hora_fim: time.nullable().optional(),
-    motivo: z.string().min(2).max(200)
+    motivo: z.string().min(2).max(200),
+    profissional_id: z.string().uuid().nullable().optional()
   }),
+
+  // ---------- ADMIN: PROFISSIONAIS (equipe) ----------
+  createProfissional: z.object({
+    nome: z.string().min(2).max(120),
+    telefone: phone.optional(),
+    bio: z.string().max(500).optional(),
+    avatar_url: imageUrl
+  }),
+  patchProfissional: z.object({
+    nome: z.string().min(2).max(120).optional(),
+    telefone: phone.optional(),
+    bio: z.string().max(500).optional(),
+    avatar_url: imageUrl,
+    ativo: z.boolean().optional(),
+    ordem: z.number().int().optional()
+  }).refine(o => Object.keys(o).length > 0, 'Payload vazio.'),
 
   // ---------- DASHBOARD ----------
   dashboardQuery: z.object({
     start_date: date.optional(),
     end_date: date.optional(),
-    is_today: z.enum(['true','false']).optional()
+    is_today: z.enum(['true','false']).optional(),
+    profissional_id: z.string().uuid().optional()
   })
 };

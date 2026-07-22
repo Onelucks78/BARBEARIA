@@ -36,13 +36,19 @@ export async function authedFetch(input: string, options: FetchOptions = {}): Pr
   const { data } = await supabase.auth.getSession();
   const token = data?.session?.access_token;
   const headers: Record<string, string> = {
-    ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+    ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
     ...options.headers
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  let body: any = undefined;
+  if (options.body !== undefined) {
+    body = typeof options.body === 'string' ? options.body : JSON.stringify(options.body);
+  }
+
   return fetch(input, {
     method: options.method || 'GET',
     headers,
-    body: options.body ? JSON.stringify(options.body) : undefined
+    body
   });
 }

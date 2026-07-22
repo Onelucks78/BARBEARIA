@@ -6,7 +6,13 @@ type Source = 'body' | 'query' | 'params';
 export function validate<T>(schema: ZodSchema<T>, source: Source = 'body') {
   return (req: Request, res: Response, next: NextFunction) => {
     try {
-      const data = schema.parse(req[source]);
+      let raw = req[source];
+      if (source === 'body' && typeof raw === 'string') {
+        try {
+          raw = JSON.parse(raw);
+        } catch {}
+      }
+      const data = schema.parse(raw);
       // Replace with parsed/coerced data so handlers receive clean types
       (req as any)[source] = data;
       next();

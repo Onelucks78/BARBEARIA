@@ -13,6 +13,21 @@ export interface Barbeiro {
   updated_at: string;
 }
 
+// Quem corta o cabelo. Não confundir com Barbeiro, que é a CONTA/barbearia.
+// Na interface o usuário lê sempre "Barbeiro"; o nome interno evita a colisão.
+export interface Profissional {
+  id: string;
+  barbeiro_id: string; // a barbearia a que pertence
+  nome: string;
+  avatar_url: string | null;
+  telefone: string;
+  bio: string;
+  ativo: boolean;
+  ordem: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Servico {
   id: string;
   barbeiro_id: string;
@@ -58,6 +73,7 @@ export interface Cliente {
 export interface Agendamento {
   id: string;
   barbeiro_id: string;
+  profissional_id: string; // quem vai atender
   servico_id: string;
   cliente_id: string | null; // Nullable if booked without registration
   nome_cliente: string;
@@ -74,6 +90,7 @@ export interface Agendamento {
 export interface Expediente {
   id: string;
   barbeiro_id: string;
+  profissional_id: string;
   dia_semana: number; // 0-6 (0 = Domingo)
   hora_inicio: string; // "HH:MM"
   hora_fim: string; // "HH:MM"
@@ -87,6 +104,7 @@ export interface Expediente {
 export interface Bloqueio {
   id: string;
   barbeiro_id: string;
+  profissional_id: string | null; // null = fecha a barbearia toda (feriado)
   data: string; // YYYY-MM-DD
   hora_inicio: string | null; // "HH:MM" (null means full day)
   hora_fim: string | null; // "HH:MM" (null means full day)
@@ -98,6 +116,7 @@ export interface Bloqueio {
 export interface LancamentoFinanceiro {
   id: string;
   barbeiro_id: string;
+  profissional_id: string | null; // null = da casa (produto, aluguel, despesa)
   tipo: 'entrada' | 'saida';
   descricao: string;
   valor: number;
@@ -140,4 +159,11 @@ export interface DashboardStats {
   agendadosCount: number;
   dailyChartData: { data: string; total: number; receitas: number; despesas: number; lucro: number }[];
   history: LancamentoFinanceiro[];
+  // Quebra de faturamento por barbeiro no período. profissional_id null = da casa.
+  porProfissional: {
+    profissional_id: string | null;
+    nome: string;
+    receita: number;
+    atendimentos: number;
+  }[];
 }
