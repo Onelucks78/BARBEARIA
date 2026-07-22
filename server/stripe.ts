@@ -30,7 +30,7 @@ export function getPlanos(): PlanDefinition[] {
       id: 'essential',
       nome: 'Essential',
       priceId: priceEssential,
-      valor: 97,
+      valor: 109.99,
       categorias: ['corte'],
       destaques: ['Cortes ilimitados', 'Agendamento prioritário', 'Sem taxa de reagendamento']
     },
@@ -38,7 +38,7 @@ export function getPlanos(): PlanDefinition[] {
       id: 'premium',
       nome: 'Premium',
       priceId: pricePremium,
-      valor: 147,
+      valor: 159.99,
       categorias: ['corte', 'barba'],
       destaques: ['Tudo do Essential', 'Barba ilimitada', 'Produtos com 10% de desconto']
     },
@@ -46,7 +46,7 @@ export function getPlanos(): PlanDefinition[] {
       id: 'exclusive',
       nome: 'Exclusive',
       priceId: priceExclusive,
-      valor: 197,
+      valor: 199.99,
       categorias: ['corte', 'barba', 'sobrancelha', 'penteado'],
       destaques: ['Tudo do Premium', 'Sobrancelha e penteado inclusos', 'Atendimento VIP express', 'Produtos com 20% de desconto']
     }

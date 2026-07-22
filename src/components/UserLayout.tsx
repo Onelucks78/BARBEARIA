@@ -85,6 +85,8 @@ export default function UserLayout({
   const [cardExpiry, setCardExpiry] = useState('');
   const [cardCvv, setCardCvv] = useState('');
   const [isSubscribing, setIsSubscribing] = useState(false);
+  const [redirectingPlan, setRedirectingPlan] = useState<string | null>(null);
+  const [isOpeningPortal, setIsOpeningPortal] = useState(false);
   const [checkoutSuccess, setCheckoutSuccess] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
 
@@ -190,6 +192,47 @@ export default function UserLayout({
     } catch (e) {
       console.error(e);
       alert('Erro de rede ao cancelar.');
+    }
+  const handleStartStripeCheckout = async (planoKey: string) => {
+    setRedirectingPlan(planoKey);
+    setCheckoutError('');
+    try {
+      const res = await fetch('/api/stripe/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          planId: planoKey,
+          email: loggedClient.email,
+          nome: loggedClient.nome
+        })
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setCheckoutError(data.error || 'Erro ao gerar checkout seguro da Stripe.');
+        setRedirectingPlan(null);
+      }
+    } catch (err) {
+      setCheckoutError('Falha de conexão com a Stripe.');
+      setRedirectingPlan(null);
+    }
+  };
+
+  const handleOpenStripePortal = async () => {
+    setIsOpeningPortal(true);
+    try {
+      const res = await fetch(`/api/stripe/portal?email=${encodeURIComponent(loggedClient.email)}`);
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        alert(data.error || 'Não foi possível acessar o portal de faturamento.');
+        setIsOpeningPortal(false);
+      }
+    } catch {
+      alert('Erro de conexão ao abrir portal Stripe.');
+      setIsOpeningPortal(false);
     }
   };
 
@@ -657,13 +700,20 @@ export default function UserLayout({
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-border flex justify-end">
+                <div className="pt-4 border-t border-border flex items-center justify-between gap-4 flex-wrap">
+                  <button
+                    onClick={handleOpenStripePortal}
+                    disabled={isOpeningPortal}
+                    className="text-primary hover:underline text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
+                  >
+                    {isOpeningPortal ? 'Abrindo Portal Stripe...' : '💳 Gerenciar Cartão & Faturas (Stripe)'}
+                  </button>
                   <button onClick={handleCancelSubscription} className="text-red-500 hover:text-red-600 text-xs uppercase tracking-widest font-bold py-2 px-4 border border-red-500/30 hover:bg-red-500/10 rounded-xl transition cursor-pointer">
                     Cancelar Assinatura
                   </button>
                 </div>
               </div>
-            ) : !selectedPlano ? (
+            ) : (
               <div className="space-y-4">
                 {checkoutError && (
                   <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-500 text-xs text-center rounded-xl font-medium">
@@ -691,90 +741,19 @@ export default function UserLayout({
                       </ul>
                       <button
                         type="button"
-                        onClick={() => { setCheckoutError(''); setSelectedPlano(plano); }}
-                        className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground text-xs tracking-wider uppercase font-bold px-4 py-3 rounded-xl transition shadow-md cursor-pointer text-gold-glow mt-auto"
+                        disabled={redirectingPlan === plano.key}
+                        onClick={() => handleStartStripeCheckout(plano.key)}
+                        className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground text-xs tracking-wider uppercase font-bold px-4 py-3 rounded-xl transition shadow-md cursor-pointer text-gold-glow mt-auto flex items-center justify-center gap-2"
                       >
-                        Escolher {plano.nome}
+                        {redirectingPlan === plano.key ? 'Redirecionando Stripe...' : `Assinar ${plano.nome}`}
                       </button>
                     </div>
                   ))}
                 </div>
               </div>
-            ) : (
-              <form onSubmit={handleSubscribe} className="space-y-4">
-                {checkoutSuccess && (
-                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 text-xs text-center rounded-xl flex items-center justify-center gap-1.5 font-bold">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500" /> ASSINATURA REALIZADA COM SUCESSO!
-                  </div>
-                )}
-                {checkoutError && (
-                  <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-500 text-xs text-center rounded-xl font-medium">
-                    {checkoutError}
-                  </div>
-                )}
-
-                <div className="bg-card/80 p-6 rounded-2xl border border-border/80 space-y-4 shadow-sm">
-                  <div className="flex items-center justify-between pb-2 border-b border-border/60">
-                    <button type="button" onClick={() => setSelectedPlano(null)} className="text-xs text-muted-foreground hover:text-primary uppercase tracking-wider cursor-pointer font-bold">
-                      ← Trocar plano
-                    </button>
-                    <span className="text-primary text-lg font-bold">R$ {formatPreco(selectedPlano.preco)} <span className="text-xs text-muted-foreground font-normal">/ mês</span></span>
-                  </div>
-                  <p className="text-center text-xs text-muted-foreground uppercase tracking-widest -mt-1 font-bold">Plano {selectedPlano.nome}</p>
-
-                  {/* Simulated Card Design */}
-                  <div className="w-full h-40 bg-gradient-to-br from-primary via-primary/80 to-primary/60 rounded-xl p-5 flex flex-col justify-between shadow-lg relative overflow-hidden select-none text-primary-foreground">
-                    <div className="absolute right-0 top-0 w-24 h-24 bg-white/10 rounded-full -mr-8 -mt-8 pointer-events-none" />
-                    <div className="flex justify-between items-start">
-                      <span className="font-bold tracking-wider text-sm">{selectedPlano.nome}</span>
-                      <span className="text-xs opacity-80 font-bold">CRÉDITO</span>
-                    </div>
-                    <div className="text-base tracking-[0.25em] font-mono font-bold py-1">
-                      {cardNumber ? cardNumber.replace(/(\d{4})/g, '$1 ').trim() : '•••• •••• •••• ••••'}
-                    </div>
-                    <div className="flex justify-between items-end">
-                      <div>
-                        <span className="text-[7.5px] uppercase tracking-wider opacity-70 block">Titular</span>
-                        <span className="text-xs uppercase font-bold tracking-wider truncate max-w-[120px]">{cardName || 'NOME NO CARTÃO'}</span>
-                      </div>
-                      <div>
-                        <span className="text-[7.5px] uppercase tracking-wider opacity-70 block">Validade</span>
-                        <span className="text-xs font-bold">{cardExpiry || 'MM/AA'}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3.5 text-xs">
-                    <div className="space-y-1">
-                      <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground block">Número do Cartão:</label>
-                      <input type="text" maxLength={16} required placeholder="5544 3322 1100 9988" value={cardNumber} onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, ''))} className="w-full bg-background border border-border/80 rounded-xl px-3.5 py-2.5 text-foreground focus:outline-none focus:border-primary" />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground block">Nome Impresso no Cartão:</label>
-                      <input type="text" required placeholder="NOME DO TITULAR" value={cardName} onChange={(e) => setCardName(e.target.value.toUpperCase())} className="w-full bg-background border border-border/80 rounded-xl px-3.5 py-2.5 text-foreground focus:outline-none focus:border-primary" />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground block">Validade (MM/AA):</label>
-                        <input type="text" maxLength={5} required placeholder="12/29" value={cardExpiry} onChange={(e) => {
-                          let val = e.target.value.replace(/\D/g, '');
-                          if (val.length > 2) val = val.substring(0,2) + '/' + val.substring(2,4);
-                          setCardExpiry(val);
-                        }} className="w-full bg-background border border-border/80 rounded-xl px-3.5 py-2.5 text-foreground focus:outline-none focus:border-primary" />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs uppercase tracking-wider font-bold text-muted-foreground block">CVV:</label>
-                        <input type="password" maxLength={3} required placeholder="123" value={cardCvv} onChange={(e) => setCardCvv(e.target.value.replace(/\D/g, ''))} className="w-full bg-background border border-border/80 rounded-xl px-3.5 py-2.5 text-foreground focus:outline-none focus:border-primary" />
-                      </div>
-                    </div>
-                  </div>
-
-                  <button type="submit" disabled={isSubscribing} className="w-full bg-gradient-to-r from-primary via-primary/90 to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground font-bold text-xs uppercase tracking-wider py-3.5 rounded-xl transition shadow-md cursor-pointer text-gold-glow">
-                    {isSubscribing ? 'Processando Assinatura...' : `Confirmar Assinatura ${selectedPlano.nome}`}
-                  </button>
-                </div>
-              </form>
             )}
+          </div>
+        )}
           </div>
         )}
 
