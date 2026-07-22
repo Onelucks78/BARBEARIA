@@ -77,6 +77,29 @@ export default function UserLayout({
   const currentPlano = PLANOS.find(p => p.key === (subscription?.plan || '').toLowerCase());
   const planoDisplayName = currentPlano ? currentPlano.nome : (subscription?.plan || 'VIP');
 
+  const getClientPlanProgress = () => {
+    if (!subscription || subscription.status !== 'ativo' || !subscription.renews_at) {
+      return null;
+    }
+    const renewsDate = new Date(subscription.renews_at);
+    const now = new Date();
+    const startDate = new Date(renewsDate);
+    startDate.setDate(startDate.getDate() - 30);
+
+    const totalTime = renewsDate.getTime() - startDate.getTime();
+    const elapsedTime = Math.max(0, now.getTime() - startDate.getTime());
+    const percent = Math.min(100, Math.round((elapsedTime / totalTime) * 100)) || 10;
+    const remainingDays = Math.max(0, Math.ceil((renewsDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+    
+    return {
+      percent,
+      remainingDays,
+      cycleEnd: renewsDate.toLocaleDateString('pt-BR')
+    };
+  };
+
+  const clientPlanStats = getClientPlanProgress();
+
   // Stripe Checkout & Portal States
   const [redirectingPlan, setRedirectingPlan] = useState<string | null>(null);
   const [isOpeningPortal, setIsOpeningPortal] = useState(false);
@@ -322,9 +345,45 @@ export default function UserLayout({
           </nav>
         </div>
 
-        <button onClick={onLogout} className="w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold text-muted-foreground hover:text-red-600 dark:text-red-400 hover:bg-red-100 dark:bg-red-950/15 border border-border hover:border-red-200 dark:border-red-900/30 transition duration-150 flex items-center gap-2.5 uppercase tracking-wider cursor-pointer font-bold">
-          <LogOut className="w-4 h-4" /> Sair da Conta
-        </button>
+        {/* Plan Info Widget na Sidebar do Cliente */}
+        <div className="pt-4 border-t border-border space-y-3">
+          <div 
+            onClick={() => setActiveTab('assinatura')}
+            className="p-3 bg-card/60 border border-border/70 hover:border-primary/40 rounded-xl transition-all duration-200 cursor-pointer group"
+          >
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs uppercase tracking-wider font-bold text-primary flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5 animate-pulse text-primary" /> {subscription?.status === 'ativo' ? `Plano ${planoDisplayName}` : 'Sem Plano VIP'}
+              </span>
+              <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${subscription?.status === 'ativo' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/30' : 'bg-muted text-muted-foreground'}`}>
+                {subscription?.status === 'ativo' ? 'Ativo' : 'Comum'}
+              </span>
+            </div>
+            
+            {subscription?.status === 'ativo' && clientPlanStats ? (
+              <>
+                <div className="w-full bg-background h-1.5 rounded-full overflow-hidden my-2 border border-border/40">
+                  <div 
+                    className="bg-gradient-to-r from-primary/60 via-primary to-primary h-full rounded-full transition-all duration-500"
+                    style={{ width: `${clientPlanStats.percent}%` }}
+                  />
+                </div>
+                <div className="flex justify-between items-center text-[10px] text-muted-foreground font-medium">
+                  <span>Renovação: {clientPlanStats.cycleEnd}</span>
+                  <span className="text-primary font-bold">{clientPlanStats.remainingDays}d restantes</span>
+                </div>
+              </>
+            ) : (
+              <p className="text-[10px] text-muted-foreground mt-1 leading-tight">
+                Clique para ver os benefícios dos planos mensais ilimitados.
+              </p>
+            )}
+          </div>
+
+          <button onClick={onLogout} className="w-full text-left px-3.5 py-2.5 rounded-xl text-xs font-semibold text-muted-foreground hover:text-red-600 dark:text-red-400 hover:bg-red-100 dark:bg-red-950/15 border border-border hover:border-red-200 dark:border-red-900/30 transition duration-150 flex items-center gap-2.5 uppercase tracking-wider cursor-pointer font-bold">
+            <LogOut className="w-4 h-4" /> Sair da Conta
+          </button>
+        </div>
       </aside>
 
       {/* Main Content Body Area (CORPO DA ABA CLIENTES MELHORADO) */}
