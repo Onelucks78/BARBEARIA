@@ -3,7 +3,8 @@ import Stripe from 'stripe';
 function getStripe(): Stripe | null {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) return null;
-  return new Stripe(key, { apiVersion: '2025-06-15.basil' as any });
+  // Sem apiVersion fixa: usa a versão padrão fixada pelo SDK instalado (sempre válida).
+  return new Stripe(key);
 }
 
 export function isStripeConfigured(): boolean {
@@ -163,5 +164,5 @@ export function constructSubscriptionInfo(event: {
 
 export function getStripeClientForWebhook(): Stripe | null {
   if (!process.env.STRIPE_SECRET_KEY) return null;
-  return new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2025-06-15.basil' as any });
+  return new Stripe(process.env.STRIPE_SECRET_KEY);
 }

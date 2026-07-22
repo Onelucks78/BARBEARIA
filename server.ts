@@ -5,8 +5,7 @@ loadEnv({ path: '.env.local', override: true });
 import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import { randomUUID } from 'crypto';
-import { createServer as createViteServer } from 'vite';
-import { 
+import {
   loadDB, 
   saveDB, 
   calculateAvailableSlots,
@@ -33,23 +32,6 @@ import * as stripe from './server/stripe.ts';
 // (substituído por server/auth.ts que verifica JWT real do Supabase)
 
 export async function createApp() {
-  // Test connectivity
-  if (isSupabaseConfigured()) {
-    try {
-      console.log('[Supabase] Testando conectividade...');
-      const client = serviceClient() || anonClient();
-      if (client) {
-        // Testa consulta rápida
-        const { error } = await client.from('barbeiros').select('id').limit(1);
-        if (error) throw error;
-        console.log('[Supabase] Conectado com sucesso!');
-      }
-    } catch (err: any) {
-      console.warn('[Supabase] Conectividade indisponível. Ativando fallback local offline (db.json).');
-      setSupabaseOffline(true);
-    }
-  }
-
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
@@ -133,7 +115,7 @@ export async function createApp() {
 
           const stripeClient2 = stripe.getStripeClientForWebhook();
           if (stripeClient2) {
-            const customer = await stripeClient2.customers.retrieve(customerId);
+            const customer: any = await stripeClient2.customers.retrieve(customerId);
             if (customer && !customer.deleted && customer.email) {
               const email = customer.email;
               const client = serviceClient();
@@ -166,7 +148,7 @@ export async function createApp() {
           const customerId = sub.customer as string;
           const stripeClient3 = stripe.getStripeClientForWebhook();
           if (stripeClient3) {
-            const customer = await stripeClient3.customers.retrieve(customerId);
+            const customer: any = await stripeClient3.customers.retrieve(customerId);
             if (customer && !customer.deleted && customer.email) {
               const client = serviceClient();
               if (client) {
@@ -690,11 +672,34 @@ export async function createApp() {
       }
 
       // Em produção, o front já mandou o JWT no header Authorization e
-      // attachUser preencheu req.userId. Aqui só retornamos o barbeiro.
-      const db = loadDB();
-      const barber = db.barbeiros[0];
-      barber.ultimo_acesso_em = new Date().toISOString();
-      saveDB(db);
+      // attachUser preencheu req.userId. Buscamos o barbeiro no Supabase.
+      // Só caímos no db.json (seed) quando o Supabase não está configurado
+      // (dev/preview) — nunca em serverless, onde o FS é read-only.
+      let barber: any = null;
+      if (isSupabaseConfigured()) {
+        const client = serviceClient();
+        if (client) {
+          const { data } = await client
+            .from('barbeiros')
+            .select('id, nome, email, avatar_url, nome_barbearia')
+            .eq('ativo', true)
+            .limit(1)
+            .single();
+          barber = data;
+          if (barber) {
+            await client
+              .from('barbeiros')
+              .update({ ultimo_acesso_em: new Date().toISOString() })
+              .eq('id', barber.id);
+          }
+        }
+      }
+      if (!barber) {
+        const db = loadDB();
+        barber = db.barbeiros[0];
+        barber.ultimo_acesso_em = new Date().toISOString();
+        saveDB(db);
+      }
 
       return res.json({
         barbeiro: {
@@ -1768,6 +1773,8 @@ export async function createApp() {
 
   if (!process.env.VERCEL) {
     if (process.env.NODE_ENV !== 'production') {
+      // Import dinâmico: mantém o Vite (dep enorme) fora do bundle serverless da Vercel.
+      const { createServer: createViteServer } = await import('vite');
       const vite = await createViteServer({
         server: { middlewareMode: true },
         appType: 'spa',
@@ -1786,6 +1793,25 @@ export async function createApp() {
 }
 
 async function startServer() {
+  // Pré-checagem de conectividade — SÓ no servidor local (nunca em serverless).
+  // Se o Supabase estiver inacessível, ativa o fallback offline (db.json).
+  // Em serverless (Vercel) isso NÃO roda: manter o Supabase como fonte única
+  // evita degradar silenciosamente para dados-semente num FS efêmero.
+  if (isSupabaseConfigured()) {
+    try {
+      console.log('[Supabase] Testando conectividade...');
+      const client = serviceClient() || anonClient();
+      if (client) {
+        const { error } = await client.from('barbeiros').select('id').limit(1);
+        if (error) throw error;
+        console.log('[Supabase] Conectado com sucesso!');
+      }
+    } catch (err: any) {
+      console.warn('[Supabase] Conectividade indisponível. Ativando fallback local offline (db.json).');
+      setSupabaseOffline(true);
+    }
+  }
+
   const app = await createApp();
   const PORT = Number(process.env.PORT) || 3000;
   app.listen(PORT, '0.0.0.0', () => {
