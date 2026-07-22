@@ -83,13 +83,30 @@ export async function createApp() {
         case 'checkout.session.completed': {
           const session = event.data.object;
           const email = session.customer_details?.email || session.metadata?.cliente_email;
-          const plan = session.subscription
-            ? (session.metadata?.plan || (session.metadata as any)?.plan || 'essential')
-            : 'essential';
+          let plan = session.metadata?.plan;
+
+          if (!plan && session.subscription) {
+            try {
+              const stripeClient = stripe.getStripeClientForWebhook();
+              if (stripeClient) {
+                const sub: any = await stripeClient.subscriptions.retrieve(session.subscription as string);
+                plan = sub.metadata?.plan;
+                if (!plan && sub.items?.data?.length > 0) {
+                  const priceId = sub.items.data[0].price?.id;
+                  if (priceId === process.env.STRIPE_PRICE_EXCLUSIVE) plan = 'exclusive';
+                  else if (priceId === process.env.STRIPE_PRICE_PREMIUM) plan = 'premium';
+                  else if (priceId === process.env.STRIPE_PRICE_ESSENTIAL) plan = 'essential';
+                }
+              }
+            } catch (e) {
+              console.error('[Stripe Webhook] Erro ao buscar subscrição no checkout:', e);
+            }
+          }
+          if (!plan) plan = 'essential';
           const valor = (session.amount_total || 0) / 100;
 
           await registrarAssinatura(email, plan, valor, session.id);
-          console.log(`[Stripe] Checkout concluído: ${email} → ${plan}`);
+          console.log(`[Stripe] Checkout concluído: ${email} → ${plan} (R$ ${valor})`);
           break;
         }
 
@@ -97,9 +114,14 @@ export async function createApp() {
           const invoice = event.data.object;
           const email = invoice.customer_email;
           const valor = (invoice.amount_paid || 0) / 100;
-          const plan = (invoice.subscription_details?.metadata?.plan
-            || invoice.metadata?.plan
-            || 'essential') as string;
+          let plan = (invoice.subscription_details?.metadata?.plan || invoice.metadata?.plan) as string;
+          if (!plan && invoice.lines?.data?.length > 0) {
+            const priceId = invoice.lines.data[0].price?.id;
+            if (priceId === process.env.STRIPE_PRICE_EXCLUSIVE) plan = 'exclusive';
+            else if (priceId === process.env.STRIPE_PRICE_PREMIUM) plan = 'premium';
+            else if (priceId === process.env.STRIPE_PRICE_ESSENTIAL) plan = 'essential';
+          }
+          if (!plan) plan = 'essential';
 
           if (email && invoice.billing_reason === 'subscription_cycle') {
             await registrarAssinatura(email, plan, valor, invoice.id);
@@ -111,7 +133,14 @@ export async function createApp() {
         case 'customer.subscription.updated': {
           const sub = event.data.object;
           const customerId = sub.customer as string;
-          const plan = (sub.metadata?.plan || 'essential') as string;
+          let plan = sub.metadata?.plan;
+          if (!plan && sub.items?.data?.length > 0) {
+            const priceId = sub.items.data[0].price?.id;
+            if (priceId === process.env.STRIPE_PRICE_EXCLUSIVE) plan = 'exclusive';
+            else if (priceId === process.env.STRIPE_PRICE_PREMIUM) plan = 'premium';
+            else if (priceId === process.env.STRIPE_PRICE_ESSENTIAL) plan = 'essential';
+          }
+          if (!plan) plan = 'essential';
 
           const stripeClient2 = stripe.getStripeClientForWebhook();
           if (stripeClient2) {
@@ -123,19 +152,20 @@ export async function createApp() {
                 const { data: clientes } = await client.from('clientes').select('id, observacoes').eq('email', email).limit(1);
                 if (clientes && clientes.length > 0) {
                   const cliente = clientes[0];
-                  const obs = storage.isClientVip(cliente.observacoes)
-                    ? JSON.parse(cliente.observacoes || '{}')
-                    : {};
+                  let obs: any = {};
+                  try {
+                    if (cliente.observacoes && cliente.observacoes.trim().startsWith('{')) {
+                      obs = JSON.parse(cliente.observacoes);
+                    }
+                  } catch { obs = {}; }
                   obs.subscription = {
-                    status: sub.status === 'active' ? 'ativo' : sub.status === 'past_due' ? 'inadimplente' : 'cancelado',
+                    status: sub.status === 'active' ? 'ativo' : sub.status,
                     plan,
-                    stripeCustomerId: customerId,
-                    stripeSubscriptionId: sub.id,
-                    currentPeriodEnd: new Date(sub.current_period_end * 1000).toISOString(),
+                    stripeReferenceId: sub.id,
                     updatedAt: new Date().toISOString()
                   };
                   await client.from('clientes').update({ observacoes: JSON.stringify(obs) }).eq('id', cliente.id);
-                  console.log(`[Stripe] Assinatura atualizada: ${email} → status=${sub.status} plan=${plan}`);
+                  console.log(`[Stripe] Assinatura atualizada: ${email} → ${plan} (${sub.status})`);
                 }
               }
             }

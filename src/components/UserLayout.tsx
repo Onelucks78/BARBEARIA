@@ -639,49 +639,107 @@ export default function UserLayout({
 
         {/* ABA: MEU PLANO */}
         {activeTab === 'assinatura' && (
-          <div className={`mx-auto space-y-6 ${subscription?.status !== 'ativo' ? 'max-w-5xl' : 'max-w-xl'}`}>
+          <div className="mx-auto space-y-6 max-w-5xl">
             <div>
               <h2 className="text-2xl font-bold tracking-tight text-foreground">Meu Plano</h2>
               <p className="text-muted-foreground text-xs mt-1">Gerencie a sua assinatura mensal ou escolha o plano ideal para você.</p>
             </div>
 
             {subscription?.status === 'ativo' ? (
-              <div className="bg-card/80 p-6 rounded-2xl border border-border/80 space-y-6 shadow-sm">
-                <div className="flex items-center justify-between border-b border-border pb-4">
-                  <div>
-                    <span className="text-primary font-bold text-lg">PLANO {planoDisplayName.toUpperCase()}</span>
-                    <p className="text-xs text-muted-foreground uppercase mt-0.5">Assinatura Mensal Ativa</p>
+              <div className="space-y-8">
+                <div className="bg-card/80 p-6 rounded-2xl border border-border/80 space-y-6 shadow-sm max-w-2xl mx-auto">
+                  <div className="flex items-center justify-between border-b border-border pb-4">
+                    <div>
+                      <span className="text-primary font-bold text-lg">PLANO {planoDisplayName.toUpperCase()}</span>
+                      <p className="text-xs text-muted-foreground uppercase mt-0.5">Assinatura Mensal Ativa</p>
+                    </div>
+                    <span className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 text-xs font-bold px-3 py-1 rounded-full">ATIVO</span>
                   </div>
-                  <span className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 text-xs font-bold px-3 py-1 rounded-full">ATIVO</span>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                    <div>
+                      <span className="text-muted-foreground text-xs uppercase block">Valor Mensal</span>
+                      <span className="text-foreground font-bold">R$ {formatPreco(Number(subscription.price ?? currentPlano?.preco ?? 0))}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground text-xs uppercase block">Próxima Cobrança</span>
+                      <span className="text-foreground font-bold">{new Date(subscription.renews_at).toLocaleDateString('pt-BR')}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground text-xs uppercase block">Forma de Pagamento</span>
+                      <span className="text-foreground">{subscription.card_brand} **** {subscription.card_last4}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground text-xs uppercase block">Benefícios Inclusos</span>
+                      <span className="text-foreground font-bold">{currentPlano ? currentPlano.beneficios.join(' • ') : '—'}</span>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-border flex items-center justify-center">
+                    <button
+                      onClick={handleOpenStripePortal}
+                      disabled={isOpeningPortal}
+                      className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground font-bold text-xs uppercase tracking-wider py-3.5 px-4 rounded-xl transition shadow-md cursor-pointer text-gold-glow flex items-center justify-center gap-2"
+                    >
+                      {isOpeningPortal ? 'Abrindo Portal Stripe...' : '💳 Gerenciar Assinatura, Cartão & Faturas (Stripe)'}
+                    </button>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                  <div>
-                    <span className="text-muted-foreground text-xs uppercase block">Valor Mensal</span>
-                    <span className="text-foreground font-bold">R$ {formatPreco(Number(subscription.price ?? currentPlano?.preco ?? 0))}</span>
+                {/* Seção de Upgrade / Troca de Plano */}
+                <div className="pt-6 border-t border-border/60 space-y-4">
+                  <div className="text-center space-y-1">
+                    <h3 className="text-lg font-bold text-foreground">Deseja fazer Upgrade ou Trocar de Plano?</h3>
+                    <p className="text-xs text-muted-foreground">Escolha abaixo o novo plano desejado para migrar sua assinatura com prorrogação automática.</p>
                   </div>
-                  <div>
-                    <span className="text-muted-foreground text-xs uppercase block">Próxima Cobrança</span>
-                    <span className="text-foreground font-bold">{new Date(subscription.renews_at).toLocaleDateString('pt-BR')}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground text-xs uppercase block">Forma de Pagamento</span>
-                    <span className="text-foreground">{subscription.card_brand} **** {subscription.card_last4}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground text-xs uppercase block">Benefícios Inclusos</span>
-                    <span className="text-foreground font-bold">{currentPlano ? currentPlano.beneficios.join(' • ') : '—'}</span>
-                  </div>
-                </div>
 
-                <div className="pt-4 border-t border-border flex items-center justify-center">
-                  <button
-                    onClick={handleOpenStripePortal}
-                    disabled={isOpeningPortal}
-                    className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground font-bold text-xs uppercase tracking-wider py-3.5 px-4 rounded-xl transition shadow-md cursor-pointer text-gold-glow flex items-center justify-center gap-2"
-                  >
-                    {isOpeningPortal ? 'Abrindo Portal Stripe...' : '💳 Gerenciar Assinatura, Cartão & Faturas (Stripe)'}
-                  </button>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                    {PLANOS.map((plano) => {
+                      const isCurrent = plano.key === (subscription?.plan || '').toLowerCase();
+                      return (
+                        <div key={plano.key} className={`flex flex-col p-6 rounded-2xl border space-y-4 bg-card/80 transition duration-300 ${isCurrent ? 'border-emerald-500/50 bg-emerald-500/5' : plano.destaque ? 'border-primary/60 shadow-lg' : 'border-border/80'}`}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-base font-bold text-foreground">{plano.nome}</span>
+                            {isCurrent ? (
+                              <span className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 text-[9px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full">Plano Atual</span>
+                            ) : plano.destaque ? (
+                              <span className="bg-primary/10 text-primary border border-primary/30 text-[9px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full">Mais Escolhido</span>
+                            ) : null}
+                          </div>
+                          <div>
+                            <span className="text-primary text-3xl font-bold">R$ {formatPreco(plano.preco)}</span>
+                            <span className="text-xs text-muted-foreground font-normal"> / mês</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground leading-relaxed font-light flex-1">{plano.descricao}</p>
+                          <ul className="space-y-2 pt-3 border-t border-border/60">
+                            {plano.beneficios.map((b) => (
+                              <li key={b} className="flex items-center gap-2 text-xs text-foreground font-medium">
+                                <Check className="w-4 h-4 text-emerald-500 shrink-0" strokeWidth={3} /> {b}
+                              </li>
+                            ))}
+                          </ul>
+                          {isCurrent ? (
+                            <button
+                              type="button"
+                              disabled
+                              className="w-full bg-emerald-500/20 text-emerald-500 text-xs tracking-wider uppercase font-bold px-4 py-3 rounded-xl cursor-default text-center"
+                            >
+                              Seu Plano Atual
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={redirectingPlan === plano.key}
+                              onClick={() => handleStartStripeCheckout(plano.key)}
+                              className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground text-xs tracking-wider uppercase font-bold px-4 py-3 rounded-xl transition shadow-md cursor-pointer text-gold-glow mt-auto flex items-center justify-center gap-2"
+                            >
+                              {redirectingPlan === plano.key ? 'Redirecionando...' : `Migrar para ${plano.nome}`}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             ) : (

@@ -86,6 +86,7 @@ export async function createCheckoutSession(params: {
       mode: 'subscription',
       customer: customerId,
       line_items: [{ price: plano.priceId, quantity: 1 }],
+      metadata: { plan: params.planId, cliente_email: params.clienteEmail },
       subscription_data: {
         metadata: { plan: params.planId, cliente_email: params.clienteEmail }
       },
