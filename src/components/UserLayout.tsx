@@ -615,16 +615,13 @@ export default function UserLayout({
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-border flex items-center justify-between gap-4 flex-wrap">
+                <div className="pt-4 border-t border-border flex items-center justify-center">
                   <button
                     onClick={handleOpenStripePortal}
                     disabled={isOpeningPortal}
-                    className="text-primary hover:underline text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
+                    className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground font-bold text-xs uppercase tracking-wider py-3.5 px-4 rounded-xl transition shadow-md cursor-pointer text-gold-glow flex items-center justify-center gap-2"
                   >
-                    {isOpeningPortal ? 'Abrindo Portal Stripe...' : '💳 Gerenciar Cartão & Faturas (Stripe)'}
-                  </button>
-                  <button onClick={handleCancelSubscription} className="text-red-500 hover:text-red-600 text-xs uppercase tracking-widest font-bold py-2 px-4 border border-red-500/30 hover:bg-red-500/10 rounded-xl transition cursor-pointer">
-                    Cancelar Assinatura
+                    {isOpeningPortal ? 'Abrindo Portal Stripe...' : '💳 Gerenciar Assinatura, Cartão & Faturas (Stripe)'}
                   </button>
                 </div>
               </div>
