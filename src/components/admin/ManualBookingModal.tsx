@@ -1,31 +1,3 @@
-# Agendamento Manual via Painel Admin Implementation Plan
-
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
-**Goal:** Implement a manual booking modal in the Admin Panel (`AdminLayout.tsx`) allowing barbers/admins to book and lock time slots for clients who request appointments via WhatsApp, phone, or in person.
-
-**Architecture:** Add a `+ Novo Agendamento` button to the Admin Agenda tab. Clicking it opens a modal component (`ManualBookingModal`) that gathers client info (existing or quick-register), professional ID, services, date, and available slot. The booking is submitted via `POST /api/agendamentos` with admin credentials, locking the slot in the backend storage (`db.json` / Supabase).
-
-**Tech Stack:** React 19, Lucide React, TypeScript, Express, Supabase / JSON Storage.
-
-## Global Constraints
-
-- Must follow existing UI styling tokens (gold accent `text-primary`, dark/light theme classes).
-- Must use existing `/api/agendamentos` POST endpoint or enhance it cleanly without breaking public client booking.
-- Must ensure TypeScript check (`npm run lint`) and production build (`npm run build`) pass cleanly after implementation.
-
----
-
-### Task 1: Create `ManualBookingModal` Component for Admin Panel
-
-**Files:**
-- Create: `src/components/admin/ManualBookingModal.tsx`
-- Consumes: `Servico`, `Profissional` types from `src/types.ts`
-- Produces: React component for manual admin booking modal
-
-- [ ] **Step 1: Create `src/components/admin/ManualBookingModal.tsx`**
-
-```tsx
 import React, { useState, useEffect } from 'react';
 import { X, Calendar, Clock, User, Phone, CheckCircle, Scissors } from 'lucide-react';
 import { Servico, Profissional } from '../../types.ts';
