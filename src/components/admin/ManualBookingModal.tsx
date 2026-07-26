@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, Clock, User, Phone, CheckCircle, Scissors } from 'lucide-react';
+import { X, Calendar, User, CheckCircle } from 'lucide-react';
 import { Servico, Profissional } from '../../types.ts';
 
 interface ManualBookingModalProps {
@@ -7,7 +7,7 @@ interface ManualBookingModalProps {
   onClose: () => void;
   profissionais: Profissional[];
   services: Servico[];
-  clientes: { id: string; nome: string; telefone: string; email?: string }[];
+  clientes?: { id: string; nome: string; telefone: string; email?: string }[];
   onBookingSuccess: () => void;
   defaultProfissionalId?: string;
 }
@@ -23,20 +23,15 @@ export default function ManualBookingModal({
   onClose,
   profissionais,
   services,
-  clientes,
   onBookingSuccess,
   defaultProfissionalId = ''
 }: ManualBookingModalProps) {
-  const [clientMode, setClientMode] = useState<'existing' | 'new'>('new');
-  const [selectedClientId, setSelectedClientId] = useState('');
   const [nomeCliente, setNomeCliente] = useState('');
-  const [telefoneCliente, setTelefoneCliente] = useState('');
-  
   const [selectedProfissionalId, setSelectedProfissionalId] = useState(defaultProfissionalId);
   const [selectedServices, setSelectedServices] = useState<Servico[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [selectedSlot, setSelectedSlot] = useState<string>('');
-  const [observacao, setObservacao] = useState('Agendamento feito via WhatsApp / Admin');
+  const [observacao, setObservacao] = useState('');
 
   const [availableSlots, setAvailableSlots] = useState<SlotState[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
@@ -51,15 +46,12 @@ export default function ManualBookingModal({
     }
   }, [defaultProfissionalId, profissionais]);
 
+  // Pre-select first service by default for convenience
   useEffect(() => {
-    if (clientMode === 'existing' && selectedClientId) {
-      const client = clientes.find(c => c.id === selectedClientId);
-      if (client) {
-        setNomeCliente(client.nome);
-        setTelefoneCliente(client.telefone || '');
-      }
+    if (services.length > 0 && selectedServices.length === 0) {
+      setSelectedServices([services[0]]);
     }
-  }, [clientMode, selectedClientId, clientes]);
+  }, [services]);
 
   useEffect(() => {
     if (!selectedProfissionalId || !selectedDate || selectedServices.length === 0) {
@@ -92,7 +84,9 @@ export default function ManualBookingModal({
 
   const handleToggleService = (s: Servico) => {
     if (selectedServices.some(item => item.id === s.id)) {
-      setSelectedServices(prev => prev.filter(item => item.id !== s.id));
+      if (selectedServices.length > 1) {
+        setSelectedServices(prev => prev.filter(item => item.id !== s.id));
+      }
     } else {
       setSelectedServices(prev => [...prev, s]);
     }
@@ -102,7 +96,7 @@ export default function ManualBookingModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nomeCliente.trim()) {
-      setErrorMsg('Por favor, informe o nome do cliente.');
+      setErrorMsg('Informe o nome do cliente.');
       return;
     }
     if (selectedServices.length === 0) {
@@ -124,7 +118,7 @@ export default function ManualBookingModal({
     try {
       const payload = {
         cliente_nome: nomeCliente.trim(),
-        cliente_telefone: telefoneCliente.trim(),
+        cliente_telefone: '',
         profissional_id: selectedProfissionalId,
         servicos_ids: selectedServices.map(s => s.id),
         data: selectedDate,
@@ -143,10 +137,15 @@ export default function ManualBookingModal({
         throw new Error(data.error || 'Erro ao agendar horário.');
       }
 
+      // Reset form
+      setNomeCliente('');
+      setObservacao('');
+      setSelectedSlot('');
+
       onBookingSuccess();
       onClose();
     } catch (err: any) {
-      setErrorMsg(err.message || 'Falha ao realizar agendamento manual.');
+      setErrorMsg(err.message || 'Falha ao realizar agendamento.');
     } finally {
       setSubmitting(false);
     }
@@ -154,19 +153,16 @@ export default function ManualBookingModal({
 
   if (!isOpen) return null;
 
-  const totalPreco = selectedServices.reduce((sum, s) => sum + s.preco, 0);
-  const totalDuracao = selectedServices.reduce((sum, s) => sum + s.duracao_minutos, 0);
-
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-black/80 backdrop-blur-sm">
-      <div className="relative w-full max-w-2xl bg-card border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[92dvh]">
+      <div className="relative w-full max-w-lg bg-card border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[92dvh]">
         {/* Header */}
         <div className="p-4 sm:p-5 bg-slate-900 text-white border-b border-border flex items-center justify-between shrink-0">
           <div>
-            <h3 className="text-base sm:text-lg font-semibold flex items-center gap-2 text-primary">
-              <Calendar className="w-5 h-5" /> Novo Agendamento Manual (WhatsApp / Ligação)
+            <h3 className="text-base font-semibold flex items-center gap-2 text-primary">
+              <Calendar className="w-5 h-5" /> Novo Agendamento
             </h3>
-            <p className="text-slate-400 text-xs mt-0.5">Trave o horário na agenda para o cliente</p>
+            <p className="text-slate-400 text-xs mt-0.5">Informe o nome do cliente e trave o horário</p>
           </div>
           <button
             type="button"
@@ -178,87 +174,35 @@ export default function ManualBookingModal({
         </div>
 
         {/* Content */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
           {errorMsg && (
             <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-500 rounded-md text-xs font-semibold">
               {errorMsg}
             </div>
           )}
 
-          {/* 1. Cliente */}
-          <div className="space-y-3">
+          {/* Nome do Cliente */}
+          <div className="space-y-1">
             <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
-              1. Dados do Cliente
+              Nome do Cliente *
             </label>
-            <div className="flex items-center gap-4 text-xs">
-              <label className="flex items-center gap-2 cursor-pointer font-medium">
-                <input
-                  type="radio"
-                  name="clientMode"
-                  checked={clientMode === 'new'}
-                  onChange={() => setClientMode('new')}
-                  className="accent-primary"
-                />
-                Novo Cliente (WhatsApp/Presencial)
-              </label>
-              {clientes.length > 0 && (
-                <label className="flex items-center gap-2 cursor-pointer font-medium">
-                  <input
-                    type="radio"
-                    name="clientMode"
-                    checked={clientMode === 'existing'}
-                    onChange={() => setClientMode('existing')}
-                    className="accent-primary"
-                  />
-                  Cliente Cadastrado
-                </label>
-              )}
+            <div className="relative">
+              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Ex: João Silva"
+                required
+                value={nomeCliente}
+                onChange={(e) => setNomeCliente(e.target.value)}
+                className="w-full pl-9 pr-3 py-2.5 bg-background border border-border rounded-md text-xs focus:outline-none focus:border-primary text-foreground font-medium"
+              />
             </div>
-
-            {clientMode === 'existing' ? (
-              <div>
-                <select
-                  value={selectedClientId}
-                  onChange={(e) => setSelectedClientId(e.target.value)}
-                  className="w-full p-2.5 bg-background border border-border rounded-md text-xs focus:outline-none focus:border-primary text-foreground"
-                >
-                  <option value="">Selecione um cliente...</option>
-                  {clientes.map(c => (
-                    <option key={c.id} value={c.id}>{c.nome} ({c.telefone || 'sem telefone'})</option>
-                  ))}
-                </select>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <input
-                    type="text"
-                    placeholder="Nome do Cliente *"
-                    required
-                    value={nomeCliente}
-                    onChange={(e) => setNomeCliente(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2.5 bg-background border border-border rounded-md text-xs focus:outline-none focus:border-primary text-foreground"
-                  />
-                </div>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <input
-                    type="tel"
-                    placeholder="Telefone / WhatsApp (ex: 11 98765-4321)"
-                    value={telefoneCliente}
-                    onChange={(e) => setTelefoneCliente(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2.5 bg-background border border-border rounded-md text-xs focus:outline-none focus:border-primary text-foreground"
-                  />
-                </div>
-              </div>
-            )}
           </div>
 
-          {/* 2. Barbeiro */}
-          <div className="space-y-2">
+          {/* Barbeiro */}
+          <div className="space-y-1">
             <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
-              2. Selecione o Barbeiro / Profissional *
+              Barbeiro *
             </label>
             <select
               value={selectedProfissionalId}
@@ -274,12 +218,12 @@ export default function ManualBookingModal({
             </select>
           </div>
 
-          {/* 3. Serviços */}
-          <div className="space-y-2">
+          {/* Serviço */}
+          <div className="space-y-1">
             <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
-              3. Selecione os Serviço(s) *
+              Serviço *
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+            <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-1 bg-background border border-border rounded-md">
               {services.map(s => {
                 const isSelected = selectedServices.some(item => item.id === s.id);
                 return (
@@ -287,31 +231,25 @@ export default function ManualBookingModal({
                     key={s.id}
                     type="button"
                     onClick={() => handleToggleService(s)}
-                    className={`p-3 rounded-md border text-left flex items-center justify-between text-xs transition cursor-pointer ${
+                    className={`px-3 py-1.5 rounded text-xs font-semibold transition cursor-pointer border ${
                       isSelected
-                        ? 'bg-primary/15 border-primary text-foreground shadow-sm'
-                        : 'bg-background hover:bg-muted/50 border-border text-foreground'
+                        ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                        : 'bg-card hover:bg-muted text-muted-foreground border-border'
                     }`}
                   >
-                    <div>
-                      <span className="font-semibold block">{s.nome}</span>
-                      <span className="text-muted-foreground text-[11px]">{s.duracao_minutos} min</span>
-                    </div>
-                    <span className="font-bold text-primary">
-                      R$ {s.preco.toFixed(2).replace('.', ',')}
-                    </span>
+                    {s.nome} (R$ {s.preco.toFixed(2).replace('.', ',')})
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* 4. Data e Horário */}
-          <div className="space-y-3">
+          {/* Data e Horário */}
+          <div className="space-y-2">
             <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
-              4. Data e Horário Livre *
+              Data & Horário *
             </label>
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex flex-col sm:flex-row gap-2.5">
               <input
                 type="date"
                 value={selectedDate}
@@ -324,22 +262,22 @@ export default function ManualBookingModal({
               />
               <div className="flex-1">
                 {loadingSlots ? (
-                  <div className="text-xs text-muted-foreground py-2 italic animate-pulse">Carregando horários...</div>
+                  <div className="text-xs text-muted-foreground py-2 italic animate-pulse">Buscando horários...</div>
                 ) : availableSlots.length === 0 ? (
-                  <div className="text-xs text-muted-foreground py-2 italic">Selecione o serviço e data para ver horários livres.</div>
+                  <div className="text-xs text-muted-foreground py-2 italic">Sem horários livres nesta data.</div>
                 ) : (
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 max-h-36 overflow-y-auto pr-1">
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 max-h-32 overflow-y-auto p-1 border border-border rounded-md bg-background">
                     {availableSlots.map(slot => (
                       <button
                         key={slot.horario}
                         type="button"
                         disabled={!slot.disponivel}
                         onClick={() => setSelectedSlot(slot.horario)}
-                        className={`py-2 px-2 text-center rounded text-xs font-bold border transition cursor-pointer ${
+                        className={`py-1.5 px-1 text-center rounded text-xs font-bold border transition cursor-pointer ${
                           selectedSlot === slot.horario
-                            ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                            ? 'bg-primary text-primary-foreground border-primary shadow-xs'
                             : slot.disponivel
-                              ? 'bg-background hover:bg-muted text-foreground border-border'
+                              ? 'bg-card hover:bg-muted text-foreground border-border'
                               : 'bg-muted/30 text-muted-foreground border-transparent line-through cursor-not-allowed opacity-40'
                         }`}
                       >
@@ -352,44 +290,36 @@ export default function ManualBookingModal({
             </div>
           </div>
 
-          {/* 5. Observação */}
+          {/* Observação (Sem texto pré-setado, campo em branco) */}
           <div className="space-y-1">
             <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
-              Observação / Origem
+              Observação (Opcional)
             </label>
             <input
               type="text"
               value={observacao}
               onChange={(e) => setObservacao(e.target.value)}
-              placeholder="Ex: Agendado pelo WhatsApp com Barbeiro"
+              placeholder="Digite alguma observação se desejar..."
               className="w-full p-2.5 bg-background border border-border rounded-md text-xs text-foreground focus:outline-none focus:border-primary"
             />
           </div>
 
-          {/* Footer Submit */}
-          <div className="pt-4 border-t border-border flex items-center justify-between gap-3 shrink-0">
-            <div className="text-xs">
-              <span className="text-muted-foreground block">Total Estimado:</span>
-              <span className="font-extrabold text-primary text-sm">
-                R$ {totalPreco.toFixed(2).replace('.', ',')} ({totalDuracao} min)
-              </span>
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2.5 border border-border rounded-md text-xs font-bold hover:bg-muted text-muted-foreground cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={submitting || !selectedSlot || selectedServices.length === 0 || !nomeCliente.trim()}
-                className="px-5 py-2.5 bg-primary text-primary-foreground font-black text-xs uppercase tracking-wider rounded-md shadow-md hover:bg-primary/90 disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
-              >
-                {submitting ? 'Agendando...' : <>Travar & Agendar <CheckCircle className="w-4 h-4" /></>}
-              </button>
-            </div>
+          {/* Submit */}
+          <div className="pt-3 border-t border-border flex items-center justify-end gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 border border-border rounded-md text-xs font-bold hover:bg-muted text-muted-foreground cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={submitting || !selectedSlot || !nomeCliente.trim()}
+              className="px-5 py-2 bg-primary text-primary-foreground font-black text-xs uppercase tracking-wider rounded-md shadow-md hover:bg-primary/90 disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+            >
+              {submitting ? 'Salvando...' : <>Salvar Agendamento <CheckCircle className="w-4 h-4" /></>}
+            </button>
           </div>
         </form>
       </div>
