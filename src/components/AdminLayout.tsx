@@ -2071,7 +2071,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                     onClick={() => setIsManualBookingModalOpen(true)}
                     className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold uppercase tracking-wider px-3.5 py-2 flex items-center gap-1.5 shadow-md cursor-pointer shrink-0"
                   >
-                    <Plus className="w-4 h-4" /> Novo Agendamento (WhatsApp/Manual)
+                    <Plus className="w-4 h-4" /> Novo Agendamento
                   </Button>
 
                   <div className="flex bg-card p-1 border border-border rounded-sm font-semibold w-full sm:w-auto">
