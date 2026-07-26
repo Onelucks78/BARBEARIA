@@ -681,7 +681,7 @@ export default function BookingWizard({
                 </div>
                 
                 {/* Scrollable Container with Subtle Styled Native Scrollbar */}
-                <div className="max-md:h-auto max-md:max-h-none h-[210px] xs:h-[250px] sm:h-[310px] md:h-[400px] md:max-h-[48vh] overflow-y-auto overscroll-contain pr-1.5 space-y-3 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent">
+                <div className="max-h-[45vh] sm:max-h-[380px] overflow-y-auto overscroll-contain pr-1.5 space-y-3 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {(Array.isArray(services) ? services : []).map((s) => {
                       const isSelected = selectedServices.some(item => item.id === s.id);
@@ -739,29 +739,7 @@ export default function BookingWizard({
                 </div>
               </div>
 
-              {/* Desktop-only Total Summary Footer inside selection step */}
-              <div className="hidden md:block space-y-4 mt-6">
-                {selectedServices.length > 0 && (
-                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-md flex items-center justify-between text-xs text-slate-700">
-                    <span className="text-slate-500 text-xs uppercase">Pacote Selecionado:</span>
-                    <div className="flex items-center gap-3">
-                      <span className="text-slate-500">{totalDuracao} min</span>
-                      <span className="text-primary font-bold font-sans text-sm">{formatBRL(totalPreco)}</span>
-                    </div>
-                  </div>
-                )}
 
-                <div className="pt-4 border-t border-slate-200 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={handleNextStep}
-                    disabled={selectedServices.length === 0}
-                    className="bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-black disabled:opacity-50 text-xs uppercase tracking-widest font-black px-6 py-3.5 rounded-md flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-primary/10 transition-all duration-300 hover:scale-105 active:scale-95"
-                  >
-                    Continuar <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
             </motion.div>
           )}
 
@@ -780,7 +758,7 @@ export default function BookingWizard({
                   <p className="text-xs text-slate-500 text-left">Escolha seu barbeiro</p>
                 </div>
 
-                <div className="max-md:h-auto max-md:max-h-none h-[210px] xs:h-[250px] sm:h-[310px] md:h-[400px] md:max-h-[48vh] overflow-y-auto overscroll-contain pr-1.5 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent">
+                <div className="max-h-[45vh] sm:max-h-[380px] overflow-y-auto overscroll-contain pr-1.5 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent">
                   {profissionais.length === 0 ? (
                     <p className="text-xs text-slate-500 py-8 text-center">
                       Nenhum barbeiro disponível no momento.
@@ -845,26 +823,7 @@ export default function BookingWizard({
                 </div>
               </div>
 
-              {/* Desktop-only Footer inside step 2 */}
-              <div className="hidden md:block space-y-4 mt-6">
-                <div className="pt-4 border-t border-slate-200 flex justify-between">
-                  <button
-                    type="button"
-                    onClick={handleBackStep}
-                    className="text-slate-600 hover:text-slate-900 text-xs uppercase tracking-widest font-bold px-6 py-3.5 rounded-md flex items-center justify-center gap-2 cursor-pointer transition"
-                  >
-                    <ArrowLeft className="w-3.5 h-3.5" /> Voltar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleNextStep}
-                    disabled={!selectedProfissional}
-                    className="bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-black disabled:opacity-50 text-xs uppercase tracking-widest font-black px-6 py-3.5 rounded-md flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-primary/10 transition-all duration-300 hover:scale-105 active:scale-95"
-                  >
-                    Continuar <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
+
             </motion.div>
           )}
 
@@ -955,35 +914,7 @@ export default function BookingWizard({
 
               </div>
 
-              {/* Desktop-only Footer inside step 2 */}
-              <div className="hidden md:block space-y-4 mt-6">
-                {selectedServices.length > 0 && (
-                  <div className="bg-slate-50 p-3.5 rounded-md border border-slate-200 text-xs flex flex-wrap items-center justify-between gap-1 text-slate-700 leading-normal">
-                    <span className="text-slate-500 text-xs uppercase">Serviços Escolhidos:</span>
-                    <span className="font-semibold text-slate-900 text-right ml-auto">
-                      {selectedServices.map(s => s.nome).join(' + ')} ({totalDuracao}min)
-                    </span>
-                  </div>
-                )}
 
-                <div className="pt-4 border-t border-slate-200 flex flex-row items-center justify-between gap-3 w-full">
-                  <button
-                    type="button"
-                    onClick={handleBackStep}
-                    className="flex-1 md:flex-none border border-slate-200 text-slate-500 hover:bg-accent hover:text-slate-900 text-xs uppercase tracking-wider font-bold py-3.5 md:px-6 rounded-md flex items-center justify-center gap-1.5 transition cursor-pointer"
-                  >
-                    <ArrowLeft className="w-3.5 h-3.5" /> Voltar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleNextStep}
-                    disabled={!selectedDate}
-                    className="flex-1 md:flex-none bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-black disabled:opacity-50 text-xs uppercase tracking-widest font-black py-3.5 md:px-6 rounded-md flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-primary/10 transition-all duration-300 hover:scale-105 active:scale-95"
-                  >
-                    Continuar <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
 
             </motion.div>
           )}
@@ -1056,39 +987,7 @@ export default function BookingWizard({
                 )}
               </div>
 
-              {/* Desktop-only Footer inside step 3 */}
-              <div className="hidden md:block space-y-4 mt-6">
-                {selectedServices.length > 0 && selectedDate && (
-                  <div className="bg-slate-50 p-3.5 rounded-sm border border-slate-200 text-xs space-y-1.5">
-                    <div className="flex justify-between md:items-center flex-col md:flex-row gap-1">
-                      <span className="text-slate-500 text-xs uppercase">Serviços Selecionados:</span>
-                      <span className="font-semibold text-slate-900">{selectedServices.map(s => s.nome).join(' + ')}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500 text-xs uppercase">Data selecionada:</span>
-                      <span className="font-semibold text-slate-900 capitalize">{getWeekDayName(selectedDate)} ({selectedDate.split('-').reverse().join('/')})</span>
-                    </div>
-                  </div>
-                )}
 
-                <div className="pt-4 border-t border-border/80 flex flex-row items-center justify-between gap-3 w-full">
-                  <button
-                    type="button"
-                    onClick={handleBackStep}
-                    className="flex-1 md:flex-none border border-border text-slate-500 hover:bg-accent hover:text-slate-900 text-xs uppercase tracking-wider font-bold py-3 md:px-5 rounded-sm flex items-center justify-center gap-1.5 transition cursor-pointer"
-                  >
-                    <ArrowLeft className="w-3.5 h-3.5" /> Voltar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleNextStep}
-                    disabled={!selectedSlot}
-                    className="flex-1 md:flex-none bg-primary hover:bg-primary/80 text-black disabled:opacity-50 text-xs uppercase tracking-widest font-bold py-3 md:px-5 rounded-sm flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
-                  >
-                    Continuar <ArrowRight className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
 
             </motion.div>
           )}
@@ -1167,31 +1066,7 @@ export default function BookingWizard({
                   </div>
                 </div>
 
-                <div className="hidden md:block pt-4 border-t border-slate-200">
-                  <div className="flex flex-row items-center justify-between gap-3 w-full">
-                    <button
-                      type="button"
-                      onClick={handleBackStep}
-                      disabled={submitting}
-                      className="flex-1 md:flex-none border border-slate-200 text-slate-500 hover:bg-accent hover:text-slate-900 text-xs uppercase tracking-wider font-bold py-3.5 md:px-6 rounded-md flex items-center justify-center gap-1.5 transition cursor-pointer"
-                    >
-                      <ArrowLeft className="w-3.5 h-3.5" /> Voltar
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={submitting}
-                      className="flex-1 md:flex-none bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-black disabled:opacity-50 text-xs uppercase tracking-widest font-black py-3.5 md:px-6 rounded-md flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-primary/10 transition-all duration-300 hover:scale-105 active:scale-95"
-                    >
-                      {submitting ? (
-                        <>Reservando...</>
-                      ) : (
-                        <>
-                          Confirmar & Agendar <CheckCircle className="w-3.5 h-3.5 text-black" />
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
+
 
               </form>
             </motion.div>
@@ -1257,40 +1132,45 @@ export default function BookingWizard({
         </AnimatePresence>
       </div>
 
-        {/* Global Wizard Navigation Footer (Always pinned at the bottom) */}
+        {/* Global Wizard Navigation Footer (Always pinned at the bottom on all screen sizes) */}
         {step < 6 && (
-          <div className="md:hidden shrink-0 bg-slate-100/90 border-t border-slate-200/80 p-4 xs:p-5 sm:px-6 sm:py-5 space-y-3.5 z-20 backdrop-blur-md">
-            {/* The Luxury Selected Services Banner */}
+          <div className="shrink-0 bg-slate-50 border-t border-slate-200 p-3.5 sm:px-6 sm:py-4 space-y-3 z-20 shadow-md">
+            {/* Selected Services / Date / Time Summary Banner */}
             {selectedServices.length > 0 && step < 5 && (
-              <div className="p-4 bg-slate-50 border border-slate-200 text-slate-800 rounded-md">
-                <span className="text-slate-500 text-xs uppercase tracking-wider block text-left">
-                  SERVIÇOS ESCOLHIDOS:
-                </span>
-                <p className="text-primary text-xs sm:text-sm font-semibold tracking-wide text-left mt-1.5 leading-relaxed text-gold-glow">
-                  {selectedServices.map(s => s.nome).join(' + ')} 
-                  <span className="text-slate-500 font-sans text-xs ml-1.5">({totalDuracao}min)</span>
+              <div className="p-3 bg-white border border-slate-200 text-slate-800 rounded-md shadow-xs flex items-center justify-between text-xs">
+                <div className="text-left font-sans truncate pr-2">
+                  <span className="text-slate-400 uppercase text-[10px] font-bold block">Resumo:</span>
+                  <span className="text-primary font-bold tracking-wide truncate">
+                    {selectedServices.map(s => s.nome).join(' + ')}
+                  </span>
+                  <span className="text-slate-500 font-sans text-xs ml-1 font-normal">
+                    ({totalDuracao}min)
+                  </span>
                   {selectedDate && (
-                    <span className="text-slate-500 font-sans text-xs ml-1.5 capitalize border-l border-slate-200/40 pl-1.5">
+                    <span className="text-slate-600 font-sans text-xs ml-1 font-medium border-l border-slate-200 pl-1">
                       | {selectedDate.split('-').reverse().join('/')}
                     </span>
                   )}
                   {selectedSlot && (
-                    <span className="text-slate-700 text-xs ml-1.5 border-l border-slate-200/40 pl-1.5">
+                    <span className="text-slate-800 text-xs ml-1 font-bold border-l border-slate-200 pl-1">
                       às {selectedSlot}h
                     </span>
                   )}
-                </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className="text-primary font-extrabold text-sm">{formatBRL(totalPreco)}</span>
+                </div>
               </div>
             )}
 
             {/* Back & Continue Buttons Row */}
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center justify-between gap-3">
               {step > 1 && (
                 <button
                   type="button"
                   onClick={handleBackStep}
                   disabled={step === 5 && submitting}
-                  className="flex-1 border border-slate-200 text-slate-500 hover:bg-accent hover:text-white text-xs uppercase tracking-widest font-bold py-3.5 px-5 rounded-md flex items-center justify-center gap-1.5 transition cursor-pointer"
+                  className="flex-1 max-w-[140px] border border-slate-300 text-slate-700 hover:bg-slate-100 text-xs uppercase tracking-widest font-bold py-3.5 px-4 rounded-md flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" /> Voltar
                 </button>
@@ -1306,12 +1186,12 @@ export default function BookingWizard({
                   (step === 4 && !selectedSlot) ||
                   (step === 5 && submitting)
                 }
-                className="flex-1 bg-gradient-to-r from-primary to-primary/70 hover:from-primary/80 hover:to-primary text-black disabled:opacity-40 disabled:cursor-not-allowed text-xs uppercase tracking-widest font-black py-3.5 px-5 rounded-md flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-primary/10 transition duration-350 active:scale-95"
+                className="flex-1 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary text-black disabled:opacity-40 disabled:cursor-not-allowed text-xs uppercase tracking-widest font-black py-3.5 px-5 rounded-md flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition duration-200 active:scale-95"
               >
                 {step === 5 ? (
                   submitting ? 'Reservando...' : <>Confirmar & Agendar <CheckCircle className="w-3.5 h-3.5 text-black" /></>
                 ) : (
-                  <>Continuar <ArrowRight className="w-3.5 h-3.5" /></>
+                  <>Continuar <ArrowRight className="w-3.5 h-3.5 text-black" /></>
                 )}
               </button>
             </div>

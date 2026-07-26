@@ -56,6 +56,7 @@ import type { Session } from '@supabase/supabase-js';
 import { authedFetch, supabase, isSupabaseConfigured } from '../lib/supabase.ts';
 import EquipeTab from './admin/EquipeTab.tsx';
 import FiltroBarbeiro from './admin/FiltroBarbeiro.tsx';
+import ManualBookingModal from './admin/ManualBookingModal.tsx';
 import { resizeImageToDataUrl, uploadImagem } from '../lib/imagem.ts';
 
 interface AdminLayoutProps {
@@ -146,6 +147,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
   const [clientSearchQuery, setClientSearchQuery] = useState('');
 
   // UI action states (Modals or quick add forms toggles)
+  const [isManualBookingModalOpen, setIsManualBookingModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -2065,6 +2067,13 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
                 {/* Agenda Mode & Date Selector */}
                 <div className="flex flex-wrap items-center gap-2 text-xs w-full md:w-auto">
+                  <Button
+                    onClick={() => setIsManualBookingModalOpen(true)}
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold uppercase tracking-wider px-3.5 py-2 flex items-center gap-1.5 shadow-md cursor-pointer shrink-0"
+                  >
+                    <Plus className="w-4 h-4" /> Novo Agendamento (WhatsApp/Manual)
+                  </Button>
+
                   <div className="flex bg-card p-1 border border-border rounded-sm font-semibold w-full sm:w-auto">
                     <button
                       type="button"
@@ -4076,6 +4085,19 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
           </div>
         )}
       </AnimatePresence>
+
+      <ManualBookingModal
+        isOpen={isManualBookingModalOpen}
+        onClose={() => setIsManualBookingModalOpen(false)}
+        profissionais={profissionais}
+        services={servicos}
+        clientes={clientes}
+        defaultProfissionalId={filtroProfissional}
+        onBookingSuccess={() => {
+          fetchAgendamentos();
+          if (activeTab === 'dashboard') fetchDashboard();
+        }}
+      />
     </div>
   );
 }

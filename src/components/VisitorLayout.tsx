@@ -1324,7 +1324,7 @@ export default function VisitorLayout({
       {/* Booking Popup Modal */}
       <AnimatePresence>
         {showBookingPopup && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -1339,7 +1339,7 @@ export default function VisitorLayout({
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="relative z-10 w-full h-full md:w-[95vw] md:max-w-4xl md:h-auto md:max-h-[92vh] md:rounded-xl overflow-hidden shadow-2xl"
+              className="relative z-10 w-full h-[95dvh] max-h-[820px] md:w-[95vw] md:max-w-4xl rounded-xl overflow-hidden shadow-2xl flex flex-col my-auto"
             >
               <BookingWizard
                 services={services}
