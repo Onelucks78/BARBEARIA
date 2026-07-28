@@ -71,17 +71,28 @@ export default function ManualBookingModal({
       setLoadingSlots(true);
       setErrorMsg('');
       try {
-        const servicosIds = selectedServices.map(s => s.id).join(',');
-        const res = await fetch(`/api/agendamentos/disponibilidade?profissional_id=${selectedProfissionalId}&data=${selectedDate}&servicos_ids=${servicosIds}`);
-        if (res.ok) {
-          const data = await res.json();
-          setAvailableSlots(data.horarios || []);
-        } else {
+        // Mesma rota que o agendamento do cliente usa. Antes o modal chamava
+        // /api/agendamentos/disponibilidade, que NÃO existe no servidor: dava 404
+        // e a tela mostrava "nenhum horário livre" para sempre.
+        const params = new URLSearchParams({
+          data: selectedDate,
+          servico_id: selectedServices.map(s => s.id).join(','),
+          profissional_id: selectedProfissionalId,
+          all: 'true'
+        });
+        const res = await fetch(`/api/horarios-livres?${params.toString()}`);
+        if (!res.ok) {
           setAvailableSlots([]);
+          setErrorMsg('Não foi possível carregar os horários desta data.');
+          return;
         }
+        // A rota devolve a lista direta: [{ horario, disponivel, motivo? }]
+        const data = await res.json();
+        setAvailableSlots(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error('Erro ao buscar disponibilidade:', err);
         setAvailableSlots([]);
+        setErrorMsg('Falha de conexão ao buscar os horários.');
       } finally {
         setLoadingSlots(false);
       }
@@ -91,8 +102,8 @@ export default function ManualBookingModal({
   }, [selectedProfissionalId, selectedDate, selectedServices]);
 
   // Um serviço por agendamento. Combos ("Cabelo + Barba + Sobrancelha") já
-  // existem como serviço próprio no catálogo. Guardamos em array porque é o
-  // formato que a API espera em servicos_ids.
+  // existem como serviço próprio no catálogo. Mantemos array porque as rotas
+  // aceitam CSV em servico_id e o cálculo de preço/duração soma a lista.
   const handleSelectService = (servicoId: string) => {
     const escolhido = services.find(item => item.id === servicoId);
     setSelectedServices(escolhido ? [escolhido] : []);
@@ -172,14 +183,17 @@ export default function ManualBookingModal({
     setErrorMsg('');
 
     try {
+      // Nomes exigidos por schemas.createBooking (server/schemas.ts). Antes o
+      // modal mandava cliente_nome/servicos_ids/observacoes e a validação
+      // rejeitava tudo — o agendamento manual nunca chegou a gravar.
       const payload = {
-        cliente_nome: nomeCliente.trim(),
-        cliente_telefone: '',
+        nome_cliente: nomeCliente.trim(),
+        telefone_cliente: '',
         profissional_id: selectedProfissionalId,
-        servicos_ids: selectedServices.map(s => s.id),
+        servico_id: selectedServices.map(s => s.id).join(','),
         data: selectedDate,
         horario: selectedSlot,
-        observacoes: observacao.trim()
+        observacao: observacao.trim()
       };
 
       const res = await fetch('/api/agendamentos', {
