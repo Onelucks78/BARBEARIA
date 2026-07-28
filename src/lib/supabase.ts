@@ -34,7 +34,14 @@ export interface FetchOptions {
  */
 export async function authedFetch(input: string, options: FetchOptions = {}): Promise<Response> {
   const { data } = await supabase.auth.getSession();
-  const token = data?.session?.access_token;
+  let token = data?.session?.access_token;
+
+  // Painel de teste local: sem sessão real, manda o token de desenvolvimento.
+  // Em produção o servidor rejeita esse token (ver MOCK_AUTH_PERMITIDO), então
+  // isso só tem efeito rodando localmente.
+  if (!token && localStorage.getItem('mock_admin_session') === 'true') {
+    token = 'mock-token';
+  }
   const headers: Record<string, string> = {
     ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
     ...options.headers
