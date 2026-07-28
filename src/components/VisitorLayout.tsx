@@ -26,6 +26,7 @@ import { Servico, Produto } from '../types.ts';
 import Logo from './Logo.tsx';
 import BookingWizard from './BookingWizard.tsx';
 import { signInWithGoogle } from '../lib/useAdminSession.ts';
+import { authedFetch } from '../lib/supabase.ts';
 import { ThemeToggle } from './ThemeToggle.tsx';
 import { Button } from '@/components/ui/button.tsx';
 import { WhatsAppFloatButton } from './WhatsAppFloatButton.tsx';
@@ -180,17 +181,14 @@ export default function VisitorLayout({
     if (!loggedClient) return;
     try {
       const telefoneDigits = editTelefone.replace(/\D/g, '');
-      const res = await fetch('/api/cliente/perfil', {
+      // O servidor identifica o cliente pelo JWT — não enviamos e-mail.
+      const res = await authedFetch('/api/cliente/perfil', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          email: loggedClient.email,
+        body: {
           nome: editNome,
           telefone: telefoneDigits,
           foto_url: editFoto
-        })
+        }
       });
       if (res.ok) {
         const data = await res.json();

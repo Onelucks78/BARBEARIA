@@ -7,7 +7,7 @@ import AdminLayout from './components/AdminLayout.tsx';
 import UserLayout from './components/UserLayout.tsx';
 import AuthModal from './components/AuthModal.tsx';
 import { useAdminSession, signOut } from './lib/useAdminSession.ts';
-import { supabase } from './lib/supabase.ts';
+import { supabase, authedFetch } from './lib/supabase.ts';
 
 function formatNameFromEmail(email: string): string {
   if (!email) return 'Cliente';
@@ -65,7 +65,8 @@ export default function App() {
       try { localStorage.setItem('logged_client', JSON.stringify(fromSession)); } catch {}
 
       // Mescla com perfil do servidor (telefone persistido, observações, etc)
-      fetch(`/api/cliente/perfil?email=${encodeURIComponent(email)}`)
+      // O servidor identifica o cliente pelo JWT da sessão — não enviamos e-mail.
+      authedFetch('/api/cliente/perfil')
         .then(res => res.ok ? res.json() : null)
         .then(data => {
           if (data?.found && data.profile) {

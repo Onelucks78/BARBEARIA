@@ -1,10 +1,20 @@
 import Stripe from 'stripe';
 
+// Versão da API fixada explicitamente. Em produção não queremos que uma
+// mudança de versão padrão do Stripe altere o formato das respostas sem aviso.
+// Precisa ser exatamente o literal aceito por Stripe.LatestApiVersion do SDK
+// instalado (stripe@22.3.2) — se divergir, o TypeScript quebra.
+const STRIPE_API_VERSION: Stripe.LatestApiVersion = '2026-06-24.dahlia';
+
+// Status considerados "assinatura vigente" (o cliente tem acesso ao plano).
+// past_due entra aqui porque o período pago ainda não terminou — a cobrança
+// falhou mas o Stripe ainda está tentando; bloquear novo checkout evita duplicidade.
+const STATUS_ATIVOS = ['active', 'trialing', 'past_due'];
+
 function getStripe(): Stripe | null {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) return null;
-  // Sem apiVersion fixa: usa a versão padrão fixada pelo SDK instalado (sempre válida).
-  return new Stripe(key);
+  return new Stripe(key, { apiVersion: STRIPE_API_VERSION });
 }
 
 export function isStripeConfigured(): boolean {
@@ -53,19 +63,143 @@ export function getPlanos(): PlanDefinition[] {
   ];
 }
 
+/**
+ * Traduz um priceId do Stripe para o id interno do plano.
+ * Fonte única de verdade — evita repetir o if/else pelo servidor.
+ */
+export function planFromPriceId(priceId?: string | null): string | null {
+  if (!priceId) return null;
+  if (priceId === process.env.STRIPE_PRICE_ESSENTIAL) return 'essential';
+  if (priceId === process.env.STRIPE_PRICE_PREMIUM) return 'premium';
+  if (priceId === process.env.STRIPE_PRICE_EXCLUSIVE) return 'exclusive';
+  return null;
+}
+
+/**
+ * Extrai o fim do período vigente como ISO string.
+ * Nas versões recentes da API o campo vive no subscription item
+ * (items.data[0].current_period_end); em versões antigas ficava na raiz.
+ * Tratamos os dois casos para não depender da versão negociada.
+ */
+function extrairCurrentPeriodEnd(sub: Stripe.Subscription): string | null {
+  const item: any = sub?.items?.data?.[0];
+  const raiz: any = sub;
+
+  let epoch: number | null = null;
+  if (typeof item?.current_period_end === 'number') {
+    epoch = item.current_period_end;
+  } else if (typeof raiz?.current_period_end === 'number') {
+    epoch = raiz.current_period_end;
+  }
+
+  if (epoch === null) return null;
+  return new Date(epoch * 1000).toISOString();
+}
+
+function extrairPriceId(sub: Stripe.Subscription): string | null {
+  const item: any = sub?.items?.data?.[0];
+  return item?.price?.id || null;
+}
+
+export interface ActiveSubscriptionInfo {
+  id: string;
+  status: string;
+  plan: string | null;
+  priceId: string | null;
+  currentPeriodEnd: string | null;
+}
+
+/**
+ * Busca a assinatura vigente mais recente de um e-mail.
+ * Retorna null se não houver customer ou nenhuma assinatura em STATUS_ATIVOS.
+ */
+export async function getActiveSubscription(email: string): Promise<ActiveSubscriptionInfo | null> {
+  const stripe = getStripe();
+  if (!stripe || !email) return null;
+
+  try {
+    // O mesmo e-mail pode ter mais de um customer (checkouts antigos, testes).
+    const customers = await stripe.customers.list({ email, limit: 10 });
+    if (customers.data.length === 0) return null;
+
+    const vigentes: Stripe.Subscription[] = [];
+    for (const customer of customers.data) {
+      const subs = await stripe.subscriptions.list({
+        customer: customer.id,
+        status: 'all',
+        limit: 100
+      });
+      for (const sub of subs.data) {
+        if (STATUS_ATIVOS.includes(sub.status)) vigentes.push(sub);
+      }
+    }
+
+    if (vigentes.length === 0) return null;
+
+    // Mais recente primeiro.
+    vigentes.sort((a, b) => (b.created || 0) - (a.created || 0));
+    const sub = vigentes[0];
+    const priceId = extrairPriceId(sub);
+
+    return {
+      id: sub.id,
+      status: sub.status,
+      plan: planFromPriceId(priceId),
+      priceId,
+      currentPeriodEnd: extrairCurrentPeriodEnd(sub)
+    };
+  } catch (err: any) {
+    console.error('[Stripe] Erro ao buscar assinatura ativa:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Agenda o cancelamento para o fim do período vigente.
+ * Nunca cancela na hora: o cliente já pagou o mês corrente.
+ */
+export async function cancelSubscriptionAtPeriodEnd(
+  email: string
+): Promise<{ ok: boolean; error?: string; currentPeriodEnd?: string }> {
+  const stripe = getStripe();
+  if (!stripe) return { ok: false, error: 'Stripe não configurado no servidor.' };
+
+  try {
+    const vigente = await getActiveSubscription(email);
+    if (!vigente) return { ok: false, error: 'Nenhuma assinatura ativa encontrada.' };
+
+    const atualizada = await stripe.subscriptions.update(vigente.id, {
+      cancel_at_period_end: true
+    });
+
+    const fim = extrairCurrentPeriodEnd(atualizada) || vigente.currentPeriodEnd;
+    return { ok: true, currentPeriodEnd: fim || undefined };
+  } catch (err: any) {
+    console.error('[Stripe] Erro ao agendar cancelamento da assinatura:', err.message);
+    return { ok: false, error: err.message };
+  }
+}
+
 export async function createCheckoutSession(params: {
   planId: string;
   clienteEmail: string;
   clienteNome: string;
   successUrl: string;
   cancelUrl: string;
-}): Promise<{ url: string | null; error?: string }> {
+  clienteId?: string;
+}): Promise<{ url: string | null; error?: string; code?: 'already_subscribed' }> {
   const stripe = getStripe();
   if (!stripe) return { url: null, error: 'Stripe não configurado no servidor.' };
 
   const plano = getPlanos().find(p => p.id === params.planId);
   if (!plano || !plano.priceId) {
     return { url: null, error: `Plano "${params.planId}" não encontrado ou sem priceId configurado.` };
+  }
+
+  // Barra assinatura duplicada antes de gastar uma sessão de checkout.
+  const jaAssinante = await getActiveSubscription(params.clienteEmail);
+  if (jaAssinante) {
+    return { url: null, error: 'Você já possui um plano ativo.', code: 'already_subscribed' };
   }
 
   try {
@@ -85,10 +219,22 @@ export async function createCheckoutSession(params: {
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       customer: customerId,
+      // Somente cartão: a conta tem boleto habilitado e boleto em assinatura
+      // conclui o checkout antes de o dinheiro entrar.
+      payment_method_types: ['card'],
       line_items: [{ price: plano.priceId, quantity: 1 }],
-      metadata: { plan: params.planId, cliente_email: params.clienteEmail },
+      ...(params.clienteId ? { client_reference_id: params.clienteId } : {}),
+      metadata: {
+        plan: params.planId,
+        cliente_email: params.clienteEmail,
+        ...(params.clienteId ? { cliente_id: params.clienteId } : {})
+      },
       subscription_data: {
-        metadata: { plan: params.planId, cliente_email: params.clienteEmail }
+        metadata: {
+          plan: params.planId,
+          cliente_email: params.clienteEmail,
+          ...(params.clienteId ? { cliente_id: params.clienteId } : {})
+        }
       },
       success_url: params.successUrl,
       cancel_url: params.cancelUrl,
@@ -165,5 +311,5 @@ export function constructSubscriptionInfo(event: {
 
 export function getStripeClientForWebhook(): Stripe | null {
   if (!process.env.STRIPE_SECRET_KEY) return null;
-  return new Stripe(process.env.STRIPE_SECRET_KEY);
+  return new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: STRIPE_API_VERSION });
 }

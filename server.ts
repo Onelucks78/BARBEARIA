@@ -21,7 +21,7 @@ import {
   LancamentoFinanceiro,
   DashboardStats
 } from './src/types.ts';
-import { attachUser, requireAdmin, AuthRequest } from './server/auth.ts';
+import { attachUser, requireAdmin, requireAuth, AuthRequest } from './server/auth.ts';
 import { isSupabaseConfigured, serviceClient, anonClient, setSupabaseOffline } from './server/supabase.ts';
 import { validate } from './server/validation.ts';
 import { schemas } from './server/schemas.ts';
@@ -30,6 +30,165 @@ import * as stripe from './server/stripe.ts';
 
 // Authenticate middleware
 // (substituído por server/auth.ts que verifica JWT real do Supabase)
+
+// --- IDEMPOTÊNCIA DO WEBHOOK DA STRIPE ---
+// A Stripe reentrega o MESMO evento sempre que a gente responde 500 ou estoura
+// o timeout. Sem trava, cada reentrega inseria outro lançamento financeiro e
+// inflava o faturamento. Fonte da verdade: tabela `stripe_webhook_events`
+// (id = event.id da Stripe). Sem Supabase, cai num Set em memória
+// (best-effort — só cobre o processo atual, serve pra dev/preview).
+const eventosStripeProcessados = new Set<string>();
+
+async function eventoStripeJaProcessado(eventId: string): Promise<boolean> {
+  if (eventosStripeProcessados.has(eventId)) return true;
+
+  const client = isSupabaseConfigured() ? serviceClient() : null;
+  if (!client) return false;
+
+  try {
+    const { data, error } = await client
+      .from('stripe_webhook_events')
+      .select('id')
+      .eq('id', eventId)
+      .maybeSingle();
+
+    if (error) {
+      // Falha na checagem não pode derrubar o webhook: seguimos o processamento.
+      console.warn('[Stripe Webhook] Falha ao checar idempotência:', error.message);
+      return false;
+    }
+    return Boolean(data);
+  } catch (err: any) {
+    console.warn('[Stripe Webhook] Erro ao checar idempotência:', err?.message);
+    return false;
+  }
+}
+
+// Só é chamado DEPOIS do processamento bem-sucedido — se algo explodir no meio,
+// o evento continua "não processado" e a reentrega da Stripe conserta o estado.
+async function marcarEventoStripeProcessado(eventId: string, tipo: string): Promise<void> {
+  eventosStripeProcessados.add(eventId);
+
+  const client = isSupabaseConfigured() ? serviceClient() : null;
+  if (!client) return;
+
+  try {
+    const { error } = await client
+      .from('stripe_webhook_events')
+      .insert({ id: eventId, type: tipo });
+    // 23505 = PK duplicada (corrida entre duas entregas simultâneas) — ok ignorar.
+    if (error && error.code !== '23505') {
+      console.warn('[Stripe Webhook] Falha ao registrar evento processado:', error.message);
+    }
+  } catch (err: any) {
+    console.warn('[Stripe Webhook] Erro ao registrar evento processado:', err?.message);
+  }
+}
+
+// --- POLÍTICA DE INADIMPLÊNCIA ---
+// isClientVip() (server/storage.ts) só considera VIP quem tem status === 'ativo'.
+// past_due entra como 'ativo' de propósito: a Stripe ainda tenta recobrar por ~2
+// semanas e cortar o acesso na primeira falha de cartão é agressivo demais.
+// O corte real acontece em unpaid/canceled/incomplete_expired.
+function mapearStatusAssinatura(stripeStatus: string): 'ativo' | 'cancelado' {
+  if (stripeStatus === 'active' || stripeStatus === 'trialing' || stripeStatus === 'past_due') {
+    return 'ativo';
+  }
+  if (stripeStatus === 'unpaid' || stripeStatus === 'canceled' || stripeStatus === 'incomplete_expired') {
+    return 'cancelado';
+  }
+  // incomplete / paused e afins: sem pagamento confirmado, não libera VIP.
+  console.warn(`[Stripe] Status de assinatura sem mapeamento: ${stripeStatus} → cancelado`);
+  return 'cancelado';
+}
+
+// Mescla um patch dentro de observacoes.subscription do cliente (as observações
+// guardam um JSON). Mesclar em vez de sobrescrever preserva campos que outro
+// evento já tinha gravado (plano, referência, pendência).
+async function patchSubscriptionObservacoes(email: string, patch: Record<string, any>): Promise<boolean> {
+  const client = isSupabaseConfigured() ? serviceClient() : null;
+  if (!client) return false;
+
+  const { data: clientes } = await client
+    .from('clientes')
+    .select('id, observacoes')
+    .eq('email', email)
+    .limit(1);
+  if (!clientes || clientes.length === 0) {
+    // Assinou na Stripe com um e-mail que não existe na base de clientes.
+    console.warn(`[Stripe] Cliente não encontrado para o e-mail da assinatura: ${email}`);
+    return false;
+  }
+
+  const cliente = clientes[0];
+  let obs: any = {};
+  try {
+    if (cliente.observacoes && cliente.observacoes.trim().startsWith('{')) {
+      obs = JSON.parse(cliente.observacoes);
+    }
+  } catch { obs = {}; }
+
+  obs.subscription = {
+    ...(obs.subscription || {}),
+    ...patch,
+    updatedAt: new Date().toISOString()
+  };
+
+  await client.from('clientes').update({ observacoes: JSON.stringify(obs) }).eq('id', cliente.id);
+  return true;
+}
+
+// Resolve o e-mail do cliente a partir do customer da Stripe.
+async function emailDoCustomerStripe(customerId: string): Promise<string | null> {
+  if (!customerId) return null;
+  const stripeClient = stripe.getStripeClientForWebhook();
+  if (!stripeClient) return null;
+  try {
+    const customer: any = await stripeClient.customers.retrieve(customerId);
+    if (customer && !customer.deleted && customer.email) return customer.email as string;
+  } catch (err: any) {
+    console.error('[Stripe Webhook] Erro ao buscar customer:', err?.message);
+  }
+  return null;
+}
+
+// Extrai o plano de uma invoice tolerando as DUAS formas da API da Stripe.
+// Da Basil em diante os metadados da assinatura vivem em
+// invoice.parent.subscription_details e o preço da linha em
+// pricing.price_details.price; antes disso era subscription_details na raiz e
+// lines.data[].price.id. A versão do payload é definida pela CONTA (não pelo SDK),
+// então lemos os dois formatos. Último recurso: consulta a assinatura, cujo
+// subscription item continua expondo price.id em qualquer versão.
+async function planoDaInvoice(invoice: any): Promise<string | null> {
+  const metaPlan =
+    invoice?.parent?.subscription_details?.metadata?.plan ||
+    invoice?.subscription_details?.metadata?.plan ||
+    invoice?.metadata?.plan;
+  if (metaPlan) return metaPlan as string;
+
+  const linha = invoice?.lines?.data?.[0];
+  const precoNovo = linha?.pricing?.price_details?.price;
+  const priceId =
+    (typeof precoNovo === 'string' ? precoNovo : precoNovo?.id) ||
+    linha?.price?.id ||
+    null;
+  const porPreco = stripe.planFromPriceId(priceId);
+  if (porPreco) return porPreco;
+
+  const subRef = invoice?.parent?.subscription_details?.subscription || invoice?.subscription;
+  const subId = typeof subRef === 'string' ? subRef : subRef?.id;
+  if (!subId) return null;
+
+  const stripeClient = stripe.getStripeClientForWebhook();
+  if (!stripeClient) return null;
+  try {
+    const sub: any = await stripeClient.subscriptions.retrieve(subId);
+    return sub.metadata?.plan || stripe.planFromPriceId(sub.items?.data?.[0]?.price?.id);
+  } catch (err: any) {
+    console.error('[Stripe Webhook] Erro ao resolver plano da invoice:', err?.message);
+    return null;
+  }
+}
 
 export async function createApp() {
   const app = express();
@@ -78,6 +237,13 @@ export async function createApp() {
       return res.status(400).json({ error: `Assinatura inválida: ${err.message}` });
     }
 
+    // Idempotência: se a Stripe já entregou esse evento antes, não processa de novo.
+    // Sem isso, todo retry (500/timeout) duplicava o lançamento financeiro.
+    if (await eventoStripeJaProcessado(event.id)) {
+      console.log(`[Stripe Webhook] Evento duplicado ignorado: ${event.id} (${event.type})`);
+      return res.json({ received: true, duplicate: true });
+    }
+
     try {
       switch (event.type) {
         case 'checkout.session.completed': {
@@ -92,18 +258,28 @@ export async function createApp() {
                 const sub: any = await stripeClient.subscriptions.retrieve(session.subscription as string);
                 plan = sub.metadata?.plan;
                 if (!plan && sub.items?.data?.length > 0) {
-                  const priceId = sub.items.data[0].price?.id;
-                  if (priceId === process.env.STRIPE_PRICE_EXCLUSIVE) plan = 'exclusive';
-                  else if (priceId === process.env.STRIPE_PRICE_PREMIUM) plan = 'premium';
-                  else if (priceId === process.env.STRIPE_PRICE_ESSENTIAL) plan = 'essential';
+                  plan = stripe.planFromPriceId(sub.items.data[0].price?.id);
                 }
               }
             } catch (e) {
               console.error('[Stripe Webhook] Erro ao buscar subscrição no checkout:', e);
             }
           }
-          if (!plan) plan = 'essential';
+          // Piso só no checkout: aqui NÓS mesmos setamos metadata.plan, então cair
+          // aqui é anomalia. O customer.subscription.updated corrige logo em seguida.
+          if (!plan) {
+            console.error(`[Stripe] Plano não identificado no checkout ${session.id} — usando 'essential' como piso.`);
+            plan = 'essential';
+          }
           const valor = (session.amount_total || 0) / 100;
+
+          // Só registra receita de dinheiro que REALMENTE entrou. Checkout pode
+          // completar com pagamento pendente (boleto, 3DS, etc) — nesse caso quem
+          // lança a receita é o invoice.paid, quando o dinheiro cai.
+          if (session.payment_status !== 'paid') {
+            console.log(`[Stripe] Checkout sem pagamento confirmado (payment_status=${session.payment_status}): ${email} — nada lançado.`);
+            break;
+          }
 
           await registrarAssinatura(email, plan, valor, session.id);
           console.log(`[Stripe] Checkout concluído: ${email} → ${plan} (R$ ${valor})`);
@@ -112,16 +288,14 @@ export async function createApp() {
 
         case 'invoice.paid': {
           const invoice = event.data.object;
-          const email = invoice.customer_email;
+          const email = invoice.customer_email || await emailDoCustomerStripe(invoice.customer as string);
           const valor = (invoice.amount_paid || 0) / 100;
-          let plan = (invoice.subscription_details?.metadata?.plan || invoice.metadata?.plan) as string;
-          if (!plan && invoice.lines?.data?.length > 0) {
-            const priceId = invoice.lines.data[0].price?.id;
-            if (priceId === process.env.STRIPE_PRICE_EXCLUSIVE) plan = 'exclusive';
-            else if (priceId === process.env.STRIPE_PRICE_PREMIUM) plan = 'premium';
-            else if (priceId === process.env.STRIPE_PRICE_ESSENTIAL) plan = 'essential';
+          // Nunca chute o plano numa renovação: chutar 'essential' rebaixa
+          // silenciosamente quem paga Premium/Exclusive. null = preserva o atual.
+          const plan = await planoDaInvoice(invoice);
+          if (!plan) {
+            console.error(`[Stripe] Plano não identificado na invoice ${invoice.id} — plano anterior do cliente preservado.`);
           }
-          if (!plan) plan = 'essential';
 
           if (email && invoice.billing_reason === 'subscription_cycle') {
             await registrarAssinatura(email, plan, valor, invoice.id);
@@ -130,76 +304,62 @@ export async function createApp() {
           break;
         }
 
+        // Falha de cobrança: NÃO derruba o VIP. A Stripe ainda vai tentar recobrar
+        // (dunning, ~2 semanas). Só marcamos a pendência pro front avisar o cliente.
+        // Quem realmente corta o acesso é o unpaid/canceled em subscription.updated.
+        case 'invoice.payment_failed': {
+          const invoice = event.data.object;
+          const email = invoice.customer_email || await emailDoCustomerStripe(invoice.customer as string);
+          if (!email) {
+            console.warn('[Stripe] invoice.payment_failed sem e-mail do cliente — ignorado.');
+            break;
+          }
+          await patchSubscriptionObservacoes(email, { pendencia: true });
+          console.log(`[Stripe] Pagamento falhou: ${email} → pendência marcada (acesso mantido).`);
+          break;
+        }
+
         case 'customer.subscription.updated': {
           const sub = event.data.object;
           const customerId = sub.customer as string;
           let plan = sub.metadata?.plan;
           if (!plan && sub.items?.data?.length > 0) {
-            const priceId = sub.items.data[0].price?.id;
-            if (priceId === process.env.STRIPE_PRICE_EXCLUSIVE) plan = 'exclusive';
-            else if (priceId === process.env.STRIPE_PRICE_PREMIUM) plan = 'premium';
-            else if (priceId === process.env.STRIPE_PRICE_ESSENTIAL) plan = 'essential';
+            plan = stripe.planFromPriceId(sub.items.data[0].price?.id);
           }
-          if (!plan) plan = 'essential';
+          // Sem chute: este é justamente o evento que corrige o plano do cliente.
+          // Se não deu pra identificar, preserva o que já está gravado.
+          if (!plan) {
+            console.error(`[Stripe] Plano não identificado na assinatura ${sub.id} — plano anterior preservado.`);
+          }
 
-          const stripeClient2 = stripe.getStripeClientForWebhook();
-          if (stripeClient2) {
-            const customer: any = await stripeClient2.customers.retrieve(customerId);
-            if (customer && !customer.deleted && customer.email) {
-              const email = customer.email;
-              const client = serviceClient();
-              if (client) {
-                const { data: clientes } = await client.from('clientes').select('id, observacoes').eq('email', email).limit(1);
-                if (clientes && clientes.length > 0) {
-                  const cliente = clientes[0];
-                  let obs: any = {};
-                  try {
-                    if (cliente.observacoes && cliente.observacoes.trim().startsWith('{')) {
-                      obs = JSON.parse(cliente.observacoes);
-                    }
-                  } catch { obs = {}; }
-                  obs.subscription = {
-                    status: sub.status === 'active' ? 'ativo' : sub.status,
-                    plan,
-                    stripeReferenceId: sub.id,
-                    updatedAt: new Date().toISOString()
-                  };
-                  await client.from('clientes').update({ observacoes: JSON.stringify(obs) }).eq('id', cliente.id);
-                  console.log(`[Stripe] Assinatura atualizada: ${email} → ${plan} (${sub.status})`);
-                }
-              }
-            }
+          const email = await emailDoCustomerStripe(customerId);
+          if (!email) break;
+
+          const status = mapearStatusAssinatura(sub.status);
+          const atualizou = await patchSubscriptionObservacoes(email, {
+            status,
+            ...(plan ? { plan } : {}),
+            stripeReferenceId: sub.id,
+            // past_due = cartão falhou mas ainda em recobrança; active/trialing limpa a pendência.
+            pendencia: sub.status === 'past_due'
+          });
+          if (atualizou) {
+            console.log(`[Stripe] Assinatura atualizada: ${email} → ${plan} (${sub.status} → ${status})`);
           }
           break;
         }
 
         case 'customer.subscription.deleted': {
           const sub = event.data.object;
-          const customerId = sub.customer as string;
-          const stripeClient3 = stripe.getStripeClientForWebhook();
-          if (stripeClient3) {
-            const customer: any = await stripeClient3.customers.retrieve(customerId);
-            if (customer && !customer.deleted && customer.email) {
-              const client = serviceClient();
-              if (client) {
-                const { data: clientes } = await client.from('clientes').select('id, observacoes').eq('email', customer.email).limit(1);
-                if (clientes && clientes.length > 0) {
-                  const cliente = clientes[0];
-                  let obs: any = {};
-                  try {
-                    if (cliente.observacoes && cliente.observacoes.trim().startsWith('{')) {
-                      obs = JSON.parse(cliente.observacoes);
-                    }
-                  } catch { obs = {}; }
-                  if (obs.subscription) {
-                    obs.subscription.status = 'cancelado';
-                    obs.subscription.updatedAt = new Date().toISOString();
-                    await client.from('clientes').update({ observacoes: JSON.stringify(obs) }).eq('id', cliente.id);
-                    console.log(`[Stripe] Assinatura cancelada: ${customer.email}`);
-                  }
-                }
-              }
-            }
+          const email = await emailDoCustomerStripe(sub.customer as string);
+          if (!email) break;
+
+          const atualizou = await patchSubscriptionObservacoes(email, {
+            status: 'cancelado',
+            pendencia: false
+          });
+          if (atualizou) {
+            console.log(`[Stripe] Assinatura cancelada: ${email}`);
           }
           break;
         }
@@ -208,16 +368,24 @@ export async function createApp() {
           console.log(`[Stripe] Evento ignorado: ${event.type}`);
       }
 
+      // Só marca como processado no fim, com tudo já persistido.
+      await marcarEventoStripeProcessado(event.id, event.type);
+
       res.json({ received: true });
     } catch (err: any) {
+      // 500 de propósito: a Stripe DEVE reentregar. A idempotência acima é que
+      // impede a reentrega de duplicar lançamento financeiro.
       console.error('[Stripe Webhook Error]', err);
       res.status(500).json({ error: err.message });
     }
   });
 
-  async function registrarAssinatura(email: string | undefined, plan: string, valor: number, referenceId: string) {
+  // plan === null significa "não consegui identificar o plano": nesse caso o plano
+  // já gravado no cliente é preservado, em vez de sobrescrito por um chute.
+  async function registrarAssinatura(email: string | undefined, plan: string | null, valor: number, referenceId: string) {
     if (!email) return;
     const splitDate = new Date().toISOString().split('T')[0];
+    const planoDescricao = plan || 'plano não identificado';
 
     if (isSupabaseConfigured()) {
       const client = serviceClient();
@@ -230,30 +398,20 @@ export async function createApp() {
         barbeiro_id: barbeiroId,
         profissional_id: null,
         tipo: 'entrada',
-        descricao: `Assinatura Stripe (${plan}): ${email}`,
+        descricao: `Assinatura Stripe (${planoDescricao}): ${email}`,
         valor,
         categoria: 'Plano',
         forma_pagamento: 'outro',
         data: splitDate
       });
 
-      const { data: clientes } = await client.from('clientes').select('id, observacoes').eq('email', email).limit(1);
-      if (clientes && clientes.length > 0) {
-        const cliente = clientes[0];
-        let obs: any = {};
-        try {
-          if (cliente.observacoes && cliente.observacoes.trim().startsWith('{')) {
-            obs = JSON.parse(cliente.observacoes);
-          }
-        } catch { obs = {}; }
-        obs.subscription = {
-          status: 'ativo',
-          plan,
-          stripeReferenceId: referenceId,
-          updatedAt: new Date().toISOString()
-        };
-        await client.from('clientes').update({ observacoes: JSON.stringify(obs) }).eq('id', cliente.id);
-      }
+      // Dinheiro entrou: assinatura ativa e sem pendência.
+      await patchSubscriptionObservacoes(email, {
+        status: 'ativo',
+        ...(plan ? { plan } : {}),
+        stripeReferenceId: referenceId,
+        pendencia: false
+      });
       return;
     }
 
@@ -284,9 +442,11 @@ export async function createApp() {
         }
       } catch { obs = {}; }
       obs.subscription = {
+        ...(obs.subscription || {}),
         status: 'ativo',
-        plan,
+        ...(plan ? { plan } : {}),
         stripeReferenceId: referenceId,
+        pendencia: false,
         updatedAt: new Date().toISOString()
       };
       cliente.observacoes = JSON.stringify(obs);
@@ -300,11 +460,17 @@ export async function createApp() {
   });
 
   // --- STRIPE: CRIAR CHECKOUT SESSION ---
-  app.post('/api/stripe/create-checkout-session', async (req, res) => {
+  // requireAuth + req.userEmail: o cliente só assina PRA SI MESMO. Nada de e-mail
+  // vindo do corpo da requisição — era um jeito de assinar em nome de terceiros.
+  app.post('/api/stripe/create-checkout-session', requireAuth, async (req: AuthRequest, res) => {
     try {
-      const { planId, email, nome } = req.body as { planId: string; email: string; nome: string };
-      if (!planId || !email) {
-        return res.status(400).json({ error: 'planId e email são obrigatórios.' });
+      const { planId, nome } = req.body as { planId: string; nome?: string };
+      const email = req.userEmail;
+      if (!planId) {
+        return res.status(400).json({ error: 'planId é obrigatório.' });
+      }
+      if (!email) {
+        return res.status(401).json({ error: 'Sessão sem e-mail. Faça login novamente.' });
       }
 
       const appUrl = process.env.APP_URL || `http://localhost:${PORT}`;
@@ -312,9 +478,19 @@ export async function createApp() {
         planId,
         clienteEmail: email,
         clienteNome: nome || email,
+        // liga o customer da Stripe ao usuário do Supabase Auth
+        clienteId: req.userId,
         successUrl: `${appUrl}/planos/sucesso?session_id={CHECKOUT_SESSION_ID}`,
         cancelUrl: `${appUrl}/planos`
       });
+
+      // Já tem assinatura ativa: 409 pro front tratar (mandar pro portal, não pro checkout).
+      if (result.code === 'already_subscribed') {
+        return res.status(409).json({
+          error: result.error || 'Você já possui uma assinatura ativa.',
+          code: 'already_subscribed'
+        });
+      }
 
       if (result.error) {
         return res.status(400).json({ error: result.error });
@@ -328,11 +504,14 @@ export async function createApp() {
   });
 
   // --- STRIPE: CUSTOMER PORTAL ---
-  app.get('/api/stripe/portal', async (req, res) => {
+  // IDOR corrigido: o portal de faturamento é sempre o de quem está logado.
+  // O ?email= da query é IGNORADO de propósito — era o buraco que entregava
+  // o faturamento de qualquer cliente pra qualquer pessoa.
+  app.get('/api/stripe/portal', requireAuth, async (req: AuthRequest, res) => {
     try {
-      const email = req.query.email as string;
+      const email = req.userEmail;
       if (!email) {
-        return res.status(400).json({ error: 'Parâmetro email é obrigatório.' });
+        return res.status(401).json({ error: 'Sessão sem e-mail. Faça login novamente.' });
       }
 
       const appUrl = process.env.APP_URL || `http://localhost:${PORT}`;
@@ -352,12 +531,38 @@ export async function createApp() {
     }
   });
 
-  // --- STRIPE: STATUS DA ASSINATURA DO CLIENTE ---
-  app.get('/api/stripe/subscription', async (req, res) => {
+  // --- STRIPE: CANCELAR ASSINATURA (no fim do período pago) ---
+  // O cancelamento tem que acontecer NA STRIPE — antes o front só "cancelava"
+  // localmente e o cartão do cliente seguia sendo cobrado pra sempre.
+  // As observações do cliente NÃO são tocadas aqui: quem atualiza é o webhook
+  // customer.subscription.updated/deleted, mantendo uma fonte da verdade só.
+  app.post('/api/stripe/cancel-subscription', requireAuth, async (req: AuthRequest, res) => {
     try {
-      const email = req.query.email as string;
+      const email = req.userEmail;
       if (!email) {
-        return res.status(400).json({ error: 'Parâmetro email é obrigatório.' });
+        return res.status(401).json({ error: 'Sessão sem e-mail. Faça login novamente.' });
+      }
+
+      const result = await stripe.cancelSubscriptionAtPeriodEnd(email);
+      if (!result.ok) {
+        return res.status(400).json({ error: result.error || 'Não foi possível cancelar a assinatura.' });
+      }
+
+      console.log(`[Stripe] Cancelamento agendado para o fim do período: ${email}`);
+      res.json({ ok: true, currentPeriodEnd: result.currentPeriodEnd });
+    } catch (err: any) {
+      console.error('[Stripe] Erro ao cancelar assinatura:', err);
+      res.status(500).json({ error: 'Erro ao cancelar assinatura.' });
+    }
+  });
+
+  // --- STRIPE: STATUS DA ASSINATURA DO CLIENTE ---
+  // Mesma correção de IDOR do portal: só o próprio status, vindo do JWT.
+  app.get('/api/stripe/subscription', requireAuth, async (req: AuthRequest, res) => {
+    try {
+      const email = req.userEmail;
+      if (!email) {
+        return res.status(401).json({ error: 'Sessão sem e-mail. Faça login novamente.' });
       }
 
       if (isSupabaseConfigured()) {
@@ -463,11 +668,15 @@ export async function createApp() {
   });
 
   // 4b. Get Client Profile by Email
-  app.get('/api/cliente/perfil', async (req, res) => {
+  // O e-mail vem do JWT (req.userEmail) — o ?email= da query só é aceito do admin.
+  // Grep em src/: hoje nenhuma tela de admin lê esse endpoint (o admin usa
+  // /api/admin/clientes), mas a exceção fica pra não travar o painel no futuro.
+  app.get('/api/cliente/perfil', requireAuth, async (req: AuthRequest, res) => {
     try {
-      const { email } = req.query as { email?: string };
+      const emailQuery = (req.query.email as string | undefined)?.trim();
+      const email = (req.isAdmin && emailQuery) ? emailQuery : req.userEmail;
       if (!email) {
-        return res.status(400).json({ error: 'Parâmetro email é obrigatório.' });
+        return res.status(401).json({ error: 'Sessão sem e-mail. Faça login novamente.' });
       }
       const profile = await storage.getClientProfile(email);
       if (profile) return res.json({ found: true, profile });
@@ -479,13 +688,17 @@ export async function createApp() {
   });
 
   // 4c. Create or Update Client Profile
-  app.post('/api/cliente/perfil', async (req, res) => {
+  // Mesma regra do GET: o cliente só edita o PRÓPRIO perfil (e-mail do JWT).
+  // Sem isso qualquer um sobrescrevia nome/telefone/observações de outro cliente
+  // — inclusive o bloco `subscription` que define quem é VIP.
+  app.post('/api/cliente/perfil', requireAuth, async (req: AuthRequest, res) => {
     try {
-      const { email, nome, telefone, foto_url, observacoes } = req.body as {
+      const { email: emailBody, nome, telefone, foto_url, observacoes } = req.body as {
         email?: string; nome?: string; telefone?: string; foto_url?: string; observacoes?: string;
       };
+      const email = (req.isAdmin && emailBody) ? emailBody.trim() : req.userEmail;
       if (!email) {
-        return res.status(400).json({ error: 'Parâmetro email é obrigatório.' });
+        return res.status(401).json({ error: 'Sessão sem e-mail. Faça login novamente.' });
       }
       const profile = await storage.upsertClientProfile({
         email,

@@ -3,9 +3,10 @@ import {
   User, Calendar, CreditCard, LogOut,
   Settings, Sparkles, Clock, MapPin,
   ChevronRight, CheckCircle2,
-  Check, X, Crown, ShoppingBag, Flame, ArrowRight
+  Check, X, Crown, ShoppingBag, Flame, ArrowRight, AlertTriangle
 } from 'lucide-react';
 import { Servico, Produto } from '../types.ts';
+import { authedFetch } from '../lib/supabase.ts';
 import BookingWizard from './BookingWizard.tsx';
 import { ThemeToggle } from './ThemeToggle.tsx';
 import { WhatsAppFloatButton } from './WhatsAppFloatButton.tsx';
@@ -104,6 +105,15 @@ export default function UserLayout({
   const [redirectingPlan, setRedirectingPlan] = useState<string | null>(null);
   const [isOpeningPortal, setIsOpeningPortal] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
+  const [showPortalShortcut, setShowPortalShortcut] = useState(false);
+
+  // Stripe Cancelamento (agendado para o fim do período vigente)
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState('');
+  const [cancelNotice, setCancelNotice] = useState('');
+
+  // Pagamento em atraso sinalizado pelo backend dentro de subscription
+  const hasPendencia = Boolean(subscription?.pendencia);
 
   // Profile Form States
   const [profileName, setProfileName] = useState('');
@@ -127,15 +137,14 @@ export default function UserLayout({
     setProfileError('');
     setProfileSaveSuccess(false);
     try {
-      const res = await fetch('/api/cliente/perfil', {
+      // O servidor identifica o cliente pelo JWT — não enviamos e-mail.
+      const res = await authedFetch('/api/cliente/perfil', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: loggedClient.email,
+        body: {
           nome: profileName,
           telefone: profilePhone.replace(/\D/g, ''),
           observacoes: loggedClient.observacoes
-        })
+        }
       });
       if (res.ok) {
         const data = await res.json();
@@ -213,21 +222,26 @@ export default function UserLayout({
   const handleStartStripeCheckout = async (planoKey: string) => {
     setRedirectingPlan(planoKey);
     setCheckoutError('');
+    setShowPortalShortcut(false);
     try {
-      const res = await fetch('/api/stripe/create-checkout-session', {
+      // O servidor identifica o cliente pelo JWT — não enviamos e-mail/nome.
+      const res = await authedFetch('/api/stripe/create-checkout-session', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          planId: planoKey,
-          email: loggedClient.email,
-          nome: loggedClient.nome
-        })
+        body: { planId: planoKey }
       });
-      const data = await res.json();
-      if (data.url) {
+      const data = await res.json().catch(() => ({} as any));
+
+      if (res.status === 409 || data?.code === 'already_subscribed') {
+        setCheckoutError('Você já possui um plano ativo.');
+        setShowPortalShortcut(true);
+        setRedirectingPlan(null);
+        return;
+      }
+
+      if (res.ok && data?.url) {
         window.location.href = data.url;
       } else {
-        setCheckoutError(data.error || 'Erro ao gerar checkout seguro da Stripe.');
+        setCheckoutError(data?.error || 'Erro ao gerar checkout seguro da Stripe.');
         setRedirectingPlan(null);
       }
     } catch (err) {
@@ -239,12 +253,12 @@ export default function UserLayout({
   const handleOpenStripePortal = async () => {
     setIsOpeningPortal(true);
     try {
-      const res = await fetch(`/api/stripe/portal?email=${encodeURIComponent(loggedClient.email)}`);
-      const data = await res.json();
-      if (data.url) {
+      const res = await authedFetch('/api/stripe/portal');
+      const data = await res.json().catch(() => ({} as any));
+      if (res.ok && data?.url) {
         window.location.href = data.url;
       } else {
-        alert(data.error || 'Não foi possível acessar o portal de faturamento.');
+        alert(data?.error || 'Não foi possível acessar o portal de faturamento.');
         setIsOpeningPortal(false);
       }
     } catch {
@@ -254,46 +268,72 @@ export default function UserLayout({
   };
 
   const handleCancelSubscription = async () => {
-    if (!confirm(`Deseja realmente cancelar o seu Plano ${planoDisplayName}?`)) return;
+    const confirmado = confirm(
+      `Deseja cancelar o seu Plano ${planoDisplayName}?\n\n` +
+      'O cancelamento vale a partir do fim do período já pago: você continua com acesso VIP e todos os benefícios até essa data, e nenhuma nova cobrança será feita depois dela.'
+    );
+    if (!confirmado) return;
+
+    setIsCancelling(true);
+    setCancelError('');
+    setCancelNotice('');
     try {
-      let currentObsText = '';
-      if (loggedClient.observacoes) {
-        try {
-          if (loggedClient.observacoes.trim().startsWith('{')) {
-            const parsed = JSON.parse(loggedClient.observacoes);
-            currentObsText = parsed.observacoes_usuario || '';
-          } else {
-            currentObsText = loggedClient.observacoes;
-          }
-        } catch {}
+      // O servidor identifica o cliente pelo JWT — sem body.
+      const res = await authedFetch('/api/stripe/cancel-subscription', { method: 'POST' });
+      const data = await res.json().catch(() => ({} as any));
+
+      if (!res.ok || !data?.ok) {
+        setCancelError(data?.error || 'Não foi possível cancelar a assinatura. Tente novamente.');
+        return;
       }
 
-      const packedData = JSON.stringify({
-        observacoes_usuario: currentObsText,
-        subscription: null
-      });
-
-      const res = await fetch('/api/cliente/perfil', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: loggedClient.email,
-          nome: loggedClient.nome,
-          telefone: loggedClient.telefone,
-          observacoes: packedData
-        })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.profile) {
-          onProfileUpdate(data.profile);
-        }
-      }
+      // Importante: NÃO limpamos o estado local da assinatura.
+      // O cliente segue VIP até o fim do período; quem vira o status é o webhook da Stripe.
+      const fim = data.currentPeriodEnd ? new Date(data.currentPeriodEnd) : null;
+      const fimValido = fim && !isNaN(fim.getTime());
+      setCancelNotice(
+        fimValido
+          ? `Cancelamento agendado. Você continua com acesso ao Plano ${planoDisplayName} até ${fim!.toLocaleDateString('pt-BR')} e não haverá novas cobranças.`
+          : `Cancelamento agendado. Você continua com acesso ao Plano ${planoDisplayName} até o fim do período já pago e não haverá novas cobranças.`
+      );
     } catch (e) {
       console.error(e);
+      setCancelError('Erro de conexão ao cancelar a assinatura.');
+    } finally {
+      setIsCancelling(false);
     }
   };
+
+  // Avisos do fluxo de cobrança (checkout / cancelamento) — usados nas duas visões da aba "Meu Plano"
+  const billingAlerts = (
+    <>
+      {checkoutError && (
+        <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-500 text-xs text-center rounded-xl font-medium space-y-2">
+          <p>{checkoutError}</p>
+          {showPortalShortcut && (
+            <button
+              type="button"
+              onClick={handleOpenStripePortal}
+              disabled={isOpeningPortal}
+              className="inline-flex items-center gap-1.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 font-bold text-[11px] uppercase tracking-wider px-3 py-2 rounded-xl transition cursor-pointer"
+            >
+              <CreditCard className="w-3.5 h-3.5" /> {isOpeningPortal ? 'Abrindo portal...' : 'Abrir portal de faturamento'}
+            </button>
+          )}
+        </div>
+      )}
+      {cancelError && (
+        <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-500 text-xs text-center rounded-xl font-medium">
+          {cancelError}
+        </div>
+      )}
+      {cancelNotice && (
+        <div className="p-3 bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs text-center rounded-xl font-medium">
+          {cancelNotice}
+        </div>
+      )}
+    </>
+  );
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col lg:flex-row font-sans">
@@ -630,10 +670,7 @@ export default function UserLayout({
 
                       <button
                         type="button"
-                        onClick={() => {
-                          setSelectedPlano(plano);
-                          setActiveTab('assinatura');
-                        }}
+                        onClick={() => setActiveTab('assinatura')}
                         className="w-full py-2.5 bg-secondary hover:bg-secondary/80 text-secondary-foreground font-bold text-xs uppercase tracking-wider rounded-xl transition cursor-pointer border border-border mt-2"
                       >
                         Assinar {plano.nome}
@@ -657,6 +694,12 @@ export default function UserLayout({
 
             {subscription?.status === 'ativo' ? (
               <div className="space-y-8">
+                {(checkoutError || cancelError || cancelNotice) && (
+                  <div className="max-w-2xl mx-auto space-y-3">
+                    {billingAlerts}
+                  </div>
+                )}
+
                 <div className="bg-card/80 p-6 rounded-2xl border border-border/80 space-y-6 shadow-sm max-w-2xl mx-auto">
                   <div className="flex items-center justify-between border-b border-border pb-4">
                     <div>
@@ -685,13 +728,27 @@ export default function UserLayout({
                     </div>
                   </div>
 
-                  <div className="pt-4 border-t border-border flex items-center justify-center">
+                  {hasPendencia && (
+                    <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs rounded-xl font-medium">
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      <span>Pagamento pendente — atualize seu cartão para não perder os benefícios.</span>
+                    </div>
+                  )}
+
+                  <div className="pt-4 border-t border-border flex flex-col items-center gap-3">
                     <button
                       onClick={handleOpenStripePortal}
                       disabled={isOpeningPortal}
                       className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground font-bold text-xs uppercase tracking-wider py-3.5 px-4 rounded-xl transition shadow-md cursor-pointer text-gold-glow flex items-center justify-center gap-2"
                     >
                       {isOpeningPortal ? 'Abrindo Portal Stripe...' : '💳 Gerenciar Assinatura, Cartão & Faturas (Stripe)'}
+                    </button>
+                    <button
+                      onClick={handleCancelSubscription}
+                      disabled={isCancelling || Boolean(cancelNotice)}
+                      className="text-red-500 hover:text-red-600 text-xs uppercase font-bold py-2 px-3 border border-red-500/30 rounded-xl hover:bg-red-500/10 transition cursor-pointer disabled:opacity-60 disabled:cursor-default"
+                    >
+                      {isCancelling ? 'Cancelando...' : cancelNotice ? 'Cancelamento Agendado' : 'Cancelar Assinatura'}
                     </button>
                   </div>
                 </div>
@@ -754,11 +811,7 @@ export default function UserLayout({
               </div>
             ) : (
               <div className="space-y-4">
-                {checkoutError && (
-                  <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-500 text-xs text-center rounded-xl font-medium">
-                    {checkoutError}
-                  </div>
-                )}
+                {billingAlerts}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                   {PLANOS.map((plano) => (
                     <div key={plano.key} className={`flex flex-col p-6 rounded-2xl border space-y-4 bg-card/80 transition duration-300 ${plano.destaque ? 'border-primary/60 shadow-lg' : 'border-border/80'}`}>
