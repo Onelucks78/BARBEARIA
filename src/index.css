@@ -103,10 +103,6 @@ html {
   font-family: 'Balthazar', 'Playfair Display', Georgia, serif;
 }
 
-.font-benguiat {
-  font-family: 'ITC Benguiat', 'ITC Benguiat Book', 'Benguiat', 'Playfair Display', Georgia, serif !important;
-}
-
 .gold-border-gradient {
   border-image: linear-gradient(to right, #c5a059, #55401e) 1;
 }
