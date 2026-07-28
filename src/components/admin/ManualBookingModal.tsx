@@ -90,13 +90,12 @@ export default function ManualBookingModal({
     fetchSlots();
   }, [selectedProfissionalId, selectedDate, selectedServices]);
 
-  // Marca/desmarca livremente (dá pra combinar corte + barba, e dá pra zerar).
-  const handleToggleService = (s: Servico) => {
-    setSelectedServices(prev =>
-      prev.some(item => item.id === s.id)
-        ? prev.filter(item => item.id !== s.id)
-        : [...prev, s]
-    );
+  // Um serviço por agendamento. Combos ("Cabelo + Barba + Sobrancelha") já
+  // existem como serviço próprio no catálogo. Guardamos em array porque é o
+  // formato que a API espera em servicos_ids.
+  const handleSelectService = (servicoId: string) => {
+    const escolhido = services.find(item => item.id === servicoId);
+    setSelectedServices(escolhido ? [escolhido] : []);
     setSelectedSlot('');
   };
 
@@ -282,11 +281,11 @@ export default function ManualBookingModal({
           <div className="space-y-1">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
-                Serviço * <span className="normal-case font-medium tracking-normal">(pode marcar mais de um)</span>
+                Serviço *
               </label>
               {selectedServices.length > 0 && (
                 <span className="text-[11px] font-bold text-primary">
-                  {selectedServices.length} selecionado{selectedServices.length > 1 ? 's' : ''} · R$ {totalPreco.toFixed(2).replace('.', ',')}
+                  R$ {totalPreco.toFixed(2).replace('.', ',')}
                   {totalDuracao > 0 && ` · ${totalDuracao} min`}
                 </span>
               )}
@@ -296,25 +295,20 @@ export default function ManualBookingModal({
                 Nenhum serviço disponível. Cadastre em “Serviços CRUD” antes de agendar.
               </div>
             ) : (
-            <div className="flex flex-wrap gap-1.5 p-2 bg-background border border-border rounded-md max-h-32 sm:max-h-40 overflow-y-auto">
-              {services.map(s => {
-                const isSelected = selectedServices.some(item => item.id === s.id);
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => handleToggleService(s)}
-                    className={`px-3 py-1.5 rounded text-xs font-semibold transition cursor-pointer border ${
-                      isSelected
-                        ? 'bg-primary text-primary-foreground border-primary shadow-xs font-bold'
-                        : 'bg-card hover:bg-muted text-muted-foreground border-border'
-                    }`}
-                  >
-                    {s.nome} (R$ {s.preco.toFixed(2).replace('.', ',')})
-                  </button>
-                );
-              })}
-            </div>
+              // Select nativo: a rolagem da lista é do próprio sistema (PC e celular),
+              // então a altura do modal não muda por causa da quantidade de serviços.
+              <select
+                value={selectedServices[0]?.id || ''}
+                onChange={(e) => handleSelectService(e.target.value)}
+                className="w-full p-2.5 bg-background border border-border rounded-md text-xs focus:outline-none focus:border-primary text-foreground font-semibold"
+              >
+                <option value="">Selecione o serviço...</option>
+                {services.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.nome} — R$ {s.preco.toFixed(2).replace('.', ',')}
+                  </option>
+                ))}
+              </select>
             )}
           </div>
 
