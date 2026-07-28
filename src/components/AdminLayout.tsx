@@ -352,6 +352,9 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
     } else if (activeTab === 'agenda') {
       fetchAgendamentos();
       fetchClientes();
+      // O modal de agendamento manual precisa da lista de serviços. Sem isso ela
+      // só era carregada se o admin passasse antes pela aba "Serviços".
+      fetchServicos();
     } else if (activeTab === 'equipe') {
       fetchProfissionais();
     } else if (activeTab === 'servicos') {

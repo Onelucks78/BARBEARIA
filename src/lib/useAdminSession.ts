@@ -31,7 +31,7 @@ export function useAdminSession() {
           session: { access_token: 'mock-token' } as any,
           user: { id: 'mock-admin-id', email: 'barbeiro@imperial.com' } as any,
           isAdmin: true,
-          barbeiroId: 'b-1'
+          barbeiroId: '00000000-0000-0000-0000-000000000001'
         };
         setState({ loading: false, session: mockAdmin });
         return;
@@ -76,7 +76,7 @@ export function useAdminSession() {
           session: { access_token: 'mock-token' } as any,
           user: { id: 'mock-admin-id', email: 'barbeiro@imperial.com' } as any,
           isAdmin: true,
-          barbeiroId: 'b-1'
+          barbeiroId: '00000000-0000-0000-0000-000000000001'
         };
         setState({ loading: false, session: mockAdmin });
         return;

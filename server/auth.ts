@@ -34,6 +34,15 @@ export function getUserClient(authHeader?: string): SupabaseClient | null {
  *   - cliente autenticado: qualquer outro usuário logado → userType='cliente'
  *   - sem token: passa adiante como anon (rotas públicas decidem o que fazer)
  */
+/**
+ * Atalho de desenvolvimento local (token fixo vira admin).
+ * NUNCA pode valer em produção: seria acesso de administrador sem senha para
+ * qualquer um que enviasse o cabeçalho. Na Vercel, process.env.VERCEL é
+ * embutido como true no build (ver script "build:api"), então o atalho morre lá.
+ */
+const MOCK_AUTH_PERMITIDO =
+  process.env.NODE_ENV !== 'production' && !process.env.VERCEL;
+
 export async function attachUser(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     const authHeader = req.headers.authorization;
@@ -44,10 +53,15 @@ export async function attachUser(req: AuthRequest, res: Response, next: NextFunc
 
     const token = authHeader.replace(/^Bearer\s+/i, '');
     if (token === 'mock-token') {
+      if (!MOCK_AUTH_PERMITIDO) {
+        return res.status(401).json({ error: 'Token inválido ou expirado.' });
+      }
       req.userId = 'mock-admin-id';
       req.userEmail = 'barbeiro@imperial.com';
       req.isAdmin = true;
-      req.barbeiroId = 'b-1';
+      // Mesmo id semeado em 004_seed.sql — 'b-1' era herança do db.json e
+      // fazia o painel de teste abrir vazio.
+      req.barbeiroId = '00000000-0000-0000-0000-000000000001';
       req.userType = 'admin';
       return next();
     }

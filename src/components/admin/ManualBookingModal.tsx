@@ -56,12 +56,9 @@ export default function ManualBookingModal({
     }
   }, [defaultProfissionalId, profissionais]);
 
-  // Pre-select first service by default
-  useEffect(() => {
-    if (services.length > 0 && selectedServices.length === 0) {
-      setSelectedServices([services[0]]);
-    }
-  }, [services]);
+  // Nada de pré-selecionar serviço: com 15 serviços cadastrados, marcar o
+  // primeiro da lista fazia o admin achar que não dava pra trocar (clicar em
+  // outro SOMAVA em vez de substituir). Quem escolhe é ele.
 
   // Fetch live availability from database API
   useEffect(() => {
@@ -93,16 +90,18 @@ export default function ManualBookingModal({
     fetchSlots();
   }, [selectedProfissionalId, selectedDate, selectedServices]);
 
+  // Marca/desmarca livremente (dá pra combinar corte + barba, e dá pra zerar).
   const handleToggleService = (s: Servico) => {
-    if (selectedServices.some(item => item.id === s.id)) {
-      if (selectedServices.length > 1) {
-        setSelectedServices(prev => prev.filter(item => item.id !== s.id));
-      }
-    } else {
-      setSelectedServices(prev => [...prev, s]);
-    }
+    setSelectedServices(prev =>
+      prev.some(item => item.id === s.id)
+        ? prev.filter(item => item.id !== s.id)
+        : [...prev, s]
+    );
     setSelectedSlot('');
   };
+
+  const totalPreco = selectedServices.reduce((acc, s) => acc + (s.preco || 0), 0);
+  const totalDuracao = selectedServices.reduce((acc, s) => acc + (s.duracao_minutos || 0), 0);
 
   // Calendar Helpers
   const getDaysInMonth = (month: number, year: number) => new Date(year, month + 1, 0).getDate();
@@ -232,7 +231,9 @@ export default function ManualBookingModal({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
+          {/* Só esta área rola. Os botões ficam fora dela, no rodapé fixo. */}
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
           {errorMsg && (
             <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-500 rounded-md text-xs font-semibold">
               {errorMsg}
@@ -279,10 +280,23 @@ export default function ManualBookingModal({
 
           {/* 2. Serviço */}
           <div className="space-y-1">
-            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
-              Serviço *
-            </label>
-            <div className="flex flex-wrap gap-1.5 p-2 bg-background border border-border rounded-md">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
+                Serviço * <span className="normal-case font-medium tracking-normal">(pode marcar mais de um)</span>
+              </label>
+              {selectedServices.length > 0 && (
+                <span className="text-[11px] font-bold text-primary">
+                  {selectedServices.length} selecionado{selectedServices.length > 1 ? 's' : ''} · R$ {totalPreco.toFixed(2).replace('.', ',')}
+                  {totalDuracao > 0 && ` · ${totalDuracao} min`}
+                </span>
+              )}
+            </div>
+            {services.length === 0 ? (
+              <div className="p-3 bg-background border border-border rounded-md text-xs text-muted-foreground text-center">
+                Nenhum serviço disponível. Cadastre em “Serviços CRUD” antes de agendar.
+              </div>
+            ) : (
+            <div className="flex flex-wrap gap-1.5 p-2 bg-background border border-border rounded-md max-h-32 sm:max-h-40 overflow-y-auto">
               {services.map(s => {
                 const isSelected = selectedServices.some(item => item.id === s.id);
                 return (
@@ -301,6 +315,7 @@ export default function ManualBookingModal({
                 );
               })}
             </div>
+            )}
           </div>
 
           {/* 3. CALENDÁRIO ABERTO (Open Visual Calendar Grid) */}
@@ -387,7 +402,9 @@ export default function ManualBookingModal({
               </div>
             ) : availableSlots.length === 0 ? (
               <div className="p-4 border border-border rounded-lg bg-background text-center text-xs text-muted-foreground">
-                Selecione um dia no calendário acima para visualizar os horários disponíveis no banco.
+                {selectedServices.length === 0
+                  ? 'Escolha o serviço acima para calcular os horários livres.'
+                  : 'Nenhum horário livre para este dia. Tente outro dia no calendário.'}
               </div>
             ) : (
               <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 p-3 bg-background border border-border rounded-lg max-h-44 overflow-y-auto">
@@ -426,8 +443,11 @@ export default function ManualBookingModal({
             />
           </div>
 
-          {/* Footer Submit */}
-          <div className="pt-3 border-t border-border flex items-center justify-end gap-2 shrink-0">
+          </div>
+
+          {/* Rodapé FIXO: fora da área de rolagem, sempre visível no celular e no PC.
+              Antes ficava dentro do scroll, então o botão nascia abaixo da dobra. */}
+          <div className="shrink-0 border-t border-border bg-card p-4 sm:px-6 flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={onClose}
