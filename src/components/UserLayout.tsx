@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   User, Calendar, CreditCard, LogOut,
   Settings, Sparkles, Clock, MapPin,
   ChevronRight, CheckCircle2,
-  Check, X, Crown, ShoppingBag, Flame, ArrowRight, AlertTriangle
+  Check, X, Menu, Crown, ShoppingBag, Flame, ArrowRight, AlertTriangle
 } from 'lucide-react';
 import { Servico, Produto } from '../types.ts';
 import { authedFetch } from '../lib/supabase.ts';
@@ -72,6 +73,7 @@ export default function UserLayout({
   products 
 }: UserLayoutProps) {
   const [activeTab, setActiveTab] = useState<'painel' | 'agendar' | 'assinatura' | 'agendamentos' | 'perfil'>('painel');
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [clientBookings, setClientBookings] = useState<any[]>([]);
   const [loadingBookings, setLoadingBookings] = useState(false);
   const [subscription, setSubscription] = useState<any>(null);
@@ -338,9 +340,141 @@ export default function UserLayout({
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col lg:flex-row font-sans">
       <WhatsAppFloatButton />
+
+      {/* Mobile Top Header Bar (Visível apenas em telas menores que lg) */}
+      <header className="lg:hidden sticky top-0 z-40 bg-card/95 backdrop-blur-md border-b border-border px-4 py-3 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-3">
+          <Logo className="h-10 w-auto object-contain shrink-0" />
+        </div>
+
+        <div className="flex items-center gap-2.5">
+          <ThemeToggle />
+
+          {/* User Profile Avatar */}
+          <div className="w-8 h-8 rounded-full border border-primary/60 overflow-hidden bg-background shrink-0">
+            {loggedClient.foto_url ? (
+              <img src={loggedClient.foto_url} alt="Profile" className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-primary font-bold text-xs uppercase">
+                {loggedClient.nome.charAt(0)}
+              </div>
+            )}
+          </div>
+
+          {/* Mobile Hamburger Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen(!mobileNavOpen)}
+            className="p-2 rounded-xl bg-accent/60 hover:bg-accent text-foreground border border-border/80 transition cursor-pointer flex items-center justify-center"
+            aria-label="Abrir menu do cliente"
+            title="Menu do cliente"
+          >
+            {mobileNavOpen ? <X className="w-5 h-5 text-primary" /> : <Menu className="w-5 h-5 text-primary" />}
+          </button>
+        </div>
+      </header>
+
+      {/* Mobile Navigation Drawer */}
+      <AnimatePresence>
+        {mobileNavOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setMobileNavOpen(false)}
+              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 lg:hidden"
+            />
+            <motion.div
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed top-0 bottom-0 left-0 w-[290px] max-w-[85vw] bg-card border-r border-border shadow-2xl p-5 z-50 lg:hidden flex flex-col justify-between overflow-y-auto"
+            >
+              <div className="space-y-6">
+                <div className="flex items-center justify-between border-b border-border/80 pb-4">
+                  <Logo className="h-12 w-auto object-contain" />
+                  <button 
+                    onClick={() => setMobileNavOpen(false)} 
+                    className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-3 p-3 bg-card/60 border border-border/80 rounded-xl">
+                  <div className="relative w-10 h-10 shrink-0">
+                    <div className="w-10 h-10 rounded-full border border-primary/60 overflow-hidden bg-background">
+                      {loggedClient.foto_url ? (
+                        <img src={loggedClient.foto_url} alt="Profile" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-primary font-bold uppercase text-sm">
+                          {loggedClient.nome.charAt(0)}
+                        </div>
+                      )}
+                    </div>
+                    {subscription?.status === 'ativo' && (
+                      <div className="absolute -top-1.5 -right-1.5 bg-gradient-to-r from-blue-600 to-sky-500 text-white p-0.5 rounded-full shadow-md border border-background flex items-center justify-center">
+                        <Crown className="w-3 h-3 fill-sky-200 text-sky-100" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-bold text-xs text-foreground truncate">{loggedClient.nome}</h4>
+                    <p className="text-[10px] text-muted-foreground truncate">{loggedClient.email}</p>
+                  </div>
+                </div>
+
+                <nav className="space-y-2">
+                  <button 
+                    onClick={() => { setActiveTab('painel'); setMobileNavOpen(false); }} 
+                    className={`w-full text-left px-3.5 py-3 rounded-xl text-xs font-semibold flex items-center gap-3 transition uppercase tracking-wider cursor-pointer ${activeTab === 'painel' ? 'bg-primary text-primary-foreground shadow-md font-black' : 'text-muted-foreground hover:bg-accent hover:text-foreground'}`}
+                  >
+                    <User className="w-4 h-4" /> Meu Painel
+                  </button>
+                  <button 
+                    onClick={() => { setActiveTab('agendar'); setMobileNavOpen(false); }} 
+                    className={`w-full text-left px-3.5 py-3 rounded-xl text-xs font-semibold flex items-center gap-3 transition uppercase tracking-wider cursor-pointer ${activeTab === 'agendar' ? 'bg-primary text-primary-foreground shadow-md font-black' : 'text-muted-foreground hover:bg-accent hover:text-foreground'}`}
+                  >
+                    <Calendar className="w-4 h-4" /> Novo Agendamento
+                  </button>
+                  <button 
+                    onClick={() => { setActiveTab('assinatura'); setMobileNavOpen(false); }} 
+                    className={`w-full text-left px-3.5 py-3 rounded-xl text-xs font-semibold flex items-center gap-3 transition uppercase tracking-wider cursor-pointer ${activeTab === 'assinatura' ? 'bg-primary text-primary-foreground shadow-md font-black' : 'text-muted-foreground hover:bg-accent hover:text-foreground'}`}
+                  >
+                    <Crown className="w-4 h-4 text-amber-500" /> Meu Plano VIP
+                  </button>
+                  <button 
+                    onClick={() => { setActiveTab('agendamentos'); setMobileNavOpen(false); }} 
+                    className={`w-full text-left px-3.5 py-3 rounded-xl text-xs font-semibold flex items-center gap-3 transition uppercase tracking-wider cursor-pointer ${activeTab === 'agendamentos' ? 'bg-primary text-primary-foreground shadow-md font-black' : 'text-muted-foreground hover:bg-accent hover:text-foreground'}`}
+                  >
+                    <Clock className="w-4 h-4" /> Meus Agendamentos
+                  </button>
+                  <button 
+                    onClick={() => { setActiveTab('perfil'); setMobileNavOpen(false); }} 
+                    className={`w-full text-left px-3.5 py-3 rounded-xl text-xs font-semibold flex items-center gap-3 transition uppercase tracking-wider cursor-pointer ${activeTab === 'perfil' ? 'bg-primary text-primary-foreground shadow-md font-black' : 'text-muted-foreground hover:bg-accent hover:text-foreground'}`}
+                  >
+                    <Settings className="w-4 h-4" /> Meus Dados
+                  </button>
+                </nav>
+              </div>
+
+              <div className="pt-4 border-t border-border/80 space-y-3">
+                <button 
+                  onClick={() => { setMobileNavOpen(false); onLogout(); }} 
+                  className="w-full text-left px-3.5 py-3 rounded-xl text-xs font-semibold text-red-500 hover:bg-red-500/10 border border-red-500/20 transition flex items-center gap-2.5 uppercase tracking-wider cursor-pointer font-bold"
+                >
+                  <LogOut className="w-4 h-4" /> Sair da Conta
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
       
-      {/* Sidebar Navigation (MANTIDA E INTACTA) */}
-      <aside className="w-full lg:w-56 xl:w-64 bg-card border-b lg:border-b-0 lg:border-r border-border flex flex-col justify-between shrink-0 p-4 xl:p-6 space-y-6 select-none">
+      {/* Desktop Sidebar Navigation (Exclusivo para Desktop lg:) */}
+      <aside className="hidden lg:flex w-56 xl:w-64 bg-card border-r border-border flex-col justify-between shrink-0 p-4 xl:p-6 space-y-6 select-none">
         <div>
           {/* Logo */}
           <div className="flex items-center justify-between gap-3 mb-8">
@@ -620,66 +754,91 @@ export default function UserLayout({
               </div>
             )}
 
-            {/* Resumo dos Planos VIP no Painel */}
-            {subscription?.status !== 'ativo' && (
-              <div className="space-y-4 pt-4 border-t border-border/60">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                      <Crown className="w-5 h-5 text-primary" /> Nossos Planos VIP
-                    </h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Economize e mantenha o estilo sempre em dia assinando um dos nossos planos mensais
-                    </p>
-                  </div>
-                  <button 
-                    onClick={() => setActiveTab('assinatura')}
-                    className="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    Ver detalhes dos planos <ChevronRight className="w-4 h-4" />
-                  </button>
+            {/* Seção VIP de Planos no Painel Principal com Ação Direta de Assinatura */}
+            <div className="space-y-5 pt-4 border-t border-border/60">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
+                    <Crown className="w-5 h-5 text-primary" /> Planos de Assinatura Ilimitada
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Assine online e tenha acesso ilimitado a cortes, barba e estilo com economia garantida.
+                  </p>
                 </div>
+                <button 
+                  onClick={() => setActiveTab('assinatura')}
+                  className="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer shrink-0"
+                >
+                  Ver detalhes e benefícios <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {PLANOS.map((plano) => (
+              {billingAlerts}
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                {PLANOS.map((plano) => {
+                  const isCurrentPlan = subscription?.status === 'ativo' && (subscription.plan || '').toLowerCase() === plano.key;
+                  return (
                     <div 
                       key={plano.key}
-                      className={`p-5 rounded-2xl border bg-card/80 transition-all duration-300 flex flex-col justify-between space-y-3 ${plano.destaque ? 'border-primary/60 shadow-md' : 'border-border/80'}`}
+                      className={`p-6 rounded-2xl border bg-card/90 backdrop-blur-sm transition-all duration-300 flex flex-col justify-between space-y-4 shadow-sm hover:shadow-lg relative overflow-hidden ${
+                        plano.destaque 
+                          ? 'border-primary shadow-primary/10 ring-1 ring-primary/40' 
+                          : 'border-border/80 hover:border-primary/40'
+                      }`}
                     >
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-base text-foreground">{plano.nome}</span>
-                        {plano.destaque && (
-                          <span className="bg-primary/10 text-primary border border-primary/30 text-[9px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full">
-                            Mais Escolhido
-                          </span>
+                      {plano.destaque && (
+                        <div className="absolute top-0 right-0 bg-primary text-primary-foreground text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-bl-xl shadow-md">
+                          Mais Vendido
+                        </div>
+                      )}
+
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-lg text-foreground tracking-tight">{plano.nome}</span>
+                        </div>
+
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-3xl font-black text-primary tracking-tight">R$ {formatPreco(plano.preco)}</span>
+                          <span className="text-xs text-muted-foreground font-semibold">/mês</span>
+                        </div>
+
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          {plano.descricao}
+                        </p>
+
+                        <ul className="space-y-2 pt-2 border-t border-border/60 text-xs">
+                          {plano.beneficios.map((beneficio, i) => (
+                            <li key={i} className="flex items-center gap-2 text-foreground font-medium">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                              <span>{beneficio}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div className="pt-3 border-t border-border/60">
+                        {isCurrentPlan ? (
+                          <div className="w-full py-3 bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 font-bold text-xs uppercase tracking-wider rounded-xl text-center flex items-center justify-center gap-2">
+                            <CheckCircle2 className="w-4 h-4" /> Plano Atual Ativo
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleStartStripeCheckout(plano.key)}
+                            disabled={redirectingPlan === plano.key}
+                            className="w-full bg-gradient-to-r from-primary via-primary/90 to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground font-bold text-xs uppercase tracking-widest py-3.5 rounded-xl shadow-md hover:shadow-lg hover:scale-[1.02] active:scale-95 transition-all duration-200 cursor-pointer text-gold-glow flex items-center justify-center gap-2"
+                          >
+                            <Crown className="w-4 h-4" />
+                            {redirectingPlan === plano.key ? 'Iniciando Checkout...' : `Assinar ${plano.nome}`}
+                          </button>
                         )}
                       </div>
-
-                      <div className="flex items-baseline text-foreground">
-                        <span className="text-2xl font-bold text-primary">R$ {formatPreco(plano.preco)}</span>
-                        <span className="text-xs text-muted-foreground ml-1 font-medium">/mês</span>
-                      </div>
-
-                      <ul className="space-y-1.5 text-xs text-muted-foreground pt-2 border-t border-border/60">
-                        {plano.beneficios.map((b) => (
-                          <li key={b} className="flex items-center gap-2 text-foreground font-medium">
-                            <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" strokeWidth={3} /> {b}
-                          </li>
-                        ))}
-                      </ul>
-
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab('assinatura')}
-                        className="w-full py-2.5 bg-secondary hover:bg-secondary/80 text-secondary-foreground font-bold text-xs uppercase tracking-wider rounded-xl transition cursor-pointer border border-border mt-2"
-                      >
-                        Assinar {plano.nome}
-                      </button>
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
-            )}
+            </div>
 
           </div>
         )}

@@ -9,6 +9,7 @@ import {
   ShoppingBag,
   Clock3,
   X,
+  Menu,
   User,
   LogOut,
   Camera,
@@ -57,6 +58,7 @@ export default function VisitorLayout({
 }: VisitorLayoutProps) {
   const [showProfilePop, setShowProfilePop] = React.useState(false);
   const [showBookingsModal, setShowBookingsModal] = React.useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
 
   // Booking popup modal state
   const [showBookingPopup, setShowBookingPopup] = React.useState(false);
@@ -365,6 +367,17 @@ export default function VisitorLayout({
               Agende Já
             </button>
 
+            {/* Hamburger Button for Mobile */}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden p-2 rounded-xl text-foreground hover:bg-accent border border-border/80 transition cursor-pointer flex items-center justify-center bg-card shadow-sm"
+              aria-label="Menu principal"
+              title="Abrir menu de navegação"
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5 text-primary" /> : <Menu className="w-5 h-5 text-primary" />}
+            </button>
+
             {/* Profile configuration popover */}
             <div className="relative shrink-0">
               {loggedClient ? (
@@ -518,6 +531,96 @@ export default function VisitorLayout({
           </div>
         </div>
       </header>
+
+      {/* Mobile Navigation Drawer */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setMobileMenuOpen(false)}
+              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 md:hidden"
+            />
+            <motion.div
+              initial={{ y: "-100%", opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: "-100%", opacity: 0 }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed top-20 left-0 right-0 bg-card/95 backdrop-blur-xl border-b border-border shadow-2xl p-6 z-50 md:hidden flex flex-col space-y-4 max-h-[calc(100vh-80px)] overflow-y-auto"
+            >
+              <nav className="flex flex-col space-y-2 text-sm font-bold uppercase tracking-wider text-foreground">
+                <a 
+                  href="#como-funciona" 
+                  onClick={() => setMobileMenuOpen(false)} 
+                  className="p-3 rounded-xl hover:bg-accent hover:text-primary transition flex items-center justify-between border border-border/40 bg-card/40"
+                >
+                  <span>Como Funciona</span>
+                  <ChevronDown className="w-4 h-4 -rotate-90 text-primary" />
+                </a>
+                <a 
+                  href="#planos" 
+                  onClick={() => setMobileMenuOpen(false)} 
+                  className="p-3 rounded-xl hover:bg-accent hover:text-primary transition flex items-center justify-between border border-border/40 bg-card/40"
+                >
+                  <span className="flex items-center gap-2">
+                    <Crown className="w-4 h-4 text-primary" /> Planos VIP
+                  </span>
+                  <ChevronDown className="w-4 h-4 -rotate-90 text-primary" />
+                </a>
+                <a 
+                  href="#servicos" 
+                  onClick={() => setMobileMenuOpen(false)} 
+                  className="p-3 rounded-xl hover:bg-accent hover:text-primary transition flex items-center justify-between border border-border/40 bg-card/40"
+                >
+                  <span>Serviços</span>
+                  <ChevronDown className="w-4 h-4 -rotate-90 text-primary" />
+                </a>
+                <a 
+                  href="#produtos" 
+                  onClick={() => setMobileMenuOpen(false)} 
+                  className="p-3 rounded-xl hover:bg-accent hover:text-primary transition flex items-center justify-between border border-border/40 bg-card/40"
+                >
+                  <span>Vitrine de Produtos</span>
+                  <ChevronDown className="w-4 h-4 -rotate-90 text-primary" />
+                </a>
+                <a 
+                  href="#depoimentos" 
+                  onClick={() => setMobileMenuOpen(false)} 
+                  className="p-3 rounded-xl hover:bg-accent hover:text-primary transition flex items-center justify-between border border-border/40 bg-card/40"
+                >
+                  <span>Avaliações dos Clientes</span>
+                  <ChevronDown className="w-4 h-4 -rotate-90 text-primary" />
+                </a>
+                <a 
+                  href="#localizacao" 
+                  onClick={() => setMobileMenuOpen(false)} 
+                  className="p-3 rounded-xl hover:bg-accent hover:text-primary transition flex items-center justify-between border border-border/40 bg-card/40"
+                >
+                  <span>Nossa Localização</span>
+                  <ChevronDown className="w-4 h-4 -rotate-90 text-primary" />
+                </a>
+              </nav>
+
+              <div className="pt-3 border-t border-border/80 flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={() => { setMobileMenuOpen(false); setPreselectedService(null); setShowBookingPopup(true); }}
+                  className="w-full bg-gradient-to-r from-primary via-primary/90 to-primary/80 text-primary-foreground font-bold text-xs uppercase tracking-widest py-3.5 rounded-xl shadow-md cursor-pointer text-gold-glow flex items-center justify-center gap-2"
+                >
+                  <Calendar className="w-4 h-4" /> Agende Já seu Horário
+                </button>
+
+                <div className="flex items-center justify-between px-2 pt-1">
+                  <span className="text-xs text-muted-foreground font-medium">Alternar Tema Visual:</span>
+                  <ThemeToggle />
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* 1º Bloco: HERO SECTION (Integrada do Google AI Studio + Glow & Dark/Light) */}
       <section className="relative min-h-0 sm:min-h-[75vh] flex items-center justify-center overflow-hidden bg-background py-10 sm:py-20 border-b border-border">
