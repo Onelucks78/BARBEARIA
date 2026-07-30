@@ -1202,14 +1202,22 @@ export async function updateExpediente(id: string, barbeiroId: string, patch: Pa
 // profissionalId ausente = aplica a todos os barbeiros da barbearia
 export async function applyDefaultInterval(
   barbeiroId: string,
-  intervaloInicio: string | null,
-  intervaloFim: string | null,
-  profissionalId?: string
+  intervaloInicio?: string | null,
+  intervaloFim?: string | null,
+  profissionalId?: string,
+  horaInicio?: string,
+  horaFim?: string
 ): Promise<void> {
   const client = sb();
   if (!client) throw new Error('Supabase not configured');
+  const updateData: any = { updated_at: new Date().toISOString() };
+  if (intervaloInicio !== undefined) updateData.intervalo_inicio = intervaloInicio;
+  if (intervaloFim !== undefined) updateData.intervalo_fim = intervaloFim;
+  if (horaInicio) updateData.hora_inicio = horaInicio;
+  if (horaFim) updateData.hora_fim = horaFim;
+
   let q = client.from('expedientes')
-    .update({ intervalo_inicio: intervaloInicio, intervalo_fim: intervaloFim, updated_at: new Date().toISOString() })
+    .update(updateData)
     .eq('barbeiro_id', barbeiroId);
   if (profissionalId) q = q.eq('profissional_id', profissionalId);
   const { error } = await q;

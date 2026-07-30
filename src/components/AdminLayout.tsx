@@ -226,6 +226,9 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
 
   const [defaultIntervalStart, setDefaultIntervalStart] = useState('12:00');
   const [defaultIntervalEnd, setDefaultIntervalEnd] = useState('13:00');
+  const [batchStart, setBatchStart] = useState('08:00');
+  const [batchEnd, setBatchEnd] = useState('20:00');
+  const [selectedConfigProfissionalId, setSelectedConfigProfissionalId] = useState<string>('all');
 
   // Filters & Pagination for Fluxo de Caixa listing
   const [filterCategory, setFilterCategory] = useState<string>('all');
@@ -909,27 +912,33 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
   };
 
   const handleApplyDefaultInterval = async () => {
-    if (!defaultIntervalStart || !defaultIntervalEnd) {
-      setErrorMsg('Por favor, preencha o início e o fim do almoço.');
+    if (!batchStart || !batchEnd) {
+      setErrorMsg('Por favor, informe a hora de abertura e de fechamento.');
       return;
     }
     setSubmitting(true);
     setErrorMsg('');
     setSuccessMsg('');
     try {
-      const res = await authedFetch('/api/admin/expedientes/intervalo-padrao', {
+      const bodyPayload: any = {
+        hora_inicio: batchStart,
+        hora_fim: batchEnd,
+        intervalo_inicio: defaultIntervalStart || null,
+        intervalo_fim: defaultIntervalEnd || null
+      };
+      if (selectedConfigProfissionalId !== 'all') {
+        bodyPayload.profissional_id = selectedConfigProfissionalId;
+      }
+      const queryParam = selectedConfigProfissionalId !== 'all' ? `?profissional_id=${encodeURIComponent(selectedConfigProfissionalId)}` : '';
+      const res = await authedFetch(`/api/admin/expedientes/intervalo-padrao${queryParam}`, {
         method: 'POST',
-
-        body: {
-          intervalo_inicio: defaultIntervalStart,
-          intervalo_fim: defaultIntervalEnd
-        }
+        body: bodyPayload
       });
       if (!res.ok) {
         const errData = await res.json();
-        throw new Error(errData.error || 'Não foi possível atualizar o intervalo padrão.');
+        throw new Error(errData.error || 'Não foi possível atualizar a escala.');
       }
-      setSuccessMsg('Intervalo de almoço padrão aplicado a todos os dias com sucesso!');
+      setSuccessMsg('Escala de expediente atualizada para todos os dias com sucesso!');
       fetchConfiguracoes();
     } catch (err: any) {
       setErrorMsg(err.message);
@@ -3504,124 +3513,222 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                 <p className="text-muted-foreground text-xs mt-1">Ajuste expediente diário, configure horários de almoço, impeça marcações em feriados ou janelas privadas</p>
               </div>
 
-               {/* Card - Definir Intervalo Padrão de Almoço */}
-              <div className="p-4 bg-card border border-border rounded-sm space-y-3.5">
+              {/* Seleção de Profissional (se houver equipe) */}
+              {profissionais.length > 1 && (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-card border border-border rounded-xl shadow-sm">
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">Escala por Profissional</h4>
+                    <p className="text-xs text-muted-foreground">Escolha qual barbeiro deseja visualizar e editar o horário de funcionamento:</p>
+                  </div>
+                  <select
+                    value={selectedConfigProfissionalId}
+                    onChange={(e) => setSelectedConfigProfissionalId(e.target.value)}
+                    className="bg-background border border-border rounded-lg px-3 py-2 text-xs font-bold text-foreground focus:border-primary focus:outline-none min-w-[200px]"
+                  >
+                    <option value="all">Todos os Barbeiros (Geral)</option>
+                    {profissionais.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nome} {p.ativo ? '' : '(Inativo)'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Card - Definir Horário Geral em Lote */}
+              <div className="p-5 bg-card border border-border rounded-xl space-y-4 shadow-sm">
                 <div className="space-y-1">
                   <h4 className="text-sm tracking-wide text-foreground font-semibold flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-primary" /> Definir Almoço Padrão (Em Lote)
+                    <Clock className="w-4 h-4 text-primary" /> Definir Horário Padrão (Abertura, Fechamento e Almoço)
                   </h4>
-                  <p className="text-muted-foreground text-xs text-left">Ajuste o intervalo de almoço padrão e aplique instantaneamente a todos os dias da semana de uma só vez:</p>
+                  <p className="text-muted-foreground text-xs text-left">
+                    Configure os horários de funcionamento personalizados (ex: 08:00 às 20:00) e aplique instantaneamente a todos os dias da semana:
+                  </p>
                 </div>
 
-                <div className="flex flex-wrap items-end gap-4 text-xs">
-                  <div className="space-y-1 w-28 text-left">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div className="space-y-1 text-left">
+                    <span className="text-xs text-muted-foreground block font-bold uppercase tracking-wider">Abertura:</span>
+                    <input 
+                      type="time" 
+                      value={batchStart}
+                      onChange={(e) => setBatchStart(e.target.value)}
+                      className="bg-background border border-border p-2 px-3 rounded-lg w-full text-xs font-bold text-foreground focus:border-primary focus:outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1 text-left">
+                    <span className="text-xs text-muted-foreground block font-bold uppercase tracking-wider">Fechamento:</span>
+                    <input 
+                      type="time" 
+                      value={batchEnd}
+                      onChange={(e) => setBatchEnd(e.target.value)}
+                      className="bg-background border border-border p-2 px-3 rounded-lg w-full text-xs font-bold text-foreground focus:border-primary focus:outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1 text-left">
                     <span className="text-xs text-muted-foreground block font-bold uppercase tracking-wider">Início Almoço:</span>
                     <input 
-                      type="text" 
-                      placeholder="Ex: 12:00"
+                      type="time" 
                       value={defaultIntervalStart}
                       onChange={(e) => setDefaultIntervalStart(e.target.value)}
-                      className="bg-background border border-border p-2 px-3 rounded-sm w-full text-xs text-muted-foreground focus:border-primary focus:outline-none placeholder-stone-700"
+                      className="bg-background border border-border p-2 px-3 rounded-lg w-full text-xs font-bold text-foreground focus:border-primary focus:outline-none"
                     />
                   </div>
-                  <div className="space-y-1 w-28 text-left">
+                  <div className="space-y-1 text-left">
                     <span className="text-xs text-muted-foreground block font-bold uppercase tracking-wider">Fim Almoço:</span>
                     <input 
-                      type="text" 
-                      placeholder="Ex: 13:00"
+                      type="time" 
                       value={defaultIntervalEnd}
                       onChange={(e) => setDefaultIntervalEnd(e.target.value)}
-                      className="bg-background border border-border p-2 px-3 rounded-sm w-full text-xs text-muted-foreground focus:border-primary focus:outline-none placeholder-stone-700"
+                      className="bg-background border border-border p-2 px-3 rounded-lg w-full text-xs font-bold text-foreground focus:border-primary focus:outline-none"
                     />
                   </div>
+                </div>
 
+                <div className="pt-2 flex flex-wrap items-center gap-3">
                   <button
                     type="button"
                     onClick={handleApplyDefaultInterval}
-                    className="bg-primary text-primary-foreground hover:bg-primary/80 px-4 py-2.5 rounded-sm text-xs font-bold uppercase tracking-wider shadow-md transition shrink-0 cursor-pointer"
+                    className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground font-bold text-xs uppercase tracking-wider px-5 py-3 rounded-xl shadow-md transition cursor-pointer text-gold-glow"
                   >
-                    Aplicar em Todos os Dias
+                    Aplicar em Todos os Dias da Semana
                   </button>
                 </div>
               </div>
 
               {/* Expedientes grid configuration */}
               <div className="space-y-4">
-                <h4 className="text-sm tracking-wide text-foreground font-semibold">Acordo de Turno Semanal (Expediente)</h4>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <h4 className="text-sm tracking-wide text-foreground font-semibold">
+                    Escala de Funcionamento Semanal (Personalizada por Dia)
+                  </h4>
+                  {configuracoes.expedientes.find(e => e.dia_semana === 1) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const seg = configuracoes.expedientes.find(e => e.dia_semana === 1);
+                        if (!seg) return;
+                        const uteis = configuracoes.expedientes.filter(e => e.dia_semana >= 1 && e.dia_semana <= 5);
+                        uteis.forEach(u => {
+                          handleUpdateExpediente(u.id, {
+                            hora_inicio: seg.hora_inicio,
+                            hora_fim: seg.hora_fim,
+                            intervalo_inicio: seg.intervalo_inicio,
+                            intervalo_fim: seg.intervalo_fim,
+                            ativo: seg.ativo
+                          });
+                        });
+                      }}
+                      className="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer self-start sm:self-auto"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" /> Replicar Segunda (Seg-Sex)
+                    </button>
+                  )}
+                </div>
                 
                 <div className="grid grid-cols-1 gap-3.5">
-                  {configuracoes.expedientes.map((ex) => (
-                    <div 
-                      key={ex.id} 
-                      className={`p-4 rounded-sm border flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all ${
-                        ex.ativo ? 'border-border bg-card' : 'border-border bg-muted opacity-60'
-                      }`}
-                    >
-                      {/* Name and active switch toggle button */}
-                      <div className="flex justify-between items-center md:block">
-                        <span className="font-sans font-bold text-foreground text-xs block">
-                          {getDayName(ex.dia_semana)}
-                        </span>
-                        
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateExpediente(ex.id, { ativo: !ex.ativo })}
-                          className={`mt-1.5 p-1 px-2.5 rounded-sm text-xs font-bold uppercase tracking-wider border transition ${
-                            ex.ativo 
-                              ? 'bg-primary border-primary text-primary-foreground hover:bg-primary/80' 
-                              : 'bg-card border-border text-muted-foreground hover:text-muted-foreground'
+                  {configuracoes.expedientes
+                    .filter(ex => selectedConfigProfissionalId === 'all' || !ex.profissional_id || ex.profissional_id === selectedConfigProfissionalId)
+                    .map((ex) => {
+                      const prof = profissionais.find(p => p.id === ex.profissional_id);
+                      return (
+                        <div 
+                          key={ex.id} 
+                          className={`p-4 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all shadow-sm ${
+                            ex.ativo ? 'border-border bg-card' : 'border-border/60 bg-muted/30 opacity-70'
                           }`}
                         >
-                          {ex.ativo ? 'Expediente Ativo' : 'Expediente Parado'}
-                        </button>
-                      </div>
-
-                      {/* Config shifts values form */}
-                      {ex.ativo && (
-                        <div className="flex-1 max-w-lg grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                          <div className="space-y-1">
-                            <span className="text-xs text-muted-foreground block font-bold uppercase tracking-wider">Hora Início:</span>
-                            <input 
-                              type="text" 
-                              defaultValue={ex.hora_inicio} 
-                              onBlur={(e) => handleUpdateExpediente(ex.id, { hora_inicio: e.target.value })}
-                              className="bg-background border border-border p-1 px-2 rounded-sm w-full font-bold text-foreground focus:border-primary focus:outline-none"
-                            />
+                          {/* Name and active switch toggle button */}
+                          <div className="flex justify-between items-center md:block min-w-[140px]">
+                            <div>
+                              <span className="font-sans font-bold text-foreground text-sm block">
+                                {getDayName(ex.dia_semana)}
+                              </span>
+                              {prof && selectedConfigProfissionalId === 'all' && (
+                                <span className="text-[10px] text-primary font-bold block mt-0.5">
+                                  {prof.nome}
+                                </span>
+                              )}
+                            </div>
+                            
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateExpediente(ex.id, { ativo: !ex.ativo })}
+                              className={`mt-2 p-1.5 px-3 rounded-lg text-[11px] font-bold uppercase tracking-wider border transition cursor-pointer ${
+                                ex.ativo 
+                                  ? 'bg-primary/10 border-primary/30 text-primary hover:bg-primary/20' 
+                                  : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                              }`}
+                            >
+                              {ex.ativo ? 'Aberto (Ativo)' : 'Fechado (Folga)'}
+                            </button>
                           </div>
 
-                          <div className="space-y-1">
-                            <span className="text-xs text-muted-foreground block font-bold uppercase tracking-wider">Hora Fim:</span>
-                            <input 
-                              type="text" 
-                              defaultValue={ex.hora_fim} 
-                              onBlur={(e) => handleUpdateExpediente(ex.id, { hora_fim: e.target.value })}
-                              className="bg-background border border-border p-1 px-2 rounded-sm w-full font-bold text-foreground focus:border-primary focus:outline-none"
-                            />
-                          </div>
+                          {/* Config shifts values form with native time inputs */}
+                          {ex.ativo && (
+                            <div className="flex-1 max-w-xl grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                              <div className="space-y-1">
+                                <span className="text-[11px] text-muted-foreground block font-bold uppercase tracking-wider">Abertura:</span>
+                                <input 
+                                  type="time" 
+                                  defaultValue={ex.hora_inicio} 
+                                  onBlur={(e) => {
+                                    if (e.target.value && e.target.value !== ex.hora_inicio) {
+                                      handleUpdateExpediente(ex.id, { hora_inicio: e.target.value });
+                                    }
+                                  }}
+                                  className="bg-background border border-border p-2 px-2.5 rounded-lg w-full font-bold text-foreground focus:border-primary focus:outline-none text-xs"
+                                />
+                              </div>
 
-                          <div className="space-y-1">
-                            <span className="text-xs text-muted-foreground block font-bold uppercase tracking-wider">Almoço Início:</span>
-                            <input 
-                              type="text" 
-                              defaultValue={ex.intervalo_inicio || ''} 
-                              onBlur={(e) => handleUpdateExpediente(ex.id, { intervalo_inicio: e.target.value || null })}
-                              className="bg-background border border-border p-1 px-2 rounded-sm w-full font-bold text-foreground focus:border-primary focus:outline-none"
-                            />
-                          </div>
+                              <div className="space-y-1">
+                                <span className="text-[11px] text-muted-foreground block font-bold uppercase tracking-wider">Fechamento:</span>
+                                <input 
+                                  type="time" 
+                                  defaultValue={ex.hora_fim} 
+                                  onBlur={(e) => {
+                                    if (e.target.value && e.target.value !== ex.hora_fim) {
+                                      handleUpdateExpediente(ex.id, { hora_fim: e.target.value });
+                                    }
+                                  }}
+                                  className="bg-background border border-border p-2 px-2.5 rounded-lg w-full font-bold text-foreground focus:border-primary focus:outline-none text-xs"
+                                />
+                              </div>
 
-                          <div className="space-y-1">
-                            <span className="text-xs text-muted-foreground block font-bold uppercase tracking-wider">Almoço Fim:</span>
-                            <input 
-                              type="text" 
-                              defaultValue={ex.intervalo_fim || ''} 
-                              onBlur={(e) => handleUpdateExpediente(ex.id, { intervalo_fim: e.target.value || null })}
-                              className="bg-background border border-border p-1 px-2 rounded-sm w-full font-bold text-foreground focus:border-primary focus:outline-none"
-                            />
-                          </div>
+                              <div className="space-y-1">
+                                <span className="text-[11px] text-muted-foreground block font-bold uppercase tracking-wider">Almoço Início:</span>
+                                <input 
+                                  type="time" 
+                                  defaultValue={ex.intervalo_inicio || ''} 
+                                  onBlur={(e) => {
+                                    const val = e.target.value || null;
+                                    if (val !== ex.intervalo_inicio) {
+                                      handleUpdateExpediente(ex.id, { intervalo_inicio: val });
+                                    }
+                                  }}
+                                  className="bg-background border border-border p-2 px-2.5 rounded-lg w-full font-bold text-foreground focus:border-primary focus:outline-none text-xs"
+                                />
+                              </div>
+
+                              <div className="space-y-1">
+                                <span className="text-[11px] text-muted-foreground block font-bold uppercase tracking-wider">Almoço Fim:</span>
+                                <input 
+                                  type="time" 
+                                  defaultValue={ex.intervalo_fim || ''} 
+                                  onBlur={(e) => {
+                                    const val = e.target.value || null;
+                                    if (val !== ex.intervalo_fim) {
+                                      handleUpdateExpediente(ex.id, { intervalo_fim: val });
+                                    }
+                                  }}
+                                  className="bg-background border border-border p-2 px-2.5 rounded-lg w-full font-bold text-foreground focus:border-primary focus:outline-none text-xs"
+                                />
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  ))}
+                      );
+                    })}
                 </div>
               </div>
 

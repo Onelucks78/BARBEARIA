@@ -1881,30 +1881,40 @@ export async function createApp() {
     }
   });
 
-  // Apply default lunch interval to every weekday
+  // Apply default shift hours & lunch interval to weekdays
   app.post('/api/admin/expedientes/intervalo-padrao', requireAdmin, validate(schemas.patchIntervaloPadrao), async (req: AuthRequest, res) => {
     try {
-      const { intervalo_inicio, intervalo_fim } = req.body;
-      // sem profissional_id = aplica a todos os barbeiros da barbearia
-      const profissionalId = req.query.profissional_id as string | undefined;
+      const { hora_inicio, hora_fim, intervalo_inicio, intervalo_fim } = req.body;
+      const profissionalId = (req.query.profissional_id || req.body.profissional_id) as string | undefined;
 
       if (isSupabaseConfigured() && req.barbeiroId) {
-        await storage.applyDefaultInterval(req.barbeiroId, intervalo_inicio || null, intervalo_fim || null, profissionalId);
-        return res.json({ success: true, message: 'Intervalo padrão atualizado para todos os dias.' });
+        await storage.applyDefaultInterval(
+          req.barbeiroId,
+          intervalo_inicio !== undefined ? (intervalo_inicio || null) : undefined,
+          intervalo_fim !== undefined ? (intervalo_fim || null) : undefined,
+          profissionalId,
+          hora_inicio,
+          hora_fim
+        );
+        return res.json({ success: true, message: 'Horários da escala atualizados com sucesso.' });
       }
 
       const db = loadDB();
       db.expedientes.forEach(ex => {
-        ex.intervalo_inicio = intervalo_inicio || null;
-        ex.intervalo_fim = intervalo_fim || null;
-        ex.updated_at = new Date().toISOString();
+        if (!profissionalId || ex.profissional_id === profissionalId) {
+          if (hora_inicio) ex.hora_inicio = hora_inicio;
+          if (hora_fim) ex.hora_fim = hora_fim;
+          if (intervalo_inicio !== undefined) ex.intervalo_inicio = intervalo_inicio || null;
+          if (intervalo_fim !== undefined) ex.intervalo_fim = intervalo_fim || null;
+          ex.updated_at = new Date().toISOString();
+        }
       });
 
       saveDB(db);
-      res.json({ success: true, message: 'Intervalo padrão atualizado para todos os dias.' });
+      res.json({ success: true, message: 'Horários da escala atualizados com sucesso.' });
     } catch (error: any) {
       console.error(error);
-      res.status(500).json({ error: error?.message || 'Erro ao cadastrar o intervalo padrão.' });
+      res.status(500).json({ error: error?.message || 'Erro ao cadastrar os horários do expediente.' });
     }
   });
 

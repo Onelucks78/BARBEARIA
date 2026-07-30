@@ -11,7 +11,18 @@ const phone = z.string()
 const date = z.string()
   .refine(s => /^\d{4}-\d{2}-\d{2}/.test(s), 'Data deve começar com YYYY-MM-DD.')
   .transform(s => s.slice(0, 10)); // aceita "YYYY-MM-DD" e "YYYY-MM-DDTHH:MM:SS..." → normaliza
-const time = z.string().regex(/^\d{2}:\d{2}/, 'Horário deve ser HH:MM.');
+const time = z.string()
+  .transform(s => {
+    if (!s) return s;
+    const parts = s.trim().split(':');
+    if (parts.length >= 2) {
+      const h = parts[0].padStart(2, '0');
+      const m = parts[1].slice(0, 2).padStart(2, '0');
+      return `${h}:${m}`;
+    }
+    return s;
+  })
+  .pipe(z.string().regex(/^\d{2}:\d{2}/, 'Horário deve ser no formato HH:MM.'));
 const imageUrl = z.string().refine(
   val => !val || val.startsWith('http://') || val.startsWith('https://') || val.startsWith('data:image/') || val.startsWith('/'),
   { message: 'URL de imagem inválida.' }
@@ -165,6 +176,8 @@ export const schemas = {
     ativo: z.boolean().optional()
   }).refine(o => Object.keys(o).length > 0, 'Payload vazio.'),
   patchIntervaloPadrao: z.object({
+    hora_inicio: time.optional(),
+    hora_fim: time.optional(),
     intervalo_inicio: time.nullable().optional(),
     intervalo_fim: time.nullable().optional()
   }),
