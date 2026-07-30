@@ -633,11 +633,11 @@ export function calculateAvailableSlots(dateStr: string, servicoId: string): str
   const startMin = hhmmToMinutes(expediente.hora_inicio);
   const endMin = hhmmToMinutes(expediente.hora_fim);
   
-  // 4. Generate candidate windows. We step every 30 minutes to make the timeline fluent
+  // 4. Generate candidate windows. We step every 30 minutes until 30 minutes before shift end
   const step = 30; // standard slot booking step
   const candidates: { startMin: number; endMin: number; startStr: string }[] = [];
   
-  for (let current = startMin; current + duration <= endMin; current += step) {
+  for (let current = startMin; current < endMin; current += step) {
     const currentEnd = current + duration;
     candidates.push({
       startMin: current,
@@ -646,16 +646,15 @@ export function calculateAvailableSlots(dateStr: string, servicoId: string): str
     });
   }
   
-  // 5. Filter out windows that lie within the lunch/interval
+  // 5. Filter out windows starting inside the lunch/interval
   let availableCandidates = candidates;
   if (expediente.intervalo_inicio && expediente.intervalo_fim) {
     const intStartMin = hhmmToMinutes(expediente.intervalo_inicio);
     const intEndMin = hhmmToMinutes(expediente.intervalo_fim);
     
     availableCandidates = availableCandidates.filter(slot => {
-      // Should NOT overlap with interval
-      const overlapsLunch = isOverlapping(slot.startMin, slot.endMin, intStartMin, intEndMin);
-      return !overlapsLunch;
+      // Pula se o início do agendamento cair dentro do almoço
+      return !(slot.startMin >= intStartMin && slot.startMin < intEndMin);
     });
   }
   
