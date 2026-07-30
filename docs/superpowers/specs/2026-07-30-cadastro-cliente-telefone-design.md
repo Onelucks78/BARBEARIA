@@ -52,13 +52,21 @@ Módulo novo `lib/telefone.ts`, na raiz, importado **tanto pelo front quanto pel
 (o alias `@/` já mapeia a raiz e ambos os lados importam de `lib/`).
 
 ```ts
-// domínio fixo; nunca recebe e-mail de verdade
-export const DOMINIO_CLIENTE = 'cliente.detalhesbarbearia.app';
+// subdomínio do domínio real da barbearia (detalhebarbearia.com.br — "detalhe",
+// singular; o nome da pasta do projeto está no plural e não serve de referência).
+// Nunca recebe e-mail: é só um endereço estável e único por telefone.
+export const DOMINIO_CLIENTE = 'cliente.detalhebarbearia.com.br';
 
 export function normalizarTelefone(t: string): string   // só dígitos
-export function telefoneParaEmail(t: string): string    // '5511987654321@cliente.detalhesbarbearia.app'
+export function telefoneParaEmail(t: string): string    // '5511987654321@cliente.detalhebarbearia.com.br'
 export function emailEDeTelefone(e: string): boolean    // termina em @DOMINIO_CLIENTE
 ```
+
+Usar um subdomínio de domínio próprio, e não um domínio inventado, evita dois problemas: o
+endereço não colide com o de outra pessoa e, se um cliente chegar a enxergá-lo na tela de
+pagamento do Stripe, ele parece legítimo. **Não criar registro MX nesse subdomínio** — sem MX,
+os e-mails do Stripe são recusados na entrega em vez de sumirem em silêncio, e nada polui a
+caixa principal `@detalhebarbearia.com.br`.
 
 Regras:
 
@@ -208,8 +216,10 @@ Sem isso, a decisão "o barbeiro avisa" não tem como ser cumprida — ele não 
    cadastrado é protegido (o 409 barra a segunda conta), então o risco real é alguém cadastrar
    preventivamente um número alheio. Impacto baixo: quem paga é o dono do cartão e o cliente
    aparece presencialmente. Mitigável depois com SMS.
-2. **E-mails do Stripe caem no vazio.** Recibos e avisos de cobrança batem num domínio que não
-   recebe e-mail. É o comportamento escolhido; a tarja da seção 7.2 é a compensação.
+2. **E-mails do Stripe caem no vazio.** Recibos e avisos de cobrança batem num subdomínio sem
+   MX e voltam como não entregues. É o comportamento escolhido; a tarja da seção 7.2 é a
+   compensação. Volume alto de rejeição não afeta a conta Stripe (são e-mails transacionais para
+   um endereço só), mas se um dia a barbearia passar a mandar marketing por e-mail, vale revisar.
 3. **Recuperação de senha depende do barbeiro.** Não há caminho self-service.
 
 ## 10. Verificação
