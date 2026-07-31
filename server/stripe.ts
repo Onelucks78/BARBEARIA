@@ -81,7 +81,7 @@ export function planFromPriceId(priceId?: string | null): string | null {
  * (items.data[0].current_period_end); em versões antigas ficava na raiz.
  * Tratamos os dois casos para não depender da versão negociada.
  */
-function extrairCurrentPeriodEnd(sub: Stripe.Subscription): string | null {
+export function extrairCurrentPeriodEnd(sub: Stripe.Subscription): string | null {
   const item: any = sub?.items?.data?.[0];
   const raiz: any = sub;
 

@@ -336,9 +336,13 @@ export async function createApp() {
           if (!email) break;
 
           const status = mapearStatusAssinatura(sub.status);
+          // Mesma razão do renews_at em registrarAssinatura: sem esta data a interface
+          // mostra o plano como vencido mesmo estando em dia.
+          const renewsAt = stripe.extrairCurrentPeriodEnd(sub);
           const atualizou = await patchSubscriptionObservacoes(email, {
             status,
             ...(plan ? { plan } : {}),
+            ...(renewsAt ? { renews_at: renewsAt } : {}),
             stripeReferenceId: sub.id,
             // past_due = cartão falhou mas ainda em recobrança; active/trialing limpa a pendência.
             pendencia: sub.status === 'past_due'
@@ -387,6 +391,12 @@ export async function createApp() {
     const splitDate = new Date().toISOString().split('T')[0];
     const planoDescricao = plan || 'plano não identificado';
 
+    // renews_at: a área do cliente (UserLayout.tsx:84) e o painel do barbeiro
+    // (AdminLayout.tsx:1030) tratam a ausência dessa data como plano vencido. O webhook
+    // nunca a gravava, então quem pagava aparecia como vencido no mesmo dia.
+    const vigente = await stripe.getActiveSubscription(email);
+    const renewsAt = vigente?.currentPeriodEnd ?? null;
+
     if (isSupabaseConfigured()) {
       const client = serviceClient();
       if (!client) return;
@@ -409,6 +419,8 @@ export async function createApp() {
       await patchSubscriptionObservacoes(email, {
         status: 'ativo',
         ...(plan ? { plan } : {}),
+        ...(renewsAt ? { renews_at: renewsAt } : {}),
+        price: valor,
         stripeReferenceId: referenceId,
         pendencia: false
       });
@@ -445,6 +457,8 @@ export async function createApp() {
         ...(obs.subscription || {}),
         status: 'ativo',
         ...(plan ? { plan } : {}),
+        ...(renewsAt ? { renews_at: renewsAt } : {}),
+        price: valor,
         stripeReferenceId: referenceId,
         pendencia: false,
         updatedAt: new Date().toISOString()
