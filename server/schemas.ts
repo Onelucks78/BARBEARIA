@@ -133,7 +133,9 @@ export const schemas = {
     telefone: phone,
     email: z.string().email().optional().or(z.literal('')),
     data_nascimento: date.optional().or(z.literal('')),
-    observacoes: z.string().max(1000).optional()
+    observacoes: z.string().max(1000).optional(),
+    // Opcional: quando vem preenchida, o cliente ganha login por telefone no app.
+    senha: z.string().min(6, 'A senha precisa ter pelo menos 6 caracteres.').optional()
   }),
   patchClient: z.object({
     nome: z.string().min(2).max(120).optional(),
@@ -143,6 +145,13 @@ export const schemas = {
     observacoes: z.string().max(1000).optional(),
     ativo: z.boolean().optional()
   }).refine(o => Object.keys(o).length > 0, 'Payload vazio.'),
+
+  redefinirSenhaCliente: z.object({
+    senha: z.string().min(6, 'A senha precisa ter pelo menos 6 caracteres.')
+  }),
+  linkPagamento: z.object({
+    planId: z.enum(['essential', 'premium', 'exclusive'])
+  }),
 
   // ---------- ADMIN: AGENDAMENTOS ----------
   patchBooking: z.object({

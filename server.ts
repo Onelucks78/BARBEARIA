@@ -1498,12 +1498,31 @@ export async function createApp() {
 
   app.post('/api/admin/clientes', requireAdmin, validate(schemas.createClient), async (req: AuthRequest, res) => {
     try {
-      const { nome, telefone, email, data_nascimento, observacoes } = req.body;
+      const { nome, telefone, email, data_nascimento, observacoes, senha } = req.body;
       if (!nome || !telefone) {
         return res.status(400).json({ error: 'Nome e telefone são obrigatórios.' });
       }
 
       if (isSupabaseConfigured() && req.barbeiroId) {
+        // Com senha: cria o login por telefone e a ficha de uma vez. O e-mail digitado
+        // no formulário é IGNORADO de propósito — o login e o Stripe têm que usar o
+        // e-mail sintético derivado do telefone, senão o cliente paga e nunca vira VIP
+        // (o webhook procura a ficha por clientes.email).
+        if (senha) {
+          const criado = await criarLoginClienteTelefone({
+            nome, telefone, senha, barbeiroId: req.barbeiroId
+          });
+          const extras: any = {};
+          if (data_nascimento) extras.data_nascimento = data_nascimento;
+          if (observacoes) extras.observacoes = observacoes;
+          const atualizado = Object.keys(extras).length
+            ? await storage.updateCliente(criado.clienteId, req.barbeiroId, extras)
+            : null;
+          const ficha = atualizado
+            ?? (await storage.listClientesAdmin(req.barbeiroId)).find(c => c.id === criado.clienteId);
+          return res.status(201).json(ficha ?? { id: criado.clienteId, nome, telefone, email: criado.email });
+        }
+
         const novo = await storage.createCliente(req.barbeiroId, { nome, telefone, email, data_nascimento: data_nascimento || null, observacoes });
         return res.status(201).json(novo);
       }
@@ -1524,6 +1543,9 @@ export async function createApp() {
       saveDB(db);
       res.status(201).json(novo);
     } catch (error: any) {
+      if (error instanceof TelefoneJaCadastradoError) {
+        return res.status(409).json({ error: 'Já existe cliente com esse telefone e login no app.' });
+      }
       console.error(error);
       res.status(500).json({ error: error?.message || 'Erro ao criar cliente.' });
     }
@@ -1562,6 +1584,76 @@ export async function createApp() {
     } catch (error: any) {
       console.error(error);
       res.status(500).json({ error: error?.message || 'Erro ao atualizar cliente.' });
+    }
+  });
+
+  // Cliente com login por telefone não tem caixa de e-mail para receber link de
+  // recuperação (AuthModal.tsx:77 só serve para quem entrou com e-mail real).
+  // Sem esta rota, quem esquece a senha fica trancado para fora permanentemente.
+  app.post('/api/admin/clientes/:id/redefinir-senha', requireAdmin, validate(schemas.redefinirSenhaCliente), async (req: AuthRequest, res) => {
+    try {
+      const client = serviceClient();
+      if (!client) return res.status(501).json({ error: 'Supabase não configurado.' });
+
+      const { data: cliente } = await client
+        .from('clientes')
+        .select('id, auth_user_id')
+        .eq('id', req.params.id)
+        .eq('barbeiro_id', req.barbeiroId!)
+        .maybeSingle();
+
+      if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado.' });
+      if (!cliente.auth_user_id) {
+        return res.status(400).json({ error: 'Esse cliente ainda não tem login no app. Cadastre uma senha para ele.' });
+      }
+
+      await redefinirSenhaCliente(cliente.auth_user_id as string, (req.body as any).senha);
+      res.json({ ok: true });
+    } catch (err: any) {
+      console.error('[POST /api/admin/clientes/:id/redefinir-senha]', err);
+      res.status(500).json({ error: 'Erro ao redefinir a senha.' });
+    }
+  });
+
+  // Link de checkout para o barbeiro mandar no WhatsApp ou abrir no tablet.
+  // Reusa createCheckoutSession sem alteração: ela já cria/reaproveita o customer
+  // e já barra assinatura duplicada.
+  app.post('/api/admin/clientes/:id/link-pagamento', requireAdmin, validate(schemas.linkPagamento), async (req: AuthRequest, res) => {
+    try {
+      const client = serviceClient();
+      if (!client) return res.status(501).json({ error: 'Supabase não configurado.' });
+
+      const { data: cliente } = await client
+        .from('clientes')
+        .select('id, nome, email, auth_user_id')
+        .eq('id', req.params.id)
+        .eq('barbeiro_id', req.barbeiroId!)
+        .maybeSingle();
+
+      if (!cliente) return res.status(404).json({ error: 'Cliente não encontrado.' });
+      if (!cliente.email) {
+        return res.status(400).json({ error: 'Cliente sem login no app. Cadastre uma senha para ele antes de cobrar o plano.' });
+      }
+
+      const appUrl = process.env.APP_URL || `http://localhost:${PORT}`;
+      const result = await stripe.createCheckoutSession({
+        planId: (req.body as any).planId,
+        clienteEmail: cliente.email as string,
+        clienteNome: cliente.nome as string,
+        clienteId: (cliente.auth_user_id as string) || undefined,
+        successUrl: `${appUrl}/planos/sucesso?session_id={CHECKOUT_SESSION_ID}`,
+        cancelUrl: `${appUrl}/planos`
+      });
+
+      if (result.code === 'already_subscribed') {
+        return res.status(409).json({ error: result.error || 'Esse cliente já tem plano ativo.', code: 'already_subscribed' });
+      }
+      if (result.error) return res.status(400).json({ error: result.error });
+
+      res.json({ url: result.url });
+    } catch (err: any) {
+      console.error('[POST /api/admin/clientes/:id/link-pagamento]', err);
+      res.status(500).json({ error: 'Erro ao gerar o link de pagamento.' });
     }
   });
 
