@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase';
+import { telefoneParaEmail, telefoneEValido } from '../../lib/telefone';
 import type { Session, User } from '@supabase/supabase-js';
 
 export interface AdminSession {
@@ -174,6 +175,47 @@ export async function signUpClient(email: string, password: string, nome: string
     }
   });
   return { data, error };
+}
+
+/**
+ * Login do cliente por telefone. Por baixo é o mesmo signInWithPassword de sempre —
+ * só o e-mail é derivado do telefone. O cliente nunca vê esse endereço.
+ */
+export async function signInClientTelefone(telefone: string, senha: string) {
+  if (!telefoneEValido(telefone)) {
+    return { data: null, error: { message: 'Telefone inválido. Use DDD + número.' } as any };
+  }
+  return supabase.auth.signInWithPassword({
+    email: telefoneParaEmail(telefone),
+    password: senha
+  });
+}
+
+/**
+ * Cadastro por telefone. O usuário é criado no servidor (Admin API, com o e-mail já
+ * confirmado); aqui só entramos na conta em seguida para o cliente não precisar
+ * digitar tudo de novo.
+ */
+export async function signUpClientTelefone(nome: string, telefone: string, senha: string) {
+  if (!telefoneEValido(telefone)) {
+    return { data: null, error: { message: 'Telefone inválido. Use DDD + número.' } as any };
+  }
+
+  const res = await fetch('/api/auth/cadastro-telefone', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nome, telefone, senha })
+  });
+  const payload = await res.json().catch(() => ({} as any));
+
+  if (!res.ok) {
+    return {
+      data: null,
+      error: { message: payload.error || 'Não foi possível criar a conta.', code: payload.code } as any
+    };
+  }
+
+  return signInClientTelefone(telefone, senha);
 }
 
 export async function signOut() {
