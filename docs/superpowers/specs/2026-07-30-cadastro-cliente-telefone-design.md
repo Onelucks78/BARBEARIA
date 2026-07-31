@@ -200,6 +200,25 @@ Adicionar um helper `temPendenciaPagamento(observacoes)` no mesmo lugar e exibir
 **"Pagamento falhou"** na lista de clientes do painel, junto do selo de VIP que já existe.
 Sem isso, a decisão "o barbeiro avisa" não tem como ser cumprida — ele não teria onde ver.
 
+### 7.3 `renews_at` nunca é gravado (bug pré-existente)
+
+Descoberto ao montar o plano de implementação. O webhook grava `status`, `plan`,
+`stripeReferenceId` e `pendencia` (`server.ts:108-138`, `server.ts:382-440`), mas **nunca**
+grava `renews_at`. A interface lê esse campo em seis lugares e trata a ausência como plano
+vencido:
+
+- `src/components/UserLayout.tsx:84` — sem `renews_at`, o painel do cliente não mostra o plano
+  como vigente.
+- `src/components/AdminLayout.tsx:1030` — `new Date(undefined) >= new Date()` é `false`, então
+  todo assinante aparece com a tarja "vencido".
+
+Não é causado por este trabalho e afeta igualmente quem entra pelo Google hoje. Entra no escopo
+porque, sem a correção, todo cliente criado pelo fluxo novo nasce marcado como vencido — e a
+tarja da seção 7.2 perde a função, já que tudo estaria vermelho de qualquer jeito.
+
+A correção é pequena: o Stripe já devolve a data (`extrairCurrentPeriodEnd`, `server/stripe.ts:84`),
+o código só não a estava guardando.
+
 ## 8. Fora de escopo
 
 - SMS / OTP. O desenho não impede ligar isso depois: o e-mail sintético já carrega o DDI, e a
