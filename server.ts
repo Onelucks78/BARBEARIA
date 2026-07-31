@@ -27,6 +27,7 @@ import { validate } from './server/validation.ts';
 import { schemas } from './server/schemas.ts';
 import * as storage from './server/storage.ts';
 import * as stripe from './server/stripe.ts';
+import { criarLoginClienteTelefone, redefinirSenhaCliente, TelefoneJaCadastradoError } from './server/clienteAuth.ts';
 
 // Authenticate middleware
 // (substituído por server/auth.ts que verifica JWT real do Supabase)
@@ -915,6 +916,45 @@ export async function createApp() {
     }
   });
 
+
+  // --- CADASTRO DE CLIENTE POR TELEFONE ---
+  // Rota pública: cria login de cliente com telefone + senha, para quem não tem Google.
+  // Limite simples por IP porque é a única rota sem autenticação que cria usuário.
+  // Em serverless a memória não é compartilhada entre instâncias, então isso é
+  // best-effort — segura script ingênuo, não ataque distribuído.
+  const tentativasCadastro = new Map<string, { count: number; resetEm: number }>();
+  const LIMITE_CADASTRO_POR_IP = 5;
+  const JANELA_CADASTRO_MS = 60 * 60 * 1000;
+
+  app.post('/api/auth/cadastro-telefone', validate(schemas.clientSignupTelefone), async (req: AuthRequest, res) => {
+    try {
+      if (!isSupabaseConfigured()) {
+        return res.status(501).json({ error: 'Cadastro por telefone exige o Supabase configurado.' });
+      }
+
+      const ip = req.ip || 'desconhecido';
+      const agora = Date.now();
+      const registro = tentativasCadastro.get(ip);
+      if (registro && registro.resetEm > agora) {
+        if (registro.count >= LIMITE_CADASTRO_POR_IP) {
+          return res.status(429).json({ error: 'Muitas tentativas. Tente de novo mais tarde.' });
+        }
+        registro.count += 1;
+      } else {
+        tentativasCadastro.set(ip, { count: 1, resetEm: agora + JANELA_CADASTRO_MS });
+      }
+
+      const { nome, telefone, senha } = req.body as { nome: string; telefone: string; senha: string };
+      const criado = await criarLoginClienteTelefone({ nome, telefone, senha });
+      return res.status(201).json({ ok: true, email: criado.email });
+    } catch (err: any) {
+      if (err instanceof TelefoneJaCadastradoError) {
+        return res.status(409).json({ error: err.message, code: 'telefone_ja_cadastrado' });
+      }
+      console.error('[POST /api/auth/cadastro-telefone]', err);
+      return res.status(500).json({ error: 'Erro ao criar cadastro.' });
+    }
+  });
 
   // --- ADMIN AUTH ROUTE ---
   // O admin se autentica via Google OAuth no front (Supabase Auth).

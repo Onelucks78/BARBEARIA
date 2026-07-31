@@ -8,6 +8,14 @@ const phone = z.string()
     .refine(d => d.length === 0 || d.length === 10 || d.length === 11, 'Telefone deve ter 10 ou 11 dígitos.')
   );
 
+// Variante do `phone` que NÃO aceita vazio: usada onde o telefone é a identidade
+// do cliente (login por telefone), não um campo de contato opcional.
+const telefoneObrigatorio = z.string()
+  .transform(s => onlyDigits(s))
+  .pipe(z.string()
+    .refine(d => d.length === 10 || d.length === 11, 'Telefone deve ter 10 ou 11 dígitos.')
+  );
+
 const date = z.string()
   .refine(s => /^\d{4}-\d{2}-\d{2}/.test(s), 'Data deve começar com YYYY-MM-DD.')
   .transform(s => s.slice(0, 10)); // aceita "YYYY-MM-DD" e "YYYY-MM-DDTHH:MM:SS..." → normaliza
@@ -42,6 +50,14 @@ export const schemas = {
     password: z.string().min(6),
     nome: z.string().min(2),
     telefone: phone
+  }),
+  // Não reusa o `phone` compartilhado: ele aceita string vazia (é campo opcional em
+  // outros formulários) e encadear um refine em cima faria o mesmo erro sair duplicado.
+  // Aqui o telefone é a identidade do cliente, então o vazio precisa ser recusado.
+  clientSignupTelefone: z.object({
+    nome: z.string().min(2, 'Informe o nome do cliente.').max(120),
+    telefone: telefoneObrigatorio,
+    senha: z.string().min(6, 'A senha precisa ter pelo menos 6 caracteres.')
   }),
 
   // ---------- PÚBLICO ----------
