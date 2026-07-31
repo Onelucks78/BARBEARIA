@@ -21,13 +21,11 @@ import {
   ChevronDown,
   ChevronUp,
   Instagram,
-  ArrowRight,
-  Phone
+  ArrowRight
 } from 'lucide-react';
 import { Servico, Produto } from '../types.ts';
 import Logo from './Logo.tsx';
 import BookingWizard from './BookingWizard.tsx';
-import ClientAuthModal from './ClientAuthModal.tsx';
 import { signInWithGoogle } from '../lib/useAdminSession.ts';
 import { authedFetch } from '../lib/supabase.ts';
 import { ThemeToggle } from './ThemeToggle.tsx';
@@ -37,7 +35,7 @@ import { WhatsAppFloatButton } from './WhatsAppFloatButton.tsx';
 interface VisitorLayoutProps {
   services: Servico[];
   products: Produto[];
-  onAdminLoginClick: () => void;
+  onLoginClick: () => void;
   onBookingSuccess: () => void;
   loggedClient: {
     nome: string;
@@ -52,7 +50,7 @@ interface VisitorLayoutProps {
 export default function VisitorLayout({ 
   services, 
   products, 
-  onAdminLoginClick,
+  onLoginClick,
   onBookingSuccess,
   loggedClient,
   onClientLogin,
@@ -89,7 +87,6 @@ export default function VisitorLayout({
   }, []);
 
   const [isGoogleLoading, setIsGoogleLoading] = React.useState(false);
-  const [showTelefoneAuth, setShowTelefoneAuth] = React.useState(false);
 
   // Central registration popup for new users
   const [showRegistrationModal, setShowRegistrationModal] = React.useState(false);
@@ -322,10 +319,6 @@ export default function VisitorLayout({
   return (
     <div className="min-h-screen bg-background text-foreground relative font-sans transition-colors duration-300 selection:bg-primary/20 selection:text-primary">
       <WhatsAppFloatButton />
-
-      {showTelefoneAuth && (
-        <ClientAuthModal onClose={() => setShowTelefoneAuth(false)} />
-      )}
       
       {/* Upper Navigation Bar (Header Original mantido & aprimorado) */}
       <header className="sticky top-0 z-40 bg-background/90 backdrop-blur-md text-foreground border-b border-border shadow-sm">
@@ -411,7 +404,7 @@ export default function VisitorLayout({
               ) : (
                 <button
                   type="button"
-                  onClick={onAdminLoginClick}
+                  onClick={onLoginClick}
                   className="w-10 h-10 rounded-full border border-primary/30 flex items-center justify-center bg-primary/10 hover:bg-primary/20 transition text-primary hover:text-primary/80 cursor-pointer shrink-0 shadow-sm"
                   title="Acesse sua área de cliente"
                   id="perfil-guest-btn"
@@ -527,18 +520,6 @@ export default function VisitorLayout({
                                 Logar com o Google
                               </>
                             )}
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setShowProfilePop(false);
-                              setShowTelefoneAuth(true);
-                            }}
-                            className="w-full py-2.5 bg-transparent border border-border hover:border-primary/40 text-foreground text-xs font-bold uppercase tracking-widest rounded-lg transition duration-150 cursor-pointer flex items-center justify-center gap-2"
-                          >
-                            <Phone className="w-4 h-4 text-primary" />
-                            Entrar com telefone
                           </button>
                         </div>
                       )}
@@ -804,7 +785,7 @@ export default function VisitorLayout({
               
               <button 
                 type="button"
-                onClick={onAdminLoginClick}
+                onClick={onLoginClick}
                 className="w-full py-3.5 px-6 rounded-xl font-bold text-xs uppercase tracking-wider bg-secondary hover:bg-secondary/80 text-secondary-foreground transition-all duration-300 mt-auto cursor-pointer border border-border"
               >
                 Assinar Essential
@@ -859,7 +840,7 @@ export default function VisitorLayout({
               
               <button 
                 type="button"
-                onClick={onAdminLoginClick}
+                onClick={onLoginClick}
                 className="w-full py-3.5 px-6 rounded-xl font-bold text-xs uppercase tracking-wider bg-gradient-to-r from-primary via-primary/90 to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground transition-all duration-300 shadow-md shadow-primary/20 text-gold-glow cursor-pointer"
               >
                 Assinar Premium
@@ -919,7 +900,7 @@ export default function VisitorLayout({
               
               <button 
                 type="button"
-                onClick={onAdminLoginClick}
+                onClick={onLoginClick}
                 className="w-full py-3.5 px-6 rounded-xl font-bold text-xs uppercase tracking-wider bg-secondary hover:bg-secondary/80 text-secondary-foreground transition-all duration-300 mt-auto cursor-pointer border border-border"
               >
                 Assinar Exclusive

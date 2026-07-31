@@ -230,7 +230,7 @@ export default function App() {
         <VisitorLayout
           services={services}
           products={products}
-          onAdminLoginClick={() => setShowAuthModal(true)}
+          onLoginClick={() => setShowAuthModal(true)}
           onBookingSuccess={handleBookingSuccess}
           loggedClient={loggedClient}
           onClientLogin={handleClientLogin}
