@@ -54,6 +54,7 @@ import {
 } from '../types.ts';
 import type { Session } from '@supabase/supabase-js';
 import { authedFetch, supabase, isSupabaseConfigured } from '../lib/supabase.ts';
+import { emailEDeTelefone } from '../../lib/telefone';
 import EquipeTab from './admin/EquipeTab.tsx';
 import FiltroBarbeiro from './admin/FiltroBarbeiro.tsx';
 import ManualBookingModal from './admin/ManualBookingModal.tsx';
@@ -163,9 +164,11 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
   const [uploadingProductImage, setUploadingProductImage] = useState(false);
   const [showProductForm, setShowProductForm] = useState(false);
 
-  const [newClient, setNewClient] = useState({ nome: '', telefone: '', email: '', data_nascimento: '', observacoes: '' });
+  const [newClient, setNewClient] = useState({ nome: '', telefone: '', email: '', data_nascimento: '', observacoes: '', senha: '' });
   const [editingClientId, setEditingClientId] = useState<string | null>(null);
   const [showClientForm, setShowClientForm] = useState(false);
+  const [linkPagamento, setLinkPagamento] = useState<{ clienteId: string; url: string } | null>(null);
+  const [gerandoLink, setGerandoLink] = useState(false);
 
   const [newLaunch, setNewLaunch] = useState({ tipo: 'entrada', descricao: '', valor: '', categoria: '', forma_pagamento: 'pix', data: '', produto_id: '', profissional_id: '' });
   const [editingFinanceId, setEditingFinanceId] = useState<string | null>(null);
@@ -657,9 +660,13 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
       const url = isEditing ? `/api/admin/clientes/${editingClientId}` : '/api/admin/clientes';
       const method = isEditing ? 'PATCH' : 'POST';
 
+      // A senha só existe na criação: para editar, o painel usa a rota de redefinir senha.
+      const { senha, ...semSenha } = newClient;
+      const payload = (!isEditing && senha) ? newClient : semSenha;
+
       const res = await authedFetch(url, {
         method,
-        body: newClient
+        body: payload
       });
 
       if (!res.ok) {
@@ -667,7 +674,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
         throw new Error(data.error || 'Erro ao cuidar do cadastro de cliente.');
       }
       setSuccessMsg(isEditing ? 'Ficha técnica do cliente atualizada.' : 'Cliente fidelizado com sucesso.');
-      setNewClient({ nome: '', telefone: '', email: '', data_nascimento: '', observacoes: '' });
+      setNewClient({ nome: '', telefone: '', email: '', data_nascimento: '', observacoes: '', senha: '' });
       setEditingClientId(null);
       setShowClientForm(false);
       fetchClientes();
@@ -685,7 +692,8 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
       telefone: c.telefone,
       email: c.email || '',
       data_nascimento: c.data_nascimento || '',
-      observacoes: c.observacoes || ''
+      observacoes: c.observacoes || '',
+      senha: ''
     });
     setShowClientForm(true);
   };
@@ -700,6 +708,45 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
       if (!res.ok) throw new Error('Não foi possível arquivar a ficha do cliente.');
       setSuccessMsg('Ficha arquivada com sucesso.');
       fetchClientes();
+    } catch (err: any) {
+      setErrorMsg(err.message);
+    }
+  };
+
+  const handleGerarLinkPagamento = async (c: Cliente, planId: string) => {
+    setGerandoLink(true);
+    setLinkPagamento(null);
+    try {
+      const res = await authedFetch(`/api/admin/clientes/${c.id}/link-pagamento`, {
+        method: 'POST',
+        body: { planId }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Não foi possível gerar o link.');
+      setLinkPagamento({ clienteId: c.id, url: data.url });
+      setSuccessMsg('Link de pagamento pronto. Copie ou mande no WhatsApp.');
+    } catch (err: any) {
+      setErrorMsg(err.message);
+    } finally {
+      setGerandoLink(false);
+    }
+  };
+
+  const handleRedefinirSenhaCliente = async (c: Cliente) => {
+    const nova = window.prompt(`Nova senha para ${c.nome} (mínimo 6 caracteres):`);
+    if (!nova) return;
+    if (nova.length < 6) {
+      setErrorMsg('A senha precisa ter pelo menos 6 caracteres.');
+      return;
+    }
+    try {
+      const res = await authedFetch(`/api/admin/clientes/${c.id}/redefinir-senha`, {
+        method: 'POST',
+        body: { senha: nova }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Não foi possível redefinir a senha.');
+      setSuccessMsg(`Senha de ${c.nome} atualizada. Avise o cliente.`);
     } catch (err: any) {
       setErrorMsg(err.message);
     }
@@ -2836,7 +2883,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                   onClick={() => {
                     if (showClientForm) {
                       setEditingClientId(null);
-                      setNewClient({ nome: '', telefone: '', email: '', data_nascimento: '', observacoes: '' });
+                      setNewClient({ nome: '', telefone: '', email: '', data_nascimento: '', observacoes: '', senha: '' });
                     }
                     setShowClientForm(v => !v);
                   }}
@@ -2877,15 +2924,37 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                   />
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label>E-mail (opcional)</Label>
-                  <Input
-                    type="email"
-                    value={newClient.email}
-                    onChange={(e) => setNewClient({ ...newClient, email: e.target.value })}
-                    placeholder="cliente@exemplo.com"
-                  />
-                </div>
+                {!editingClientId && (
+                  <div className="space-y-1.5">
+                    <Label>Senha de acesso ao app (opcional)</Label>
+                    <Input
+                      type="text"
+                      value={newClient.senha}
+                      onChange={(e) => setNewClient({ ...newClient, senha: e.target.value })}
+                      placeholder="Mínimo 6 caracteres"
+                      minLength={6}
+                    />
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                      Combine a senha com o cliente. Ele entra no app com o telefone e essa senha.
+                      Deixe em branco para só criar a ficha, sem login.
+                    </p>
+                  </div>
+                )}
+
+                {/* O e-mail some quando há senha: o cliente com login por telefone precisa
+                    ter clientes.email igual ao e-mail sintético, senão o webhook do Stripe
+                    não acha a ficha e o cliente paga sem virar VIP. */}
+                {!newClient.senha && (
+                  <div className="space-y-1.5">
+                    <Label>E-mail (opcional)</Label>
+                    <Input
+                      type="email"
+                      value={newClient.email}
+                      onChange={(e) => setNewClient({ ...newClient, email: e.target.value })}
+                      placeholder="cliente@exemplo.com"
+                    />
+                  </div>
+                )}
 
                 <div className="space-y-1.5">
                   <Label>Data de nascimento (opcional)</Label>
@@ -2913,7 +2982,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                       variant="outline"
                       onClick={() => {
                         setEditingClientId(null);
-                        setNewClient({ nome: '', telefone: '', email: '', data_nascimento: '', observacoes: '' });
+                        setNewClient({ nome: '', telefone: '', email: '', data_nascimento: '', observacoes: '', senha: '' });
                         setShowClientForm(false);
                       }}
                     >
@@ -2993,8 +3062,18 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                                     {vipEntry.renovado ? planLabel(vipEntry.subscription.plan || '') : `${planLabel(vipEntry.subscription.plan || '')} vencido`}
                                   </Badge>
                                 )}
+                                {/* Cliente com login por telefone não recebe e-mail do Stripe
+                                    avisando cartão recusado. Esta tarja é o único aviso que
+                                    o barbeiro tem de mensalidade perdida. */}
+                                {vipEntry?.subscription.pendencia && (
+                                  <Badge className="text-xs uppercase tracking-wider font-bold bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 border border-red-300 dark:border-red-900/40">
+                                    Pagamento falhou
+                                  </Badge>
+                                )}
                               </h5>
-                              <p className="text-xs text-muted-foreground uppercase tracking-wider">{c.email || 'Sem e-mail'}</p>
+                              <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                                {emailEDeTelefone(c.email) ? c.telefone : (c.email || 'Sem e-mail')}
+                              </p>
                             </div>
                           </div>
                           <span className="text-xs bg-background text-primary border border-border px-2 py-0.5 rounded-sm uppercase tracking-[0.05em]">
@@ -3015,10 +3094,18 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                               <FaWhatsapp size={12} /> {c.telefone}
                             </a>
                           </p>
-                          {c.email && (
+                          {/* E-mail sintético (login por telefone) não é mostrado:
+                              é identificador interno, não um contato do cliente. */}
+                          {c.email && !emailEDeTelefone(c.email) && (
                             <p className="flex items-center gap-1.5">
                               <span className="text-muted-foreground">E-mail:</span>
                               <span className="text-muted-foreground">{c.email}</span>
+                            </p>
+                          )}
+                          {emailEDeTelefone(c.email) && (
+                            <p className="flex items-center gap-1.5">
+                              <span className="text-muted-foreground">Acesso ao app:</span>
+                              <span className="text-muted-foreground">entra pelo telefone</span>
                             </p>
                           )}
                         </div>
@@ -3026,6 +3113,60 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                         {c.observacoes && (
                           <div className="text-xs text-muted-foreground bg-muted border border-border p-2.5 rounded-sm whitespace-pre-line leading-relaxed">
                             "{c.observacoes}"
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-2 pt-2 border-t border-border" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex flex-wrap gap-2">
+                          {PLAN_TIERS.map(tier => (
+                            <Button
+                              key={tier.key}
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={gerandoLink}
+                              onClick={() => handleGerarLinkPagamento(c, tier.key)}
+                            >
+                              Cobrar {tier.label}
+                            </Button>
+                          ))}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleRedefinirSenhaCliente(c)}
+                          >
+                            Redefinir senha
+                          </Button>
+                        </div>
+
+                        {linkPagamento?.clienteId === c.id && (
+                          <div className="space-y-2 bg-muted border border-border p-2.5 rounded-sm">
+                            <p className="text-[10px] text-muted-foreground break-all">{linkPagamento.url}</p>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(linkPagamento.url);
+                                  setSuccessMsg('Link copiado.');
+                                }}
+                              >
+                                Copiar link
+                              </Button>
+                              <a
+                                href={`${getWhatsAppLink(c.telefone)}?text=${encodeURIComponent(
+                                  `Olá ${c.nome}! Segue o link para ativar seu plano: ${linkPagamento.url}`
+                                )}`}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                <Button type="button" size="sm" variant="outline">
+                                  Mandar no WhatsApp
+                                </Button>
+                              </a>
+                            </div>
                           </div>
                         )}
                       </div>

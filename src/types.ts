@@ -138,6 +138,9 @@ export interface ClienteSubscription {
   renews_at: string; // ISO date
   card_last4?: string;
   card_brand?: string;
+  // true quando a Stripe avisou que a cobrança falhou e ainda está recobrando.
+  // Gravado por patchSubscriptionObservacoes (server.ts:108).
+  pendencia?: boolean;
 }
 
 export interface CategoriaFinanceira {
