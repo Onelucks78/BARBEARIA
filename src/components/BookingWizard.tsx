@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Calendar, Clock, User, Phone, CheckCircle, ArrowRight, ArrowLeft, Scissors, Printer, FileText, X } from 'lucide-react';
 import { Servico, Profissional } from '../types.ts';
+import ClientAuthModal from './ClientAuthModal.tsx';
 import { signInWithGoogle } from '../lib/useAdminSession.ts';
 
 interface BookingWizardProps {
@@ -119,6 +120,7 @@ export default function BookingWizard({
   // Google authentication states
   const [showGoogleLoginPopup, setShowGoogleLoginPopup] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [showTelefoneAuth, setShowTelefoneAuth] = useState(false);
 
   const MONTHS_PT = [
     'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -1274,6 +1276,18 @@ export default function BookingWizard({
 
               <button
                 type="button"
+                onClick={() => {
+                  setShowGoogleLoginPopup(false);
+                  setShowTelefoneAuth(true);
+                }}
+                className="w-full py-3 bg-transparent border border-slate-200 hover:border-primary/40 text-slate-900 text-xs font-bold uppercase tracking-widest rounded-sm transition cursor-pointer flex items-center justify-center gap-2"
+              >
+                <Phone className="w-4 h-4 shrink-0 text-primary" />
+                Entrar com telefone
+              </button>
+
+              <button
+                type="button"
                 disabled={isGoogleLoading}
                 onClick={() => {
                   setShowGoogleLoginPopup(false);
@@ -1289,6 +1303,10 @@ export default function BookingWizard({
         </div>
       )}
     </AnimatePresence>
+
+    {showTelefoneAuth && (
+      <ClientAuthModal onClose={() => setShowTelefoneAuth(false)} />
+    )}
   </>
   );
 }

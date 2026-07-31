@@ -21,11 +21,13 @@ import {
   ChevronDown,
   ChevronUp,
   Instagram,
-  ArrowRight
+  ArrowRight,
+  Phone
 } from 'lucide-react';
 import { Servico, Produto } from '../types.ts';
 import Logo from './Logo.tsx';
 import BookingWizard from './BookingWizard.tsx';
+import ClientAuthModal from './ClientAuthModal.tsx';
 import { signInWithGoogle } from '../lib/useAdminSession.ts';
 import { authedFetch } from '../lib/supabase.ts';
 import { ThemeToggle } from './ThemeToggle.tsx';
@@ -87,6 +89,7 @@ export default function VisitorLayout({
   }, []);
 
   const [isGoogleLoading, setIsGoogleLoading] = React.useState(false);
+  const [showTelefoneAuth, setShowTelefoneAuth] = React.useState(false);
 
   // Central registration popup for new users
   const [showRegistrationModal, setShowRegistrationModal] = React.useState(false);
@@ -319,6 +322,10 @@ export default function VisitorLayout({
   return (
     <div className="min-h-screen bg-background text-foreground relative font-sans transition-colors duration-300 selection:bg-primary/20 selection:text-primary">
       <WhatsAppFloatButton />
+
+      {showTelefoneAuth && (
+        <ClientAuthModal onClose={() => setShowTelefoneAuth(false)} />
+      )}
       
       {/* Upper Navigation Bar (Header Original mantido & aprimorado) */}
       <header className="sticky top-0 z-40 bg-background/90 backdrop-blur-md text-foreground border-b border-border shadow-sm">
@@ -520,6 +527,18 @@ export default function VisitorLayout({
                                 Logar com o Google
                               </>
                             )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowProfilePop(false);
+                              setShowTelefoneAuth(true);
+                            }}
+                            className="w-full py-2.5 bg-transparent border border-border hover:border-primary/40 text-foreground text-xs font-bold uppercase tracking-widest rounded-lg transition duration-150 cursor-pointer flex items-center justify-center gap-2"
+                          >
+                            <Phone className="w-4 h-4 text-primary" />
+                            Entrar com telefone
                           </button>
                         </div>
                       )}
