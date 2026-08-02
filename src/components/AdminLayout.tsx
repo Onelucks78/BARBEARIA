@@ -89,7 +89,7 @@ const PLAN_TIERS: {
   {
     key: 'premium',
     label: 'Premium',
-    price: 159.99,
+    price: 149.99,
     features: ['Corte ilimitado', 'Barba ilimitada'],
     textClass: 'text-primary',
     borderClass: 'border-primary/30',

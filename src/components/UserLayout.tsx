@@ -34,7 +34,7 @@ const PLANOS: PlanoAssinatura[] = [
   {
     key: 'premium',
     nome: 'Premium',
-    preco: 159.99,
+    preco: 149.99,
     descricao: 'Mais estilo e cuidado em cada visita. Perfeito para quem gosta de manter o cabelo e a barba sempre impecáveis.',
     beneficios: ['Corte ilimitado', 'Barba ilimitada']
   },

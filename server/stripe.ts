@@ -48,7 +48,7 @@ export function getPlanos(): PlanDefinition[] {
       id: 'premium',
       nome: 'Premium',
       priceId: pricePremium,
-      valor: 159.99,
+      valor: 149.99,
       categorias: ['corte', 'barba'],
       destaques: ['Tudo do Essential', 'Barba ilimitada', 'Produtos com 10% de desconto']
     },
