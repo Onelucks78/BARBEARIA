@@ -1,6 +1,6 @@
 {
-  "name": "Detalhes Barbearia",
-  "short_name": "Detalhes",
+  "name": "Detalhe Barbearia",
+  "short_name": "Detalhe",
   "start_url": "/",
   "display": "standalone",
   "theme_color": "#0a0a09",
