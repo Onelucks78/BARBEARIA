@@ -97,6 +97,8 @@ export default function VisitorLayout({
   const [editFoto, setEditFoto] = React.useState('');
 
   // Fetch client bookings by email & phone
+  // MORPH-004: o servidor agora exige login (identidade vem do JWT). Visitante
+  // sem sessão não lista agendamentos antigos de terceiros.
   const fetchClientBookings = React.useCallback(async () => {
     if (!loggedClient) return;
     setLoadingBookings(true);
@@ -105,7 +107,7 @@ export default function VisitorLayout({
       if (loggedClient.email) q.append('email', loggedClient.email);
       if (loggedClient.telefone) q.append('telefone', loggedClient.telefone.replace(/\D/g, ''));
 
-      const res = await fetch(`/api/agendamentos/cliente?${q.toString()}`);
+      const res = await authedFetch(`/api/agendamentos/cliente?${q.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setClientBookings(data);
@@ -215,6 +217,11 @@ export default function VisitorLayout({
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
   };
 
+  const includesHotTowel = (s: Servico) => {
+    const n = s.nome.toLowerCase();
+    return n.includes('barba') || n.includes('toalha') || n.includes('vapor') || s.descricao.toLowerCase().includes('toalha');
+  };
+
   const activeServices = Array.isArray(services) ? services.filter(s => s.ativo) : [];
   const activeProducts = Array.isArray(products) ? products.filter(p => p.ativo) : [];
 
@@ -290,10 +297,14 @@ export default function VisitorLayout({
             <span className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 font-medium">
               <Clock className="w-3.5 h-3.5 text-primary" /> {s.duracao_minutos} min
             </span>
-            <span className="w-1 h-1 bg-muted-foreground/30 rounded-full"></span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2.5 py-0.5 rounded-md border border-primary/20 flex items-center gap-1">
-              <Sparkles className="w-3 h-3 text-primary" /> Toalha quente inclusa
-            </span>
+            {includesHotTowel(s) && (
+              <>
+                <span className="w-1 h-1 bg-muted-foreground/30 rounded-full"></span>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2.5 py-0.5 rounded-md border border-primary/20 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-primary" /> Toalha quente inclusa
+                </span>
+              </>
+            )}
           </div>
         </div>
       </div>

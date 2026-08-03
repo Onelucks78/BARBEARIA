@@ -195,6 +195,21 @@ export async function createApp() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
+  // MORPH-006: confia no proxy (Vercel/Cloudflare) para resolver req.ip real.
+  // Sem isso o rate-limit por IP enxerga o IP do proxy — ou vira 429 coletivo
+  // (todo mundo no mesmo balde) ou é trivialmente burlado. Em dev local mantém 1 hop.
+  app.set('trust proxy', process.env.VERCEL ? true : 1);
+
+  // MORPH-011: headers mínimos de segurança. CSP propositalmente não adicionada
+  // (o voucher de impressão usa HTML inline).
+  app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    next();
+  });
+
   // Body parsers
   // Stripe webhook precisa do body RAW (antes do json parser)
   app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
@@ -666,15 +681,38 @@ export async function createApp() {
     }
   });
 
-  // 4a. Get Public Bookings for a Logged Client
-  app.get('/api/agendamentos/cliente', async (req, res) => {
+  // 4a. Get Bookings for a Logged Client
+  // MORPH-004: antes só exigia e-mail/telefone na query — qualquer pessoa lia o
+  // histórico de terceiros (nomes, telefones, observações). Agora exige login e
+  // resolve a identidade do JWT; só o admin pode filtrar por query.
+  app.get('/api/agendamentos/cliente', requireAuth, async (req: AuthRequest, res) => {
     try {
       const { email, telefone } = req.query as { email?: string; telefone?: string };
-      if (!email && !telefone) {
+
+      let emailMatch = email;
+      let telefoneDigits = telefone ? telefone.replace(/\D/g, '') : undefined;
+
+      if (!req.isAdmin) {
+        emailMatch = req.userEmail;
+        telefoneDigits = undefined;
+        // Puxa o telefone do próprio cadastro para achar agendamentos antigos
+        // criados só com telefone (sem cliente_id ligado).
+        if (isSupabaseConfigured() && req.userId) {
+          const svc = serviceClient();
+          if (svc) {
+            const { data: me } = await svc
+              .from('clientes').select('telefone')
+              .eq('auth_user_id', req.userId).maybeSingle();
+            if (me?.telefone) telefoneDigits = String(me.telefone).replace(/\D/g, '');
+          }
+        }
+      }
+
+      if (!emailMatch && !telefoneDigits) {
         return res.status(400).json({ error: 'Parâmetro email ou telefone é obrigatório.' });
       }
-      const telefoneDigits = telefone ? telefone.replace(/\D/g, '') : undefined;
-      const bookings = await storage.listClientBookings(email, telefoneDigits);
+
+      const bookings = await storage.listClientBookings(emailMatch, telefoneDigits);
       res.json(bookings);
     } catch (error) {
       console.error('[GET /api/agendamentos/cliente]', error);
@@ -863,18 +901,55 @@ export async function createApp() {
   });
 
   // Cancel booking from client dashboard
-  app.post('/api/agendamentos/:id/cancelar', async (req, res) => {
+  // MORPH-002: exige login e só permite cancelar os PRÓPRIOS agendamentos.
+  // Antes era público e o código é sequencial (#000001...): um anônimo podia
+  // iterar códigos e cancelar a agenda inteira (IDOR + BFLA).
+  app.post('/api/agendamentos/:id/cancelar', requireAuth, async (req: AuthRequest, res) => {
     try {
       const { id } = req.params;
 
       if (isSupabaseConfigured()) {
+        const svc = serviceClient()!;
         let uuid = id;
         if (id.startsWith('#')) {
-          const svc = serviceClient();
-          const { data: row } = await svc!.from('agendamentos').select('id').eq('codigo', id).single();
+          const { data: row } = await svc.from('agendamentos').select('id').eq('codigo', id).single();
           if (!row) return res.status(404).json({ error: 'Agendamento não encontrado.' });
           uuid = row.id;
         }
+
+        // Admin da barbearia pode cancelar qualquer agendamento.
+        if (!req.isAdmin) {
+          const { data: booking } = await svc
+            .from('agendamentos')
+            .select('cliente_id, telefone_cliente')
+            .eq('id', uuid)
+            .maybeSingle();
+          if (!booking) return res.status(404).json({ error: 'Agendamento não encontrado.' });
+
+          let me: any = null;
+          const { data: meAuth } = await svc
+            .from('clientes').select('id, telefone, email')
+            .eq('auth_user_id', req.userId).maybeSingle();
+          if (meAuth) {
+            me = meAuth;
+          } else if (req.userEmail) {
+            const { data: meEmail } = await svc
+              .from('clientes').select('id, telefone, email')
+              .eq('email', req.userEmail).maybeSingle();
+            me = meEmail;
+          }
+
+          const mePhone = me?.telefone ? String(me.telefone).replace(/\D/g, '') : '';
+          const bookingPhone = booking.telefone_cliente ? String(booking.telefone_cliente).replace(/\D/g, '') : '';
+          const owned = me && (
+            booking.cliente_id === me.id ||
+            (mePhone && bookingPhone && mePhone === bookingPhone)
+          );
+          if (!owned) {
+            return res.status(403).json({ error: 'Você só pode cancelar os seus próprios agendamentos.' });
+          }
+        }
+
         const updated = await storage.updateBookingStatus(uuid, { status: 'cancelado' });
         if (!updated) return res.status(404).json({ error: 'Agendamento não encontrado.' });
         return res.json(updated);
@@ -885,6 +960,18 @@ export async function createApp() {
       const idx = db.agendamentos.findIndex(a => a.id === id);
       if (idx === -1) return res.status(404).json({ error: 'Agendamento não encontrado.' });
       const original = db.agendamentos[idx];
+      if (!req.isAdmin) {
+        const cliente = db.clientes.find(c =>
+          req.userEmail && c.email && c.email.toLowerCase() === req.userEmail.toLowerCase()
+        );
+        const mePhone = cliente?.telefone ? cliente.telefone.replace(/\D/g, '') : '';
+        const bookingPhone = original.telefone_cliente ? original.telefone_cliente.replace(/\D/g, '') : '';
+        const owned = (cliente && original.cliente_id === cliente.id) ||
+          (mePhone && bookingPhone && mePhone === bookingPhone);
+        if (!owned) {
+          return res.status(403).json({ error: 'Você só pode cancelar os seus próprios agendamentos.' });
+        }
+      }
       original.status = 'cancelado';
       original.updated_at = new Date().toISOString();
       saveDB(db);
@@ -966,6 +1053,13 @@ export async function createApp() {
       const { email } = req.body as { email?: string };
       if (!email) {
         return res.status(400).json({ error: 'Email é obrigatório.' });
+      }
+
+      // MORPH-010: em produção (Supabase configurado) exige JWT válido — o front
+      // já manda o token e attachUser validou. Em dev (sem Supabase) mantém o
+      // fluxo de preview do AI Studio.
+      if (isSupabaseConfigured() && !req.userId) {
+        return res.status(401).json({ error: 'Autenticação necessária.' });
       }
 
       // Em produção, o front já mandou o JWT no header Authorization e
@@ -1271,13 +1365,20 @@ export async function createApp() {
         return res.status(400).json({ error: 'Imagem inválida. Envie um arquivo JPEG, PNG ou WebP.' });
       }
 
+      // MORPH-007: limite de tamanho ANTES de qualquer ramificação (Supabase OU
+      // fallback offline). Sem isto, um dataUrl gigante vira imagem_url persistida
+      // no fallback — o cap do body (10mb) não basta.
+      const buffer = Buffer.from(match[3], 'base64');
+      if (buffer.byteLength > 5 * 1024 * 1024) {
+        return res.status(413).json({ error: 'Imagem muito grande. Máximo de 5 MB.' });
+      }
+
       if (isSupabaseConfigured() && req.barbeiroId) {
         const client = serviceClient();
         if (client) {
           try {
             const mime = match[1];
             const ext = mime === 'image/jpeg' ? 'jpg' : mime.split('/')[1];
-            const buffer = Buffer.from(match[3], 'base64');
             const pastasPermitidas = ['servicos', 'produtos', 'profissionais'];
             const folder = pastasPermitidas.includes(pasta) ? pasta : 'servicos';
             const filePath = `${folder}/${req.barbeiroId}/${randomUUID()}.${ext}`;

@@ -28,21 +28,21 @@ const PLANOS: PlanoAssinatura[] = [
     key: 'essential',
     nome: 'Essential',
     preco: 109.99,
-    descricao: 'O essencial para manter seu visual sempre em dia. Ideal para quem deseja cortes ilimitados com praticidade e economia.',
+    descricao: 'Cortes ilimitados todo mês por um valor fixo. O jeito mais econômico de manter o visual sempre em dia.',
     beneficios: ['Corte ilimitado']
   },
   {
     key: 'premium',
     nome: 'Premium',
     preco: 149.99,
-    descricao: 'Mais estilo e cuidado em cada visita. Perfeito para quem gosta de manter o cabelo e a barba sempre impecáveis.',
+    descricao: 'Cabelo e barba sempre impecáveis: cortes e barbas ilimitados com toalha quente e navalha, sem custo extra por visita.',
     beneficios: ['Corte ilimitado', 'Barba ilimitada']
   },
   {
     key: 'exclusive',
     nome: 'Exclusive',
     preco: 199.99,
-    descricao: 'A experiência mais completa da barbearia. O máximo em cuidado, estilo e exclusividade para quem busca um visual impecável em qualquer ocasião.',
+    descricao: 'A experiência completa: corte, barba, sobrancelha e penteado ilimitados. O pacote premium para quem não abre mão de nada.',
     beneficios: ['Corte ilimitado', 'Barba ilimitada', 'Sobrancelha ilimitada', 'Penteado ilimitado'],
     destaque: true
   }
@@ -188,10 +188,13 @@ export default function UserLayout({
       const q = new URLSearchParams();
       if (loggedClient.email) q.append('email', loggedClient.email);
       if (loggedClient.telefone) q.append('telefone', loggedClient.telefone.replace(/\D/g, ''));
-      const res = await fetch(`/api/agendamentos/cliente?${q.toString()}`);
+      const res = await authedFetch(`/api/agendamentos/cliente?${q.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setClientBookings(data);
+      } else {
+        console.error('Erro ao buscar agendamentos:', res.status);
+        setClientBookings([]);
       }
     } catch (e) {
       console.error(e);
@@ -207,13 +210,14 @@ export default function UserLayout({
   const handleCancelBooking = async (id: string) => {
     if (!confirm('Deseja realmente cancelar este agendamento?')) return;
     try {
-      const res = await fetch(`/api/agendamentos/${encodeURIComponent(id)}/cancelar`, {
+      const res = await authedFetch(`/api/agendamentos/${encodeURIComponent(id)}/cancelar`, {
         method: 'POST'
       });
       if (res.ok) {
         fetchBookings();
       } else {
-        alert('Erro ao cancelar agendamento.');
+        const data = await res.json().catch(() => ({} as any));
+        alert(data?.error || 'Erro ao cancelar agendamento.');
       }
     } catch (e) {
       console.error(e);
@@ -583,7 +587,7 @@ export default function UserLayout({
                   Olá, {loggedClient.nome}!
                 </h2>
                 <p className="text-muted-foreground text-xs font-medium">
-                  Seja bem-vindo à sua área exclusiva na Detalhe Barbearia.
+                  Sua área exclusiva na Detalhe Barbearia. Agende, acompanhe seus horários e gerencie seu plano VIP.
                 </p>
               </div>
               <div className="flex items-center gap-3 shrink-0">
@@ -638,7 +642,7 @@ export default function UserLayout({
                       <span className="text-lg font-bold text-foreground">Seja um Cliente VIP</span>
                     </div>
                     <p className="text-xs text-muted-foreground leading-relaxed">
-                      Assine um dos nossos planos a partir de R$ 109,99/mês e tenha cortes e barba ilimitados sem taxas adicionais.
+                      Assine um dos nossos planos a partir de R$ 109,99/mês e tenha cortes e barba ilimitados, sem taxas adicionais por visita.
                     </p>
                     <div className="pt-2">
                       <button 
@@ -684,7 +688,7 @@ export default function UserLayout({
                 ) : (
                   <div className="space-y-3">
                     <p className="text-xs text-muted-foreground leading-relaxed">
-                      Você não possui nenhuma sessão agendada nos próximos dias. Escolha o melhor dia e garanta o seu horário na cadeira.
+                      Você não possui nenhuma sessão agendada. Escolha o melhor dia e garanta o seu horário na cadeira — agende agora em menos de 1 minuto.
                     </p>
                     <div className="pt-2">
                       <button 
@@ -709,7 +713,7 @@ export default function UserLayout({
                       <ShoppingBag className="w-5 h-5 text-primary" /> Vitrine de Produtos Recomendados
                     </h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Cosméticos de alta performance disponíveis para compra durante o seu atendimento
+                      Cosméticos de uso profissional para compra durante o seu atendimento — leve o resultado do seu corte para casa.
                     </p>
                   </div>
                 </div>
@@ -762,7 +766,7 @@ export default function UserLayout({
                     <Crown className="w-5 h-5 text-primary" /> Planos de Assinatura Ilimitada
                   </h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Assine online e tenha acesso ilimitado a cortes, barba e estilo com economia garantida.
+                    Pague um valor fixo por mês e tenha cortes, barba e estilo ilimitados — com economia garantida.
                   </p>
                 </div>
                 <button 
@@ -1011,7 +1015,7 @@ export default function UserLayout({
           <div className="max-w-4xl mx-auto space-y-6">
             <div>
               <h2 className="text-2xl font-bold tracking-tight text-foreground">Reservar Horário</h2>
-              <p className="text-muted-foreground text-xs mt-1 uppercase tracking-wider">Como assinante, seus agendamentos elegíveis dentro do seu plano possuem valor zerado.</p>
+              <p className="text-muted-foreground text-xs mt-1 uppercase tracking-wider">Escolha o serviço, o barbeiro e o melhor horário. Como assinante, seus agendamentos elegíveis dentro do plano têm valor zerado.</p>
             </div>
             <div className="bg-card/80 p-6 rounded-2xl border border-border/80 shadow-sm">
               <BookingWizard
@@ -1038,8 +1042,20 @@ export default function UserLayout({
             {loadingBookings ? (
               <div className="text-center py-12 text-muted-foreground text-xs uppercase">Carregando seus horários...</div>
             ) : clientBookings.length === 0 ? (
-              <div className="bg-card/80 p-8 text-center border border-border/80 rounded-2xl text-muted-foreground text-xs">
-                Você não possui nenhum agendamento registrado. Clique em "Novo Agendamento" para marcar!
+              <div className="bg-card/80 p-8 text-center border border-border/80 rounded-2xl space-y-4">
+                <div className="mx-auto w-14 h-14 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
+                  <Clock className="w-6 h-6 text-primary" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-foreground text-sm font-bold">Você ainda não tem nenhum horário agendado.</p>
+                  <p className="text-muted-foreground text-xs">Marque seu primeiro corte agora — leva menos de 1 minuto.</p>
+                </div>
+                <button
+                  onClick={() => setActiveTab('agendar')}
+                  className="inline-flex items-center gap-2 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-bold text-xs uppercase tracking-wider px-5 py-3 rounded-xl shadow-md hover:scale-105 transition-all duration-300 cursor-pointer text-gold-glow"
+                >
+                  <Calendar className="w-4 h-4" /> Agendar Horário
+                </button>
               </div>
             ) : (
               <div className="space-y-4">
@@ -1088,7 +1104,7 @@ export default function UserLayout({
           <div className="max-w-xl mx-auto space-y-6">
             <div>
               <h2 className="text-2xl font-bold tracking-tight text-foreground">Editar Perfil</h2>
-              <p className="text-muted-foreground text-xs mt-1">Mantenha seus dados e contato de WhatsApp atualizados no sistema.</p>
+              <p className="text-muted-foreground text-xs mt-1">Mantenha seu nome e WhatsApp atualizados — é assim que avisamos sobre seus horários e promoções.</p>
             </div>
 
             <form onSubmit={handleUpdateProfile} className="space-y-4">

@@ -39,9 +39,15 @@ export function getUserClient(authHeader?: string): SupabaseClient | null {
  * NUNCA pode valer em produção: seria acesso de administrador sem senha para
  * qualquer um que enviasse o cabeçalho. Na Vercel, process.env.VERCEL é
  * embutido como true no build (ver script "build:api"), então o atalho morre lá.
+ *
+ * MORPH-003: além do NODE_ENV/VERCEL, exige ALLOW_MOCK_AUTH=true EXPLÍCITO.
+ * Sem isso, um deploy Express standalone com NODE_ENV não-produção (ex: VPS com
+ * `npm start` e NODE_ENV vazio) abriria admin total sem senha.
  */
 const MOCK_AUTH_PERMITIDO =
-  process.env.NODE_ENV !== 'production' && !process.env.VERCEL;
+  process.env.ALLOW_MOCK_AUTH === 'true' &&
+  process.env.NODE_ENV !== 'production' &&
+  !process.env.VERCEL;
 
 export async function attachUser(req: AuthRequest, res: Response, next: NextFunction) {
   try {

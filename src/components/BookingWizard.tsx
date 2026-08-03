@@ -27,6 +27,18 @@ interface SlotState {
   motivo?: 'ocupado' | 'intervalo' | 'bloqueado';
 }
 
+// MORPH-008: escape de HTML para o comprovante de impressão (document.write).
+// Nome/serviços/profissional vêm de input do usuário ou do banco — sem escape,
+// um nome como `<img src=x onerror=...>` executaria na janela de impressão.
+function esc(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export default function BookingWizard({ 
   services, 
   onBookingSuccess,
@@ -462,7 +474,7 @@ export default function BookingWizard({
       printWindow.document.write(`
         <html>
           <head>
-            <title>Comprovante - ${successBooking.id}</title>
+            <title>Comprovante - ${esc(successBooking.id)}</title>
             <style>
               body {
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -547,31 +559,31 @@ export default function BookingWizard({
               <h1>Detalhe Barbearia</h1>
               <p>Comprovante de Agendamento</p>
             </div>
-            <div class="voucher-id">VOUCHER: ${successBooking.id}</div>
+            <div class="voucher-id">VOUCHER: ${esc(successBooking.id)}</div>
             <div class="details">
               <div class="row">
                 <span class="label">Cliente:</span>
-                <span class="value">${nomeCliente}</span>
+                <span class="value">${esc(nomeCliente)}</span>
               </div>
               <div class="row">
                 <span class="label">Profissional:</span>
-                <span class="value">${selectedProfissional?.nome ?? '-'}</span>
+                <span class="value">${esc(selectedProfissional?.nome ?? '-')}</span>
               </div>
               <div class="row">
                 <span class="label">Serviços:</span>
-                <span class="value" style="text-align: right; max-width: 220px;">${selectedServices.map(s => s.nome).join(' + ')}</span>
+                <span class="value" style="text-align: right; max-width: 220px;">${esc(selectedServices.map(s => s.nome).join(' + '))}</span>
               </div>
               <div class="row">
                 <span class="label">Quando:</span>
-                <span class="value">${selectedDate.split('-').reverse().join('/')} às ${selectedSlot}h</span>
+                <span class="value">${esc(selectedDate.split('-').reverse().join('/'))} às ${esc(selectedSlot)}h</span>
               </div>
               <div class="row">
                 <span class="label">Duração:</span>
-                <span class="value">${totalDuracao} minutos</span>
+                <span class="value">${esc(totalDuracao)} minutos</span>
               </div>
               <div class="row total">
                 <span class="label" style="font-weight: bold; color: #1c1917;">Valor total:</span>
-                <span class="value" style="color: #c5a059; font-size: 16px;">${formatBRL(totalPreco)}</span>
+                <span class="value" style="color: #c5a059; font-size: 16px;">${esc(formatBRL(totalPreco))}</span>
               </div>
             </div>
             <div class="footer">

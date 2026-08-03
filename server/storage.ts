@@ -506,6 +506,25 @@ export async function getClientProfile(email: string): Promise<ClientProfile | n
   return data as ClientProfile;
 }
 
+// ---------- SEGURANÇA (MORPH-001) ----------
+// O bloco `subscription` das observações (status VIP, plano) é gravado EXCLUSIVAMENTE
+// pelo webhook da Stripe. O que o cliente mandar em `observacoes` no próprio perfil
+// NUNCA pode sobrescrever isso — sem esta proteção, qualquer um se auto-concede VIP.
+function parseObservacoes(texto?: string): Record<string, any> {
+  if (!texto) return {};
+  try {
+    if (texto.trim().startsWith('{')) return JSON.parse(texto);
+  } catch {}
+  return {};
+}
+
+function sanitizarObservacoesCliente(inputObs?: string, existenteObs?: string): string {
+  const nova = parseObservacoes(inputObs);
+  const existente = parseObservacoes(existenteObs);
+  nova.subscription = existente.subscription;
+  return JSON.stringify(nova);
+}
+
 export async function upsertClientProfile(input: {
   email: string;
   nome?: string;
@@ -522,7 +541,9 @@ export async function upsertClientProfile(input: {
       if (input.nome !== undefined) c.nome = input.nome;
       if (input.telefone !== undefined) c.telefone = input.telefone;
       if (input.foto_url !== undefined) c.foto_url = input.foto_url;
-      if (input.observacoes !== undefined) c.observacoes = input.observacoes;
+      if (input.observacoes !== undefined) {
+        c.observacoes = sanitizarObservacoesCliente(input.observacoes, c.observacoes);
+      }
       c.updated_at = new Date().toISOString();
     } else {
       c = {
@@ -532,7 +553,7 @@ export async function upsertClientProfile(input: {
         telefone: input.telefone || '',
         email: input.email,
         data_nascimento: null,
-        observacoes: input.observacoes || 'Cliente cadastrado via login',
+        observacoes: sanitizarObservacoesCliente(input.observacoes, undefined) || 'Cliente cadastrado via login',
         ativo: true,
         foto_url: input.foto_url || '',
         created_at: new Date().toISOString(),
@@ -551,7 +572,9 @@ export async function upsertClientProfile(input: {
     if (input.nome !== undefined) update.nome = input.nome;
     if (input.telefone !== undefined) update.telefone = input.telefone;
     if (input.foto_url !== undefined) update.foto_url = input.foto_url;
-    if (input.observacoes !== undefined) update.observacoes = input.observacoes;
+    if (input.observacoes !== undefined) {
+      update.observacoes = sanitizarObservacoesCliente(input.observacoes, existing.observacoes);
+    }
     const { data, error } = await client
       .from('clientes').update(update).eq('id', existing.id)
       .select('*').single();
@@ -568,7 +591,7 @@ export async function upsertClientProfile(input: {
       nome: cleanClientName(input.nome, input.email),
       telefone: input.telefone || '',
       foto_url: input.foto_url || '',
-      observacoes: input.observacoes || 'Cliente auto-cadastrado'
+      observacoes: sanitizarObservacoesCliente(input.observacoes, undefined) || 'Cliente auto-cadastrado'
     }).select('*').single();
     if (error) throw error;
     return data as ClientProfile;
