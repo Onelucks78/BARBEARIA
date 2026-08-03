@@ -13,3 +13,5 @@ api/_app.mjs
 
 .vercel
 .env*
+
+.env*.local
