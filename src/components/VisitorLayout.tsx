@@ -826,7 +826,7 @@ export default function VisitorLayout({
                 <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">Por apenas</span>
                 <div className="flex items-baseline text-foreground">
                   <span className="text-xl font-bold">R$</span>
-                  <span className="text-4xl sm:text-5xl font-extrabold tracking-tight mx-1 text-primary">159</span>
+                  <span className="text-4xl sm:text-5xl font-extrabold tracking-tight mx-1 text-primary">149</span>
                   <span className="text-lg font-bold text-muted-foreground">,99</span>
                   <span className="text-muted-foreground ml-1 text-xs font-medium">/mês</span>
                 </div>

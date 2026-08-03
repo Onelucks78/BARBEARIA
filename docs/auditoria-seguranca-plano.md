@@ -80,7 +80,7 @@ sem superfície LLM explorável.
   atacante chama o PostgREST diretamente e insere agendamentos/clientes arbitrários — inclusive
   `status='concluido'` com `preco_cobrado` alto (infla o dashboard financeiro) ou lota a agenda.
 - **Correção:** migração `015_harden_anon_rls.sql` restringe insert anon a dados consistentes.
-- **Status:** Pendente de aplicação no banco (migração escrita; rodar `npm run db:push`)
+- **Status:** Concluído ✔ (aplicada em 2026-08-03; políticas verificadas no banco via `pg_policies.with_check`)
 
 ### MORPH-006 — Rate-limit de cadastro ineficaz por IP na Vercel (sem `trust proxy`)
 - **Severity:** Medium | **CWE:** CWE-307 | **OWASP:** API4:2023
@@ -157,9 +157,12 @@ sem superfície LLM explorável.
 | 2026-08-03 | Auditoria completa. Correções MORPH-001..004, 006, 007, 008, 010, 011 aplicadas. |
 | 2026-08-03 | **Verificação:** `npm run lint` (tsc) sem erros; `npx vite build` OK; bundle servidor (esbuild) e bundle serverless Vercel (`build:api`) OK. |
 | 2026-08-03 | Migração MORPH-005 escrita; **aplicação bloqueada** — `SUPABASE_DB_PASSWORD` ausente no `.env.local`. Para aplicar: definir a senha do banco e rodar `npm run db:push`. |
+| 2026-08-03 | **MORPH-005 aplicada e verificada** no banco (políticas `agendamentos_anon_insert`, `agendamentos_cliente_insert`, `clientes_anon_insert` endurecidas). `db:verify` OK. |
+| 2026-08-03 | **Observação pré-existente:** constraint `no_overlap_per_barbeiro` (EXCLUDE) está AUSENTE no banco — fora do escopo desta auditoria; validar com a RPC `get_available_slots`/replicar migração 002 se necessário. |
 
 ## Pendências (bloqueadas)
 
-1. **Aplicar `015_harden_anon_rls.sql`** — requer `SUPABASE_DB_PASSWORD` em `.env.local`.
+1. **Aplicar `015_harden_anon_rls.sql`** — requer `SUPABASE_DB_PASSWORD` em `.env.local`. → **Concluído em 2026-08-03.**
 2. **(Recomendado)** Garantir `NODE_ENV=production` em qualquer deploy standalone do Express; `ALLOW_MOCK_AUTH` deve ficar vazio em produção.
 3. **(Recomendado)** Rotacionar secrets se algum dia expostos.
+4. **(Pré-existente, fora do escopo)** Investigar a ausência da EXCLUDE constraint `no_overlap_per_barbeiro`.
