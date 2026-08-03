@@ -15,7 +15,7 @@
 
 -- Agendamentos (anon): só agendamento futuro, sem preço (quem cobra é o
 -- servidor), para barbeiro ativo e profissional ativo DESTE barbeiro.
-alter table public.agendamentos drop policy if exists agendamentos_anon_insert;
+drop policy if exists agendamentos_anon_insert on public.agendamentos;
 create policy agendamentos_anon_insert on public.agendamentos
   for insert to anon with check (
     status = 'agendado'
@@ -35,7 +35,7 @@ create policy agendamentos_anon_insert on public.agendamentos
 
 -- Agendamentos (cliente autenticado): mesmo endurecimento, preso aos próprios
 -- clientes (auth_user_id = auth.uid()).
-alter table public.agendamentos drop policy if exists agendamentos_cliente_insert;
+drop policy if exists agendamentos_cliente_insert on public.agendamentos;
 create policy agendamentos_cliente_insert on public.agendamentos
   for insert to authenticated with check (
     status = 'agendado'
@@ -48,7 +48,7 @@ create policy agendamentos_cliente_insert on public.agendamentos
 
 -- Clientes (anon): sem auth_user_id e em barbearia ativa existente. Impede
 -- criar ficha vinculada a um usuário ou poluir com e-mails arbitrários.
-alter table public.clientes drop policy if exists clientes_anon_insert;
+drop policy if exists clientes_anon_insert on public.clientes;
 create policy clientes_anon_insert on public.clientes
   for insert to anon with check (
     auth_user_id is null
