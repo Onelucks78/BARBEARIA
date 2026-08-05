@@ -968,7 +968,15 @@ export default function UserLayout({
                     {PLANOS.map((plano) => {
                       const isCurrent = plano.key === (subscription?.plan || '').toLowerCase();
                       return (
-                        <div key={plano.key} className={`flex flex-col p-6 rounded-2xl border space-y-4 bg-card/80 transition duration-300 ${isCurrent ? 'border-emerald-500/50 bg-emerald-500/5' : plano.destaque ? 'border-primary/60 shadow-lg' : 'border-border/80'}`}>
+                        <div
+                          key={plano.key}
+                          onClick={() => { if (!isCurrent) handleStartStripeCheckout(plano.key); }}
+                          className={`flex flex-col p-6 rounded-2xl border space-y-4 bg-card/80 transition duration-300 ${
+                            isCurrent
+                              ? 'border-emerald-500/50 bg-emerald-500/5'
+                              : `cursor-pointer ${plano.destaque ? 'border-primary/60 shadow-lg hover:border-primary' : 'border-border/80 hover:border-primary/40 hover:shadow-md'}`
+                          }`}
+                        >
                           <div className="flex items-center justify-between">
                             <span className="text-base font-bold text-foreground">{plano.nome}</span>
                             {isCurrent ? (
@@ -1001,7 +1009,7 @@ export default function UserLayout({
                             <button
                               type="button"
                               disabled={redirectingPlan === plano.key}
-                              onClick={() => handleStartStripeCheckout(plano.key)}
+                              onClick={(e) => { e.stopPropagation(); handleStartStripeCheckout(plano.key); }}
                               className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground text-xs tracking-wider uppercase font-bold px-4 py-3 rounded-xl transition shadow-md cursor-pointer text-gold-glow mt-auto flex items-center justify-center gap-2"
                             >
                               {redirectingPlan === plano.key ? 'Redirecionando...' : `Migrar para ${plano.nome}`}
@@ -1018,7 +1026,11 @@ export default function UserLayout({
                 {billingAlerts}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                   {PLANOS.map((plano) => (
-                    <div key={plano.key} className={`flex flex-col p-6 rounded-2xl border space-y-4 bg-card/80 transition duration-300 ${plano.destaque ? 'border-primary/60 shadow-lg' : 'border-border/80'}`}>
+                    <div
+                      key={plano.key}
+                      onClick={() => handleStartStripeCheckout(plano.key)}
+                      className={`flex flex-col p-6 rounded-2xl border space-y-4 bg-card/80 transition duration-300 cursor-pointer ${plano.destaque ? 'border-primary/60 shadow-lg hover:border-primary' : 'border-border/80 hover:border-primary/40 hover:shadow-md'}`}
+                    >
                       <div className="flex items-center justify-between">
                         <span className="text-base font-bold text-foreground">{plano.nome}</span>
                         {plano.destaque && <span className="bg-primary/10 text-primary border border-primary/30 text-[9px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full">Mais Escolhido</span>}
@@ -1038,7 +1050,7 @@ export default function UserLayout({
                       <button
                         type="button"
                         disabled={redirectingPlan === plano.key}
-                        onClick={() => handleStartStripeCheckout(plano.key)}
+                        onClick={(e) => { e.stopPropagation(); handleStartStripeCheckout(plano.key); }}
                         className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground text-xs tracking-wider uppercase font-bold px-4 py-3 rounded-xl transition shadow-md cursor-pointer text-gold-glow mt-auto flex items-center justify-center gap-2"
                       >
                         {redirectingPlan === plano.key ? 'Redirecionando Stripe...' : `Assinar ${plano.nome}`}

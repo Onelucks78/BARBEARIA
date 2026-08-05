@@ -764,7 +764,8 @@ export default function VisitorLayout({
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.5 }}
-              className="relative flex flex-col bg-card/80 border border-border/80 rounded-2xl p-8 shadow-md hover:shadow-xl transition duration-300"
+              onClick={onLoginClick}
+              className="relative flex flex-col bg-card/80 border border-border/80 rounded-2xl p-8 shadow-md hover:shadow-xl hover:border-primary/40 transition duration-300 cursor-pointer"
             >
               <div className="mb-4">
                 <h3 className="text-2xl font-serif font-bold text-foreground">Essential</h3>
@@ -796,7 +797,7 @@ export default function VisitorLayout({
               
               <button 
                 type="button"
-                onClick={onLoginClick}
+                onClick={(e) => { e.stopPropagation(); onLoginClick(); }}
                 className="w-full py-3.5 px-6 rounded-xl font-bold text-xs uppercase tracking-wider bg-secondary hover:bg-secondary/80 text-secondary-foreground transition-all duration-300 mt-auto cursor-pointer border border-border"
               >
                 Assinar Essential
@@ -809,7 +810,8 @@ export default function VisitorLayout({
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.5, delay: 0.1 }}
-              className="relative flex flex-col bg-card border-2 border-primary/60 rounded-2xl p-8 shadow-xl shadow-primary/10 hover:shadow-primary/20 transition duration-300 md:-mt-2 md:mb-[-0.5rem]"
+              onClick={onLoginClick}
+              className="relative flex flex-col bg-card border-2 border-primary/60 rounded-2xl p-8 shadow-xl shadow-primary/10 hover:shadow-primary/20 transition duration-300 md:-mt-2 md:mb-[-0.5rem] cursor-pointer"
             >
               <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-bold px-4 py-1 rounded-full text-xs uppercase tracking-wider shadow-md text-gold-glow">
                 Mais Escolhido
@@ -851,7 +853,7 @@ export default function VisitorLayout({
               
               <button 
                 type="button"
-                onClick={onLoginClick}
+                onClick={(e) => { e.stopPropagation(); onLoginClick(); }}
                 className="w-full py-3.5 px-6 rounded-xl font-bold text-xs uppercase tracking-wider bg-gradient-to-r from-primary via-primary/90 to-primary/80 hover:from-primary/90 hover:to-primary text-primary-foreground transition-all duration-300 shadow-md shadow-primary/20 text-gold-glow cursor-pointer"
               >
                 Assinar Premium
@@ -864,7 +866,8 @@ export default function VisitorLayout({
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.5, delay: 0.2 }}
-              className="relative flex flex-col bg-card/80 border border-border/80 rounded-2xl p-8 shadow-md hover:shadow-xl transition duration-300"
+              onClick={onLoginClick}
+              className="relative flex flex-col bg-card/80 border border-border/80 rounded-2xl p-8 shadow-md hover:shadow-xl hover:border-primary/40 transition duration-300 cursor-pointer"
             >
               <div className="mb-4">
                 <h3 className="text-2xl font-serif font-bold text-foreground flex items-center justify-between">
@@ -911,7 +914,7 @@ export default function VisitorLayout({
               
               <button 
                 type="button"
-                onClick={onLoginClick}
+                onClick={(e) => { e.stopPropagation(); onLoginClick(); }}
                 className="w-full py-3.5 px-6 rounded-xl font-bold text-xs uppercase tracking-wider bg-secondary hover:bg-secondary/80 text-secondary-foreground transition-all duration-300 mt-auto cursor-pointer border border-border"
               >
                 Assinar Exclusive
