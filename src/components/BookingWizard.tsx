@@ -694,8 +694,7 @@ export default function BookingWizard({
                   <p className="text-xs text-slate-500 text-left">Selecione seu corte</p>
                 </div>
                 
-                {/* Scrollable Container with Subtle Styled Native Scrollbar */}
-                <div className="max-h-[45vh] sm:max-h-[380px] overflow-y-auto overscroll-contain pr-1.5 space-y-3 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent">
+                <div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {(Array.isArray(services) ? services : []).map((s) => {
                       const isSelected = selectedServices.some(item => item.id === s.id);
@@ -772,7 +771,7 @@ export default function BookingWizard({
                   <p className="text-xs text-slate-500 text-left">Escolha seu barbeiro</p>
                 </div>
 
-                <div className="max-h-[45vh] sm:max-h-[380px] overflow-y-auto overscroll-contain pr-1.5 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent">
+                <div>
                   {profissionais.length === 0 ? (
                     <p className="text-xs text-slate-500 py-8 text-center">
                       Nenhum barbeiro disponível no momento.

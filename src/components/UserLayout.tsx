@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   User, Calendar, CreditCard, LogOut,
@@ -180,6 +180,47 @@ export default function UserLayout({
     }
     setSubscription(null);
   }, [loggedClient.observacoes]);
+
+  // Refresh do status da assinatura direto na Stripe (autocura no servidor).
+  // Roda ao voltar do checkout (?session_id=...), ao abrir a aba "Meu Plano"
+  // e de tempos em tempos na área do cliente — garante que quem pagou vira VIP
+  // mesmo se o webhook atrasar, e que quem cancelou deixa de ser VIP.
+  const refreshSubscriptionStatus = useCallback(async () => {
+    try {
+      const res = await authedFetch('/api/stripe/subscription');
+      const data = await res.json().catch(() => ({} as any));
+      if (data?.ativo) {
+        const parsed = (() => {
+          try {
+            const p = JSON.parse(loggedClient.observacoes || '');
+            return p;
+          } catch { return {}; }
+        })();
+        const plano = data.plan || parsed.subscription?.plan || 'vip';
+        const updated = { ...loggedClient, observacoes: JSON.stringify({ ...parsed, subscription: { ...(parsed.subscription || {}), status: 'ativo', plan: plano, renews_at: data.currentPeriodEnd || parsed.subscription?.renews_at, pendencia: false, updatedAt: new Date().toISOString() } }) };
+        onProfileUpdate(updated);
+      }
+    } catch { /* silencioso: o webhook corrige quando chegar */ }
+  }, [loggedClient, onProfileUpdate]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const voltouDoCheckout = params.get('session_id') || window.location.pathname.includes('/planos/sucesso');
+    if (voltouDoCheckout) {
+      refreshSubscriptionStatus();
+      // limpa a query pra não repetir o refresh a cada render/navegação
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [refreshSubscriptionStatus]);
+
+  useEffect(() => {
+    if (activeTab === 'assinatura') refreshSubscriptionStatus();
+  }, [activeTab, refreshSubscriptionStatus]);
+
+  useEffect(() => {
+    const id = window.setInterval(refreshSubscriptionStatus, 120000);
+    return () => window.clearInterval(id);
+  }, [refreshSubscriptionStatus]);
 
   // Load Bookings
   const fetchBookings = async () => {

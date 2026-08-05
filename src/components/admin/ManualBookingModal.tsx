@@ -49,12 +49,14 @@ export default function ManualBookingModal({
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
-    if (defaultProfissionalId) {
-      setSelectedProfissionalId(defaultProfissionalId);
-    } else if (profissionais.length > 0 && !selectedProfissionalId) {
-      setSelectedProfissionalId(profissionais[0].id);
+    const activeProfissionais = profissionais.filter(p => p.ativo !== false);
+    const matched = activeProfissionais.find(p => p.id === defaultProfissionalId);
+    if (matched) {
+      setSelectedProfissionalId(matched.id);
+    } else if (activeProfissionais.length > 0) {
+      setSelectedProfissionalId(activeProfissionais[0].id);
     }
-  }, [defaultProfissionalId, profissionais]);
+  }, [defaultProfissionalId, profissionais, isOpen]);
 
   // Nada de pré-selecionar serviço: com 15 serviços cadastrados, marcar o
   // primeiro da lista fazia o admin achar que não dava pra trocar (clicar em
@@ -282,10 +284,15 @@ export default function ManualBookingModal({
                   setSelectedProfissionalId(e.target.value);
                   setSelectedSlot('');
                 }}
-                className="w-full p-2.5 bg-background border border-border rounded-md text-xs focus:outline-none focus:border-primary text-foreground font-semibold"
+                className="w-full p-2.5 bg-background border border-border rounded-md text-xs focus:outline-none focus:border-primary text-foreground font-semibold cursor-pointer"
               >
-                {profissionais.map(p => (
-                  <option key={p.id} value={p.id}>{p.nome}</option>
+                <option value="" className="bg-card text-foreground" disabled>
+                  Selecione o barbeiro...
+                </option>
+                {profissionais.filter(p => p.ativo !== false).map(p => (
+                  <option key={p.id} value={p.id} className="bg-card text-foreground">
+                    {p.nome}
+                  </option>
                 ))}
               </select>
             </div>
@@ -309,16 +316,14 @@ export default function ManualBookingModal({
                 Nenhum serviço disponível. Cadastre em “Serviços CRUD” antes de agendar.
               </div>
             ) : (
-              // Select nativo: a rolagem da lista é do próprio sistema (PC e celular),
-              // então a altura do modal não muda por causa da quantidade de serviços.
               <select
                 value={selectedServices[0]?.id || ''}
                 onChange={(e) => handleSelectService(e.target.value)}
-                className="w-full p-2.5 bg-background border border-border rounded-md text-xs focus:outline-none focus:border-primary text-foreground font-semibold"
+                className="w-full p-2.5 bg-background border border-border rounded-md text-xs focus:outline-none focus:border-primary text-foreground font-semibold cursor-pointer"
               >
-                <option value="">Selecione o serviço...</option>
+                <option value="" className="bg-card text-foreground">Selecione o serviço...</option>
                 {services.map(s => (
-                  <option key={s.id} value={s.id}>
+                  <option key={s.id} value={s.id} className="bg-card text-foreground">
                     {s.nome} — R$ {s.preco.toFixed(2).replace('.', ',')}
                   </option>
                 ))}
@@ -415,7 +420,7 @@ export default function ManualBookingModal({
                   : 'Nenhum horário livre para este dia. Tente outro dia no calendário.'}
               </div>
             ) : (
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 p-3 bg-background border border-border rounded-lg max-h-44 overflow-y-auto">
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 p-3 bg-background border border-border rounded-lg">
                 {availableSlots.map(slot => (
                   <button
                     key={slot.horario}

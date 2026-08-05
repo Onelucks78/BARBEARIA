@@ -28,7 +28,8 @@ import {
   Minus,
   CheckCircle2,
   Upload,
-  Loader2
+  Loader2,
+  XCircle
 } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 import { Sidebar, Header } from './Layout.tsx';
@@ -145,6 +146,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
   }, [dashboardCardFilter, dashboardPeriod]);
   const [agendaDateFilter, setAgendaDateFilter] = useState<string>('');
   const [agendaFilterMode, setAgendaFilterMode] = useState<'upcoming' | 'day'>('upcoming');
+  const [agendaViewType, setAgendaViewType] = useState<'lista' | 'horarios'>('lista');
   const [clientSearchQuery, setClientSearchQuery] = useState('');
 
   // UI action states (Modals or quick add forms toggles)
@@ -2118,55 +2120,33 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
           {/* TAB 2: DAILY AGENDA & CHOOSE STATUS */}
           {activeTab === 'agenda' && (
             <div className="space-y-6">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                  <h2 className="font-normal text-2xl text-foreground tracking-tight">Agenda de Compromissos</h2>
-                  <p className="text-muted-foreground text-xs mt-1">Mude o status de agendamentos e consulte relatórios de clientes</p>
-                </div>
+              {/* Header & Main Action */}
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div>
+                    <h2 className="font-normal text-2xl text-foreground tracking-tight">Agenda de Compromissos</h2>
+                    <p className="text-muted-foreground text-xs mt-1">Mude o status de agendamentos e consulte relatórios de clientes</p>
+                  </div>
 
-                {/* Agenda Mode & Date Selector */}
-                <div className="flex flex-wrap items-center gap-2 text-xs w-full md:w-auto">
+                  {/* Desktop Novo Agendamento Button */}
                   <Button
                     onClick={() => setIsManualBookingModalOpen(true)}
-                    className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold uppercase tracking-wider px-3.5 py-2 flex items-center gap-1.5 shadow-md cursor-pointer shrink-0"
+                    className="hidden sm:flex bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold uppercase tracking-wider px-4 py-2.5 items-center gap-2 shadow-md hover:shadow-lg transition-all cursor-pointer shrink-0"
                   >
                     <Plus className="w-4 h-4" /> Novo Agendamento
                   </Button>
-
-                  <div className="flex bg-card p-1 border border-border rounded-sm font-semibold w-full sm:w-auto">
-                    <button
-                      type="button"
-                      onClick={() => setAgendaFilterMode('upcoming')}
-                      className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-sm transition text-center cursor-pointer ${
-                        agendaFilterMode === 'upcoming' 
-                          ? 'bg-primary text-primary-foreground shadow-md font-bold' 
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      Hoje e Futuros
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAgendaFilterMode('day')}
-                      className={`flex-1 sm:flex-initial px-3 py-1.5 rounded-sm transition text-center cursor-pointer ${
-                        agendaFilterMode === 'day' 
-                          ? 'bg-primary text-primary-foreground shadow-md font-bold' 
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      Por Dia Específico
-                    </button>
-                  </div>
-
-                  {agendaFilterMode === 'day' && (
-                    <input
-                      type="date"
-                      value={agendaDateFilter}
-                      onChange={(e) => setAgendaDateFilter(e.target.value)}
-                      className="w-full sm:w-auto pl-3 pr-3 py-2 bg-background border border-border rounded-sm text-xs font-semibold focus:outline-none text-foreground focus:border-primary"
-                    />
-                  )}
                 </div>
+
+                {/* Mobile Novo Agendamento Button (Centered, Large, Prominent) */}
+                <div className="sm:hidden w-full">
+                  <Button
+                    onClick={() => setIsManualBookingModalOpen(true)}
+                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-bold uppercase tracking-wider py-3 flex items-center justify-center gap-2 shadow-lg cursor-pointer transition-all active:scale-[0.99]"
+                  >
+                    <Plus className="w-5 h-5" /> Novo Agendamento
+                  </Button>
+                </div>
+
               </div>
 
               <FiltroBarbeiro
@@ -2175,161 +2155,284 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                 onChange={setFiltroProfissional}
               />
 
-              {/* Status count badges */}
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge variant="outline" className="text-xs uppercase tracking-wider font-bold py-1 px-2.5">
-                  Total: {filteredAgendamentos.length}
-                </Badge>
-                <Badge className="text-xs uppercase tracking-wider font-bold py-1 px-2.5 bg-primary/10 text-primary border border-primary/20">
-                  Agendados: {filteredAgendamentos.filter(b => b.status === 'agendado' || b.status === 'confirmado').length}
-                </Badge>
-                <Badge className="text-xs uppercase tracking-wider font-bold py-1 px-2.5 bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/40">
-                  Concluídos: {filteredAgendamentos.filter(b => b.status === 'concluido').length}
-                </Badge>
-                <Badge className="text-xs uppercase tracking-wider font-bold py-1 px-2.5 bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/40">
-                  Cancelados: {filteredAgendamentos.filter(b => b.status === 'cancelado' || b.status === 'faltou').length}
-                </Badge>
+              {/* View Type Toggle (Visão Lista vs Grade por Horários) */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card p-3 rounded-lg border border-border">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-muted-foreground hidden sm:inline">Visualização:</span>
+                  <div className="flex bg-muted/60 p-1 rounded-md border border-border text-xs font-semibold w-full sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={() => setAgendaViewType('lista')}
+                      className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-md transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                        agendaViewType === 'lista'
+                          ? 'bg-background text-foreground shadow-xs font-bold border border-border'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <span>📋</span> Visão Lista
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAgendaViewType('horarios')}
+                      className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-md transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                        agendaViewType === 'horarios'
+                          ? 'bg-background text-foreground shadow-xs font-bold border border-border'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <span>🕒</span> Grade de Horários (Timeline)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="text-xs text-muted-foreground text-center sm:text-right font-medium">
+                  {agendaViewType === 'lista' 
+                    ? `${filteredAgendamentos.length} agendamento(s) encontrado(s)` 
+                    : 'Expediente completo (08:00 às 19:30)'}
+                </div>
               </div>
 
-              {filteredAgendamentos.length === 0 ? (
-                <div className="py-16 text-center space-y-3 bg-card border border-dashed border-border rounded-sm">
-                  <CalendarX className="w-8 h-8 text-muted-foreground mx-auto" />
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider">
-                    {agendaFilterMode === 'upcoming' 
-                      ? 'Nenhum compromisso agendado para hoje ou dias futuros.' 
-                      : `Nenhum compromisso agendado para o dia ${agendaDateFilter.split('-').reverse().join('/')}.`}
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {filteredAgendamentos.map((b) => {
-                    const servLabel = servicos.find(s => s.id === b.servico_id)?.nome || 'Corte de Cabelo';
-                    const matchedClient = b.cliente_id 
-                      ? clientes.find(c => c.id === b.cliente_id) 
-                      : clientes.find(c => (c.telefone && c.telefone === b.telefone_cliente) || (c.email && c.email === b.email_cliente));
-                    const clientSub = matchedClient ? parseSubscription(matchedClient) : null;
-                    const isVipActive = clientSub && clientSub.status === 'ativo' && new Date(clientSub.renews_at) >= new Date();
-                    const clientBadge = isVipActive ? (
-                      <span className={`text-xs px-2.5 py-1 rounded-md font-bold uppercase tracking-wider border ${planBadgeClass(clientSub.plan || '')}`}>
-                        {planLabel(clientSub.plan || '')}
-                      </span>
-                    ) : (
-                      <span className="text-xs bg-card text-muted-foreground border border-border px-2.5 py-1 rounded-md font-semibold">
-                        Cliente Comum
-                      </span>
-                    );
+              {/* MODE 1: LISTA */}
+              {agendaViewType === 'lista' && (
+                filteredAgendamentos.length === 0 ? (
+                  <div className="py-16 text-center space-y-3 bg-card border border-dashed border-border rounded-sm">
+                    <CalendarX className="w-8 h-8 text-muted-foreground mx-auto" />
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                      {agendaFilterMode === 'upcoming' 
+                        ? 'Nenhum compromisso agendado para hoje ou dias futuros.' 
+                        : `Nenhum compromisso agendado para o dia ${agendaDateFilter.split('-').reverse().join('/')}.`}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {filteredAgendamentos.map((b) => {
+                      const servLabel = servicos.find(s => s.id === b.servico_id)?.nome || 'Corte de Cabelo';
+                      const matchedClient = b.cliente_id 
+                        ? clientes.find(c => c.id === b.cliente_id) 
+                        : clientes.find(c => (c.telefone && c.telefone === b.telefone_cliente) || (c.email && c.email === b.email_cliente));
+                      const clientSub = matchedClient ? parseSubscription(matchedClient) : null;
+                      const isVipActive = clientSub && clientSub.status === 'ativo' && new Date(clientSub.renews_at) >= new Date();
+                      const clientBadge = isVipActive ? (
+                        <span className={`text-xs px-2.5 py-1 rounded-md font-bold uppercase tracking-wider border ${planBadgeClass(clientSub.plan || '')}`}>
+                          {planLabel(clientSub.plan || '')}
+                        </span>
+                      ) : (
+                        <span className="text-xs bg-card text-muted-foreground border border-border px-2.5 py-1 rounded-md font-semibold">
+                          Cliente Comum
+                        </span>
+                      );
 
-                    return (
-                      <div
-                        key={b.id}
-                        className={`p-5 rounded-sm border border-l-4 transition-all ${
-                          b.status === 'concluido'
-                            ? 'bg-card/30 border-border border-l-emerald-500 opacity-60'
-                            : b.status === 'cancelado' || b.status === 'faltou'
-                            ? 'bg-red-100 dark:bg-red-950/10 border-red-200 dark:border-red-950/40 border-l-red-500 opacity-50'
-                            : 'bg-card border-border border-l-primary shadow-sm hover:border-primary/40'
-                        }`}
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                          <div className="space-y-2.5 flex-1 min-w-0">
-                            {/* Date, Time and service */}
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-xs font-bold text-muted-foreground bg-card border border-border px-2.5 py-1 rounded-sm">
-                                {b.inicio_em.split('T')[0].split('-').reverse().join('/')}
-                              </span>
-                              <span className="font-bold text-primary text-sm bg-primary/10 px-2.5 py-1 rounded-sm border border-primary/20">
-                                {b.inicio_em.split('T')[1].substring(0, 5)}h
-                              </span>
-                              <span className="text-foreground/40 hidden sm:inline">|</span>
-                              <span className="font-sans font-semibold text-foreground text-xs sm:text-sm">{servLabel}</span>
-                              <span className="text-foreground/40">|</span>
-                              <span className="text-primary text-xs font-bold">{formatBRL(b.preco_cobrado)}</span>
-                              {profissionais.length > 1 && (
-                                <>
-                                  <span className="text-foreground/40">|</span>
-                                  <span className="text-xs font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded-sm">
-                                    {profissionais.find(p => p.id === b.profissional_id)?.nome ?? 'Sem barbeiro'}
-                                  </span>
-                                </>
-                              )}
-                            </div>
-
-                            {/* Client particulars details */}
-                            <div className="space-y-1.5">
-                              <h4 className="font-bold text-foreground text-sm flex items-center justify-between sm:justify-start gap-2">
-                                <span>Cliente: <span className="text-foreground font-extrabold">{b.nome_cliente}</span></span>
-                                <span className="sm:hidden">{clientBadge}</span>
-                              </h4>
-
-                              <div className="flex items-center gap-2 pt-0.5">
-                                <span className="text-muted-foreground text-xs font-medium">Contato:</span>
-                                <a
-                                  href={getWhatsAppLink(b.telefone_cliente)}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 transition cursor-pointer group shadow-xs"
-                                  title="Chamar no WhatsApp"
-                                >
-                                  <span className="text-emerald-500 group-hover:scale-110 transition-transform"><FaWhatsapp size={14} /></span>
-                                  <span>{b.telefone_cliente}</span>
-                                </a>
+                      return (
+                        <div
+                          key={b.id}
+                          className={`p-5 rounded-sm border border-l-4 transition-all ${
+                            b.status === 'concluido'
+                              ? 'bg-card/30 border-border border-l-emerald-500 opacity-60'
+                              : b.status === 'cancelado' || b.status === 'faltou'
+                              ? 'bg-red-100 dark:bg-red-950/10 border-red-200 dark:border-red-950/40 border-l-red-500 opacity-50'
+                              : 'bg-card border-border border-l-primary shadow-sm hover:border-primary/40'
+                          }`}
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div className="space-y-2.5 flex-1 min-w-0">
+                              {/* Date, Time and service */}
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-xs font-bold text-muted-foreground bg-card border border-border px-2.5 py-1 rounded-sm">
+                                  {b.inicio_em.split('T')[0].split('-').reverse().join('/')}
+                                </span>
+                                <span className="font-bold text-primary text-sm bg-primary/10 px-2.5 py-1 rounded-sm border border-primary/20">
+                                  {b.inicio_em.split('T')[1].substring(0, 5)}h
+                                </span>
+                                <span className="text-foreground/40 hidden sm:inline">|</span>
+                                <span className="font-sans font-semibold text-foreground text-xs sm:text-sm">{servLabel}</span>
+                                <span className="text-foreground/40">|</span>
+                                <span className="text-primary text-xs font-bold">{formatBRL(b.preco_cobrado)}</span>
+                                {profissionais.length > 1 && (
+                                  <>
+                                    <span className="text-foreground/40">|</span>
+                                    <span className="text-xs font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded-sm">
+                                      {profissionais.find(p => p.id === b.profissional_id)?.nome ?? 'Sem barbeiro'}
+                                    </span>
+                                  </>
+                                )}
                               </div>
 
-                              {b.observacao && (
-                                <p className="text-primary text-xs bg-primary/5 p-2 rounded-sm border border-primary/10">
-                                  "{b.observacao}"
-                                </p>
-                              )}
+                              {/* Client particulars details */}
+                              <div className="space-y-1.5">
+                                <h4 className="font-bold text-foreground text-sm flex items-center justify-between sm:justify-start gap-2">
+                                  <span>Cliente: <span className="text-foreground font-extrabold">{b.nome_cliente}</span></span>
+                                  <span className="sm:hidden">{clientBadge}</span>
+                                </h4>
 
-                              {/* Show client custom observations */}
-                              {matchedClient?.observacoes && matchedClient.observacoes !== 'Auto-cadastrado via agendamento online' && (
-                                <div className="text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/10 p-2 rounded-sm border border-emerald-200 dark:border-emerald-900/30 mt-2 leading-relaxed">
-                                  <span className="font-bold block text-xs uppercase text-emerald-500">Observação:</span>
-                                  {matchedClient.observacoes}
+                                <div className="flex items-center gap-2 pt-0.5">
+                                  <span className="text-muted-foreground text-xs font-medium">Contato:</span>
+                                  <a
+                                    href={getWhatsAppLink(b.telefone_cliente)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 transition cursor-pointer group shadow-xs"
+                                    title="Chamar no WhatsApp"
+                                  >
+                                    <span className="text-emerald-500 group-hover:scale-110 transition-transform"><FaWhatsapp size={14} /></span>
+                                    <span>{b.telefone_cliente}</span>
+                                  </a>
                                 </div>
-                              )}
+
+                                {b.observacao && (
+                                  <p className="text-primary text-xs bg-primary/5 p-2 rounded-sm border border-primary/10">
+                                    "{b.observacao}"
+                                  </p>
+                                )}
+
+                                {matchedClient?.observacoes && matchedClient.observacoes !== 'Auto-cadastrado via agendamento online' && (
+                                  <div className="text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/10 p-2 rounded-sm border border-emerald-200 dark:border-emerald-900/30 mt-2 leading-relaxed">
+                                    <span className="font-bold block text-xs uppercase text-emerald-500">Observação:</span>
+                                    {matchedClient.observacoes}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Quick Controls */}
+                            <div className="pt-3 sm:pt-0 border-t sm:border-t-0 border-border flex flex-col items-stretch sm:items-end justify-center gap-2.5 shrink-0 w-full sm:w-auto">
+                              <div className="hidden sm:flex items-center justify-end">
+                                {clientBadge}
+                              </div>
+
+                              <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
+                                {b.status !== 'concluido' && b.status !== 'cancelado' && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateBookingStatus(b.id, 'concluido')}
+                                      className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 rounded-lg text-xs font-bold uppercase tracking-wide bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-900/20 transition cursor-pointer active:scale-95"
+                                    >
+                                      <CheckCircle2 className="w-4 h-4" /> Concluir
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateBookingStatus(b.id, 'cancelado')}
+                                      className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 rounded-lg text-xs font-bold uppercase tracking-wide bg-red-600 hover:bg-red-500 text-white shadow-md shadow-red-900/20 transition cursor-pointer active:scale-95"
+                                    >
+                                      <X className="w-4 h-4" /> Cancelar
+                                    </button>
+                                  </>
+                                )}
+                                {b.status === 'concluido' && (
+                                  <span className="col-span-2 sm:col-span-1 w-full sm:w-auto inline-flex items-center justify-center gap-1 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                                    <CheckCircle2 className="w-4 h-4" /> Concluído
+                                  </span>
+                                )}
+                                {b.status === 'cancelado' && (
+                                  <span className="col-span-2 sm:col-span-1 w-full sm:w-auto inline-flex items-center justify-center gap-1 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/30">
+                                    <X className="w-4 h-4" /> Cancelado
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
+              )}
 
-                          {/* Quick Controls */}
-                          <div className="pt-3 sm:pt-0 border-t sm:border-t-0 border-border flex flex-col items-stretch sm:items-end justify-center gap-2.5 shrink-0 w-full sm:w-auto">
-                            {/* On desktop, show client type badge directly above buttons */}
-                            <div className="hidden sm:flex items-center justify-end">
-                              {clientBadge}
+              {/* MODE 2: GRADE DE HORÁRIOS (TIMELINE) */}
+              {agendaViewType === 'horarios' && (
+                <div className="space-y-2.5">
+                  {[
+                    '08:00', '08:30', '09:00', '09:30', '10:00', '10:30',
+                    '11:00', '11:30', '12:00', '12:30', '13:00', '13:30',
+                    '14:00', '14:30', '15:00', '15:30', '16:00', '16:30',
+                    '17:00', '17:30', '18:00', '18:30', '19:00', '19:30'
+                  ].map((slotTime) => {
+                    const slotBookings = filteredAgendamentos.filter(
+                      b => b.inicio_em.split('T')[1]?.substring(0, 5) === slotTime
+                    );
+
+                    if (slotBookings.length > 0) {
+                      return slotBookings.map(b => {
+                        const servLabel = servicos.find(s => s.id === b.servico_id)?.nome || 'Corte de Cabelo';
+                        return (
+                          <div
+                            key={b.id}
+                            className={`p-3.5 rounded-lg border border-l-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all ${
+                              b.status === 'concluido'
+                                ? 'bg-card/40 border-border border-l-emerald-500 opacity-60'
+                                : b.status === 'cancelado' || b.status === 'faltou'
+                                ? 'bg-red-500/10 border-red-500/20 border-l-red-500 opacity-60'
+                                : 'bg-card border-border border-l-primary shadow-xs'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span className="font-mono text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-md border border-primary/20 shrink-0">
+                                {slotTime}h
+                              </span>
+                              <div className="min-w-0 space-y-0.5">
+                                <p className="font-bold text-foreground text-sm truncate">{b.nome_cliente}</p>
+                                <p className="text-xs text-muted-foreground truncate">{servLabel} • <span className="text-primary font-semibold">{formatBRL(b.preco_cobrado)}</span></p>
+                              </div>
                             </div>
 
-                            {/* Buttons: Grid 2 cols on mobile (w-full), flex row on desktop */}
-                            <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
+                            <div className="flex items-center gap-2 shrink-0">
+                              <a
+                                href={getWhatsAppLink(b.telefone_cliente)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="p-2 rounded-md bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border border-emerald-500/30 transition cursor-pointer"
+                                title="WhatsApp"
+                              >
+                                <FaWhatsapp size={14} />
+                              </a>
+
                               {b.status !== 'concluido' && b.status !== 'cancelado' && (
                                 <>
                                   <button
                                     type="button"
                                     onClick={() => handleUpdateBookingStatus(b.id, 'concluido')}
-                                    className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 rounded-lg text-xs font-bold uppercase tracking-wide bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-900/20 transition cursor-pointer active:scale-95"
+                                    className="px-3 py-1.5 rounded-md text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-500 transition cursor-pointer"
                                   >
-                                    <CheckCircle2 className="w-4 h-4" /> Concluir
+                                    Concluir
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => handleUpdateBookingStatus(b.id, 'cancelado')}
-                                    className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 rounded-lg text-xs font-bold uppercase tracking-wide bg-red-600 hover:bg-red-500 text-white shadow-md shadow-red-900/20 transition cursor-pointer active:scale-95"
+                                    className="px-3 py-1.5 rounded-md text-xs font-bold bg-red-600 text-white hover:bg-red-500 transition cursor-pointer"
                                   >
-                                    <X className="w-4 h-4" /> Cancelar
+                                    Cancelar
                                   </button>
                                 </>
                               )}
                               {b.status === 'concluido' && (
-                                <span className="col-span-2 sm:col-span-1 w-full sm:w-auto inline-flex items-center justify-center gap-1 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-                                  <CheckCircle2 className="w-4 h-4" /> Concluído
-                                </span>
+                                <span className="text-xs font-bold text-emerald-500 uppercase">Concluído</span>
                               )}
                               {b.status === 'cancelado' && (
-                                <span className="col-span-2 sm:col-span-1 w-full sm:w-auto inline-flex items-center justify-center gap-1 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/30">
-                                  <X className="w-4 h-4" /> Cancelado
-                                </span>
+                                <span className="text-xs font-bold text-red-500 uppercase">Cancelado</span>
                               )}
                             </div>
                           </div>
+                        );
+                      });
+                    }
+
+                    return (
+                      <div
+                        key={slotTime}
+                        className="flex items-center gap-3 p-3 rounded-lg border border-dashed border-border/70 bg-card/30 hover:bg-card/70 transition-all group"
+                      >
+                        <span className="font-mono text-xs font-bold text-muted-foreground bg-muted px-2.5 py-1 rounded-md shrink-0">
+                          {slotTime}h
+                        </span>
+                        <div className="flex-1 flex items-center justify-between min-w-0">
+                          <span className="text-xs text-muted-foreground/60 font-medium italic">Horário Livre</span>
+                          <button
+                            type="button"
+                            onClick={() => setIsManualBookingModalOpen(true)}
+                            className="text-xs font-bold text-primary hover:text-primary-foreground hover:bg-primary px-3 py-1 rounded-md border border-primary/30 transition-all flex items-center gap-1 cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" /> Encaixar
+                          </button>
                         </div>
                       </div>
                     );

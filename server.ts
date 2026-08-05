@@ -4,6 +4,7 @@ loadEnv({ path: '.env.local', override: true });
 
 import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
+import fs from 'fs';
 import { randomUUID } from 'crypto';
 import {
   loadDB, 
@@ -588,6 +589,13 @@ export async function createApp() {
 
   // --- STRIPE: STATUS DA ASSINATURA DO CLIENTE ---
   // Mesma correção de IDOR do portal: só o próprio status, vindo do JWT.
+  //
+  // Autocura: o status gravado nas observações vem do webhook. Se o webhook
+  // atrasar ou se perder (ex.: indisponibilidade no momento do pagamento), o
+  // cliente PAGO ficaria sem VIP pra sempre. Por isso este endpoint também
+  // consulta a Stripe DIRETO (fonte da verdade) e reconcilia as observações
+  // quando encontra assinatura ativa — o VIP vira assim que a Stripe confirmar,
+  // sem depender da entrega do webhook.
   app.get('/api/stripe/subscription', requireAuth, async (req: AuthRequest, res) => {
     try {
       const email = req.userEmail;
@@ -595,31 +603,51 @@ export async function createApp() {
         return res.status(401).json({ error: 'Sessão sem e-mail. Faça login novamente.' });
       }
 
+      // 1) Rápido: se as observações locais já marcam VIP, devolve direto.
+      let observacoesLocais: string | null = null;
       if (isSupabaseConfigured()) {
         const client = serviceClient();
         if (client) {
           const { data: clientes } = await client.from('clientes').select('observacoes').eq('email', email).limit(1);
-          if (clientes && clientes.length > 0 && storage.isClientVip(clientes[0].observacoes)) {
-            return res.json({
-              ativo: true,
-              plan: storage.getClientPlan(clientes[0].observacoes),
-              observacoes: clientes[0].observacoes
-            });
-          }
+          if (clientes && clientes.length > 0) observacoesLocais = clientes[0].observacoes;
         }
-        return res.json({ ativo: false });
+      } else {
+        const db = loadDB();
+        const cliente = db.clientes.find(c => c.email && c.email.toLowerCase() === email.toLowerCase());
+        if (cliente) observacoesLocais = cliente.observacoes;
       }
 
-      const db = loadDB();
-      const cliente = db.clientes.find(c => c.email && c.email.toLowerCase() === email.toLowerCase());
-      if (cliente && storage.isClientVip(cliente.observacoes)) {
+      if (observacoesLocais && storage.isClientVip(observacoesLocais)) {
         return res.json({
           ativo: true,
-          plan: storage.getClientPlan(cliente.observacoes),
-          observacoes: cliente.observacoes
+          plan: storage.getClientPlan(observacoesLocais),
+          observacoes: observacoesLocais
         });
       }
-      res.json({ ativo: false });
+
+      // 2) Autocura: consulta a Stripe direto. Se existir assinatura ativa,
+      //    grava o VIP nas observações e devolve ativo.
+      try {
+        const vigente = await stripe.getActiveSubscription(email);
+        if (vigente) {
+          await patchSubscriptionObservacoes(email, {
+            status: 'ativo',
+            ...(vigente.plan ? { plan: vigente.plan } : {}),
+            ...(vigente.currentPeriodEnd ? { renews_at: vigente.currentPeriodEnd } : {}),
+            stripeReferenceId: vigente.id,
+            pendencia: false
+          });
+          return res.json({
+            ativo: true,
+            plan: vigente.plan,
+            currentPeriodEnd: vigente.currentPeriodEnd
+          });
+        }
+      } catch (err: any) {
+        console.error('[Stripe] Erro ao consultar assinatura direto na Stripe:', err?.message);
+      }
+
+      return res.json({ ativo: false });
     } catch (err: any) {
       console.error('[Stripe] Erro ao buscar assinatura:', err);
       res.status(500).json({ error: 'Erro ao buscar assinatura.' });
@@ -2271,7 +2299,7 @@ export async function createApp() {
   // --- BIND LIVE VITE MIDDLEWARE (DEV) OR SERVE BUILDS (PROD) ---
   // Vercel handles static file serving via CDN — skip when running serverless.
 
-  if (!process.env.VERCEL) {
+  if (!process.env.VERCEL || process.env.NODE_ENV !== 'production') {
     if (process.env.NODE_ENV !== 'production') {
       // Import dinâmico: mantém o Vite (dep enorme) fora do bundle serverless da Vercel.
       const { createServer: createViteServer } = await import('vite');
@@ -2280,6 +2308,18 @@ export async function createApp() {
         appType: 'spa',
       });
       app.use(vite.middlewares);
+      app.get('*', async (req, res, next) => {
+        if (req.originalUrl.startsWith('/api')) return next();
+        try {
+          const indexPath = path.resolve(process.cwd(), 'index.html');
+          let template = fs.readFileSync(indexPath, 'utf-8');
+          template = await vite.transformIndexHtml(req.originalUrl, template);
+          res.status(200).set({ 'Content-Type': 'text/html' }).send(template);
+        } catch (e) {
+          vite.ssrFixStacktrace(e as Error);
+          next(e);
+        }
+      });
     } else {
       const distPath = path.join(process.cwd(), 'dist');
       app.use(express.static(distPath));

@@ -34,7 +34,7 @@ const PLANOS = [
     key: 'premium',
     nome: 'Plano Premium',
     descricao: 'Tudo do Essential, barba ilimitada, produtos com 10% de desconto.',
-    centavos: 15999,
+    centavos: 14999,
     envVar: 'STRIPE_PRICE_PREMIUM'
   },
   {
