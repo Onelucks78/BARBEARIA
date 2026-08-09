@@ -13,6 +13,7 @@ interface AgendaSemanalProps {
 const HORA_INICIO = 7;    // 07:00
 const HORA_FIM = 24;      // até 24:00
 const MINUTOS_GRADE = HORA_FIM * 60 - HORA_INICIO * 60; // 1020 min
+const PASSO_MIN = 15;     // horários de 15 em 15 min (como o AppBarber)
 
 function getLocalDateString(d: Date): string {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
@@ -79,10 +80,10 @@ export default function AgendaSemanal({
   const diaAtual: Date = dias[diaSelecionado];
   const dataAtual = getLocalDateString(diaAtual);
 
-  // Horários (a cada 30 min) — o dia escolhido determina quais blocos aparecem
+  // Horários (a cada 15 min) — o dia escolhido determina quais blocos aparecem
   const slots = useMemo(() => {
     const out: number[] = [];
-    for (let m = 0; m < MINUTOS_GRADE; m += 30) out.push(HORA_INICIO * 60 + m);
+    for (let m = 0; m < MINUTOS_GRADE; m += PASSO_MIN) out.push(HORA_INICIO * 60 + m);
     return out;
   }, []);
 
@@ -192,17 +193,17 @@ export default function AgendaSemanal({
                     const minAge = timeToMinutes(a.inicio_em.split('T')[1]?.substring(0, 5) || '00:00');
                     return a.profissional_id === p.id
                       && dataAge === dataAtual
-                      && Math.floor(minAge / 30) === min / 30;
+                      && Math.floor(minAge / PASSO_MIN) === min / PASSO_MIN;
                   });
                   return (
                     <div
                       key={p.id}
-                      className="relative border-b border-r border-border min-h-[30px] hover:bg-accent/40 transition cursor-pointer"
+                      className="relative border-b border-r border-border min-h-[15px] hover:bg-accent/40 transition cursor-pointer"
                       onClick={() => onSlotClickWrapped(min)}
                     >
                       {agendamentosDaColuna.map(a => {
                         const fimMin = a.fim_em ? timeToMinutes(a.fim_em.split('T')[1]?.substring(0, 5) || '00:00') : min + 30;
-                        const altura = Math.max(24, ((fimMin - min) / 30) * 30 - 4);
+                        const altura = Math.max(24, ((fimMin - min) / PASSO_MIN) * 15 - 2);
                         const servNome = servicos.find(s => s.id === a.servico_id)?.nome || 'Serviço';
                         return (
                           <button
