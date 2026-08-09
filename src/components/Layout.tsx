@@ -50,17 +50,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="text-[9px] font-bold text-muted-foreground uppercase tracking-[0.2em] px-3 mb-2 block">Menu do Negócio</div>
 
           <button
-            onClick={() => setActiveTab('dashboard')}
-            className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${
-              activeTab === 'dashboard'
-                ? 'bg-primary text-primary-foreground shadow-lg font-bold'
-                : 'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground'
-            }`}
-          >
-            <TrendingUp className="w-4 h-4" /> Balanço Financeiro
-          </button>
-
-          <button
             onClick={() => setActiveTab('agenda')}
             className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${
               activeTab === 'agenda'
@@ -69,6 +58,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
             }`}
           >
             <Calendar className="w-4 h-4" /> Agenda & Status
+          </button>
+
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${
+              activeTab === 'dashboard'
+                ? 'bg-primary text-primary-foreground shadow-lg font-bold'
+                : 'text-muted-foreground hover:bg-sidebar-accent hover:text-foreground'
+            }`}
+          >
+            <TrendingUp className="w-4 h-4" /> Balanço Financeiro
           </button>
 
           <button

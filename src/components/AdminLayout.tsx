@@ -119,7 +119,7 @@ function getLocalDateString(d = new Date()): string {
 }
 
 export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'agenda' | 'equipe' | 'servicos' | 'produtos' | 'planos' | 'clientes' | 'financeiro' | 'configuracoes'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'agenda' | 'equipe' | 'servicos' | 'produtos' | 'planos' | 'clientes' | 'financeiro' | 'configuracoes'>('agenda');
   const [profissionais, setProfissionais] = useState<Profissional[]>([]);
   // '' = todos os barbeiros. Vale para agenda, financeiro e dashboard.
   const [filtroProfissional, setFiltroProfissional] = useState<string>('');
@@ -1166,17 +1166,6 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                   <div className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em] px-3 mb-2 block">Menu do Negócio</div>
                   
                   <button
-                    onClick={() => { setActiveTab('dashboard'); setIsMobileMenuOpen(false); }}
-                    className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${
-                      activeTab === 'dashboard' 
-                        ? 'bg-primary text-primary-foreground shadow-lg font-bold' 
-                        : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-                    }`}
-                  >
-                    <TrendingUp className="w-4 h-4" /> Balanço Financeiro
-                  </button>
-
-                  <button
                     onClick={() => { setActiveTab('agenda'); setIsMobileMenuOpen(false); }}
                     className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${
                       activeTab === 'agenda' 
@@ -1185,6 +1174,17 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                     }`}
                   >
                     <Calendar className="w-4 h-4" /> Agenda & Status
+                  </button>
+
+                  <button
+                    onClick={() => { setActiveTab('dashboard'); setIsMobileMenuOpen(false); }}
+                    className={`w-full text-left px-3.5 py-2.5 rounded-sm text-xs font-semibold flex items-center gap-2.5 transition uppercase tracking-wider cursor-pointer ${
+                      activeTab === 'dashboard' 
+                        ? 'bg-primary text-primary-foreground shadow-lg font-bold' 
+                        : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                    }`}
+                  >
+                    <TrendingUp className="w-4 h-4" /> Balanço Financeiro
                   </button>
 
                   <button
