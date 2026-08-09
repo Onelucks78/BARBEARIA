@@ -7,9 +7,10 @@ interface ManualBookingModalProps {
   onClose: () => void;
   profissionais: Profissional[];
   services: Servico[];
-  clientes?: { id: string; nome: string; telefone: string; email?: string }[];
+  clientes?: { id: string; nome: string; telefone: string; email?: string; ativo?: boolean }[];
   onBookingSuccess: () => void;
   defaultProfissionalId?: string;
+  slotInicial?: { data: string; horario: string };
 }
 
 interface SlotState {
@@ -29,10 +30,14 @@ export default function ManualBookingModal({
   onClose,
   profissionais,
   services,
+  clientes = [],
   onBookingSuccess,
-  defaultProfissionalId = ''
+  defaultProfissionalId = '',
+  slotInicial
 }: ManualBookingModalProps) {
   const [nomeCliente, setNomeCliente] = useState('');
+  const [buscandoCliente, setBuscandoCliente] = useState(false);
+  const [telefoneCliente, setTelefoneCliente] = useState('');
   const [selectedProfissionalId, setSelectedProfissionalId] = useState(defaultProfissionalId);
   const [selectedServices, setSelectedServices] = useState<Servico[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -57,6 +62,14 @@ export default function ManualBookingModal({
       setSelectedProfissionalId(activeProfissionais[0].id);
     }
   }, [defaultProfissionalId, profissionais, isOpen]);
+
+  // Quando aberto a partir da grade semanal, pré-seleciona data e horário do slot.
+  useEffect(() => {
+    if (isOpen && slotInicial) {
+      setSelectedDate(slotInicial.data);
+      setSelectedSlot(slotInicial.horario);
+    }
+  }, [isOpen, slotInicial]);
 
   // Nada de pré-selecionar serviço: com 15 serviços cadastrados, marcar o
   // primeiro da lista fazia o admin achar que não dava pra trocar (clicar em
@@ -190,7 +203,7 @@ export default function ManualBookingModal({
       // rejeitava tudo — o agendamento manual nunca chegou a gravar.
       const payload = {
         nome_cliente: nomeCliente.trim(),
-        telefone_cliente: '',
+        telefone_cliente: telefoneCliente.trim(),
         profissional_id: selectedProfissionalId,
         servico_id: selectedServices.map(s => s.id).join(','),
         data: selectedDate,
@@ -211,6 +224,7 @@ export default function ManualBookingModal({
 
       // Reset form
       setNomeCliente('');
+      setTelefoneCliente('');
       setObservacao('');
       setSelectedSlot('');
 
@@ -262,15 +276,49 @@ export default function ManualBookingModal({
                 Nome do Cliente *
               </label>
               <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" />
                 <input
                   type="text"
                   placeholder="Ex: João Silva"
                   required
                   value={nomeCliente}
-                  onChange={(e) => setNomeCliente(e.target.value)}
+                  onChange={(e) => {
+                    setNomeCliente(e.target.value);
+                    setBuscandoCliente(true);
+                  }}
+                  onFocus={() => setBuscandoCliente(true)}
                   className="w-full pl-9 pr-3 py-2.5 bg-background border border-border rounded-md text-xs focus:outline-none focus:border-primary text-foreground font-medium"
                 />
+                {buscandoCliente && nomeCliente.trim().length > 0 && (
+                  <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-card border border-border rounded-md shadow-xl max-h-48 overflow-y-auto">
+                    {clientes
+                      .filter(c =>
+                        c.ativo !== false &&
+                        c.nome.toLowerCase().includes(nomeCliente.trim().toLowerCase())
+                      )
+                      .slice(0, 8)
+                      .map(c => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => {
+                            setNomeCliente(c.nome);
+                            setTelefoneCliente(c.telefone || '');
+                            setBuscandoCliente(false);
+                          }}
+                          className="w-full text-left px-3 py-2.5 hover:bg-accent text-xs font-semibold text-foreground transition cursor-pointer"
+                        >
+                          {c.nome}
+                          {c.telefone && <span className="block text-[10px] text-muted-foreground">{c.telefone}</span>}
+                        </button>
+                      ))}
+                    {clientes.filter(c => c.nome.toLowerCase().includes(nomeCliente.trim().toLowerCase())).length === 0 && (
+                      <div className="px-3 py-2.5 text-[10px] text-muted-foreground italic">
+                        Nenhum cliente encontrado — digite o nome para criar sem cadastro.
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
