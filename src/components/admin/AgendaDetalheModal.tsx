@@ -1,4 +1,3 @@
-import React from 'react';
 import { X, CheckCircle2, Trash2, User } from 'lucide-react';
 import { Agendamento, Profissional, Servico } from '../../types.ts';
 

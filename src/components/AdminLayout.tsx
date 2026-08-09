@@ -16,7 +16,6 @@ import {
   Clock,
   Save,
   Settings,
-  CalendarX,
   FileSpreadsheet,
   LogOut,
   Sparkles,
@@ -146,8 +145,6 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
   useEffect(() => {
     setDashboardCurrentPage(1);
   }, [dashboardCardFilter, dashboardPeriod]);
-  const [agendaDateFilter, setAgendaDateFilter] = useState<string>('');
-  const [agendaFilterMode, setAgendaFilterMode] = useState<'upcoming' | 'day'>('upcoming');
   const [clientSearchQuery, setClientSearchQuery] = useState('');
 
   // UI action states (Modals or quick add forms toggles)
@@ -248,7 +245,6 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
   // Initialize dates
   useEffect(() => {
     const todayStr = getLocalDateString();
-    setAgendaDateFilter(todayStr);
     setNewLaunch(prev => ({ ...prev, data: todayStr }));
     setNewBlock(prev => ({ ...prev, data: todayStr }));
   }, []);
@@ -1091,24 +1087,6 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
   const assinantesOutrosPlanos = assinantesVIP.filter(
     a => !PLAN_TIERS.some(t => t.key === (a.subscription.plan || '').toLowerCase())
   );
-
-  // Filtered list of agenda
-  const filteredAgendamentos = [...agendamentos]
-    .filter(a => {
-      const todayStr = getLocalDateString();
-      const appointmentDateStr = a.inicio_em.split('T')[0];
-      
-      if (agendaFilterMode === 'upcoming') {
-        // Show today (all day) and all upcoming future bookings
-        return appointmentDateStr >= todayStr;
-      } else {
-        if (!agendaDateFilter) return true;
-        return appointmentDateStr === agendaDateFilter;
-      }
-    })
-    .sort((a, b) => {
-      return new Date(a.inicio_em).getTime() - new Date(b.inicio_em).getTime();
-    });
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-background text-foreground flex flex-col lg:flex-row font-sans">

@@ -63,13 +63,38 @@ export default function ManualBookingModal({
     }
   }, [defaultProfissionalId, profissionais, isOpen]);
 
-  // Quando aberto a partir da grade semanal, pré-seleciona data e horário do slot.
+  // Quando aberto a partir da grade semanal, pré-seleciona data e horário do slot
+  // e sincroniza o mês/ano do calendário para a data preenchida ficar visível.
   useEffect(() => {
     if (isOpen && slotInicial) {
       setSelectedDate(slotInicial.data);
       setSelectedSlot(slotInicial.horario);
+      const [ano, mes] = slotInicial.data.split('-').map(Number);
+      if (ano && mes) {
+        setCurrentCalendarYear(ano);
+        setCurrentCalendarMonth(mes - 1);
+      }
     }
   }, [isOpen, slotInicial]);
+
+  // Fecha o dropdown de autocomplete ao clicar fora dele ou pressionar Escape.
+  useEffect(() => {
+    if (!buscandoCliente) return;
+    const onDocMouseDown = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('[data-cliente-dropdown]')) return;
+      setBuscandoCliente(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setBuscandoCliente(false);
+    };
+    document.addEventListener('mousedown', onDocMouseDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocMouseDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [buscandoCliente]);
 
   // Nada de pré-selecionar serviço: com 15 serviços cadastrados, marcar o
   // primeiro da lista fazia o admin achar que não dava pra trocar (clicar em
@@ -237,6 +262,18 @@ export default function ManualBookingModal({
     }
   };
 
+  // Predicado único do autocomplete: busca por nome ou telefone, só clientes ativos.
+  const buscaClienteQuery = nomeCliente.trim().toLowerCase();
+  const buscaClienteDigits = buscaClienteQuery.replace(/\D/g, '');
+  const matchesCliente = (c: { nome: string; telefone: string; ativo?: boolean }) => {
+    if (c.ativo === false) return false;
+    if (c.nome.toLowerCase().includes(buscaClienteQuery)) return true;
+    const telefone = c.telefone || '';
+    if (telefone.toLowerCase().includes(buscaClienteQuery)) return true;
+    if (buscaClienteDigits.length > 0 && telefone.replace(/\D/g, '').includes(buscaClienteDigits)) return true;
+    return false;
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -290,12 +327,9 @@ export default function ManualBookingModal({
                   className="w-full pl-9 pr-3 py-2.5 bg-background border border-border rounded-md text-xs focus:outline-none focus:border-primary text-foreground font-medium"
                 />
                 {buscandoCliente && nomeCliente.trim().length > 0 && (
-                  <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-card border border-border rounded-md shadow-xl max-h-48 overflow-y-auto">
+                  <div data-cliente-dropdown className="absolute left-0 right-0 top-full mt-1 z-20 bg-card border border-border rounded-md shadow-xl max-h-48 overflow-y-auto">
                     {clientes
-                      .filter(c =>
-                        c.ativo !== false &&
-                        c.nome.toLowerCase().includes(nomeCliente.trim().toLowerCase())
-                      )
+                      .filter(matchesCliente)
                       .slice(0, 8)
                       .map(c => (
                         <button
@@ -312,7 +346,7 @@ export default function ManualBookingModal({
                           {c.telefone && <span className="block text-[10px] text-muted-foreground">{c.telefone}</span>}
                         </button>
                       ))}
-                    {clientes.filter(c => c.nome.toLowerCase().includes(nomeCliente.trim().toLowerCase())).length === 0 && (
+                    {clientes.filter(matchesCliente).length === 0 && (
                       <div className="px-3 py-2.5 text-[10px] text-muted-foreground italic">
                         Nenhum cliente encontrado — digite o nome para criar sem cadastro.
                       </div>
