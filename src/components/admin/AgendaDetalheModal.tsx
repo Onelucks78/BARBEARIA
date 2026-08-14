@@ -93,7 +93,7 @@ export default function AgendaDetalheModal({
                 onClick={() => { onCancelar(agendamento.id); onClose(); }}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-sm bg-red-600 hover:bg-red-500 text-white text-xs font-bold uppercase tracking-wide transition cursor-pointer"
               >
-                <Trash2 className="w-4 h-4" /> Cancelar
+                <Trash2 className="w-4 h-4" /> Excluir
               </button>
             </>
           ) : (

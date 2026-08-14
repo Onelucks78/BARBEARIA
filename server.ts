@@ -1382,6 +1382,34 @@ export async function createApp() {
     }
   });
 
+  app.delete('/api/admin/agendamentos/:id', requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { id } = req.params;
+
+      if (isSupabaseConfigured()) {
+        let uuid = id;
+        if (id.startsWith('#')) {
+          const svc = serviceClient();
+          const { data: row } = await svc!.from('agendamentos').select('id').eq('codigo', id).single();
+          if (!row) return res.status(404).json({ error: 'Agendamento não encontrado.' });
+          uuid = row.id;
+        }
+        await storage.deleteAgendamento(uuid);
+        return res.json({ ok: true });
+      }
+
+      const db = loadDB();
+      const idx = db.agendamentos.findIndex(a => a.id === id);
+      if (idx === -1) return res.status(404).json({ error: 'Agendamento não encontrado.' });
+      db.agendamentos.splice(idx, 1);
+      saveDB(db);
+      return res.json({ ok: true });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'Erro ao excluir agendamento.' });
+    }
+  });
+
 
   // 3. SERVICES CRUD (Prevent actual deleting, just flip active flag / deativar)
   // Upload de imagem decorativa (serviços/produtos) para o Supabase Storage (bucket "imagens")

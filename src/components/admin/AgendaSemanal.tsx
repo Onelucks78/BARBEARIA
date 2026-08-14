@@ -28,22 +28,27 @@ function addDays(d: Date, dias: number): Date {
 const DIAS_PT = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 const DIAS_PT_SHORT = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 
-// Cores e estilos por status (mesma semântica da lista atual da agenda)
-function statusClasses(status: Agendamento['status']): string {
-  switch (status) {
-    case 'concluido':
-      return 'bg-emerald-500/25 text-emerald-700 dark:text-emerald-300 border-l-emerald-500 opacity-70 hover:opacity-100';
-    case 'cancelado':
-    case 'faltou':
-      return 'bg-red-500/20 text-red-700 dark:text-red-300 border-l-red-500 opacity-60 hover:opacity-100';
-    default:
-      return 'bg-primary/20 text-primary border-l-primary hover:bg-primary/30';
-  }
-}
+// Cores que alternam a cada agendamento (para diferenciar quando um termina e outro começa)
+const CORES_BLOCO = [
+  'border-l-primary bg-primary/20 text-primary',
+  'border-l-purple-500 bg-purple-500/20 text-purple-700 dark:text-purple-300',
+  'border-l-rose-500 bg-rose-500/20 text-rose-700 dark:text-rose-300',
+  'border-l-emerald-500 bg-emerald-500/20 text-emerald-700 dark:text-emerald-300',
+  'border-l-orange-500 bg-orange-500/20 text-orange-700 dark:text-orange-300',
+  'border-l-sky-500 bg-sky-500/20 text-sky-700 dark:text-sky-300',
+  'border-l-fuchsia-500 bg-fuchsia-500/20 text-fuchsia-700 dark:text-fuchsia-300'
+];
 
 function timeToMinutes(t: string): number {
   const [h, m] = t.split(':').map(Number);
   return h * 60 + m;
+}
+
+// Fim do agendamento arredondado para cima até a próxima linha de 15min
+function fimMinutoAgendamento(a: Agendamento): number {
+  const s = timeToMinutes(a.inicio_em.split('T')[1]?.substring(0, 5) || '00:00');
+  const fimRaw = a.fim_em ? timeToMinutes(a.fim_em.split('T')[1]?.substring(0, 5) || '00:00') : s + 30;
+  return Math.ceil(fimRaw / PASSO_MIN) * PASSO_MIN;
 }
 
 function fmtHora(min: number): string {
@@ -189,20 +194,30 @@ export default function AgendaSemanal({
                 </div>
                 {colunas.map(p => {
                   const agendamentosDoDia = agendamentos.filter(a =>
-                    a.profissional_id === p.id && a.inicio_em.split('T')[0] === dataAtual
+                    a.profissional_id === p.id
+                    && a.inicio_em.split('T')[0] === dataAtual
+                    && a.status !== 'cancelado'
+                    && a.status !== 'faltou'
                   );
+                  const corPorAgendamento = new Map<string, string>();
+                  [...agendamentosDoDia]
+                    .sort((a, b) => a.inicio_em.localeCompare(b.inicio_em))
+                    .forEach((a, i) => corPorAgendamento.set(a.id, CORES_BLOCO[i % CORES_BLOCO.length]));
+
                   const cobrindo = agendamentosDoDia.find(a => {
                     const s = timeToMinutes(a.inicio_em.split('T')[1]?.substring(0, 5) || '00:00');
-                    const fimRaw = a.fim_em ? timeToMinutes(a.fim_em.split('T')[1]?.substring(0, 5) || '00:00') : s + 30;
-                    const e = Math.ceil(fimRaw / PASSO_MIN) * PASSO_MIN;
-                    return s < min + PASSO_MIN && e > min;
+                    return s < min + PASSO_MIN && fimMinutoAgendamento(a) > min;
                   });
                   const ehInicio = cobrindo && timeToMinutes(cobrindo.inicio_em.split('T')[1]?.substring(0, 5) || '00:00') === min;
+                  const ehUltimo = cobrindo && min + PASSO_MIN >= fimMinutoAgendamento(cobrindo);
                   const servNome = cobrindo ? (servicos.find(s => s.id === cobrindo.servico_id)?.nome || 'Serviço') : '';
+                  const cor = cobrindo ? (corPorAgendamento.get(cobrindo.id) || CORES_BLOCO[0]) : '';
                   return (
                     <div
                       key={p.id}
-                      className={`relative border-b border-r border-border min-h-[15px] transition ${cobrindo ? `border-l-4 cursor-pointer ${statusClasses(cobrindo.status)}` : 'hover:bg-accent/40 cursor-pointer'}`}
+                      className={`relative border-r border-border min-h-[15px] transition ${cobrindo
+                        ? `border-l-4 cursor-pointer ${cor} ${ehUltimo ? 'border-b border-border' : ''}`
+                        : 'border-b border-border hover:bg-accent/40 cursor-pointer'}`}
                       onClick={() => cobrindo ? onAgendamentoClick(cobrindo) : onSlotClickWrapped(min)}
                       title={cobrindo ? `${cobrindo.nome_cliente} — ${servNome} (${cobrindo.inicio_em.split('T')[1]?.substring(0, 5)}h)` : undefined}
                     >

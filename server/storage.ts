@@ -435,6 +435,16 @@ export async function updateBookingStatus(
   return rowToAgendamento(data);
 }
 
+export async function deleteAgendamento(uuid: string): Promise<boolean> {
+  const client = sb();
+  if (!client) {
+    throw new Error('deleteAgendamento em modo dev ainda roda via server.ts (legado).');
+  }
+  const { error } = await client.from('agendamentos').delete().eq('id', uuid);
+  if (error) throw error;
+  return true;
+}
+
 // ---------- AGENDAMENTOS DO CLIENTE (Meus Agendamentos) ----------
 export async function listClientBookings(email?: string, telefone?: string): Promise<Agendamento[]> {
   await purgeOldAgendamentos();

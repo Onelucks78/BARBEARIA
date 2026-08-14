@@ -465,6 +465,21 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
     }
   };
 
+  const handleDeleteBooking = async (bookingId: string) => {
+    if (!window.confirm('Excluir este agendamento?')) return;
+    try {
+      const res = await authedFetch(`/api/admin/agendamentos/${encodeURIComponent(bookingId)}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) throw new Error('Falha ao excluir agendamento.');
+      setSuccessMsg('Agendamento excluído.');
+      setAgendamentoDetalhe(null);
+      fetchAgendamentos();
+    } catch (e: any) {
+      setErrorMsg(e.message);
+    }
+  };
+
   // Link pre-registered client
   const handleLinkClientToBooking = async (bookingId: string, clienteId: string) => {
     if (!clienteId) return;
@@ -4153,7 +4168,7 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
         servicos={servicos}
         onClose={() => setAgendamentoDetalhe(null)}
         onConcluir={(id) => handleUpdateBookingStatus(id, 'concluido')}
-        onCancelar={(id) => handleUpdateBookingStatus(id, 'cancelado')}
+        onCancelar={handleDeleteBooking}
       />
 
       <ManualBookingModal
