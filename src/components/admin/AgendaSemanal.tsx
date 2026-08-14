@@ -202,7 +202,8 @@ export default function AgendaSemanal({
                       onClick={() => onSlotClickWrapped(min)}
                     >
                       {agendamentosDaColuna.map(a => {
-                        const fimMin = a.fim_em ? timeToMinutes(a.fim_em.split('T')[1]?.substring(0, 5) || '00:00') : min + 30;
+                        const fimRaw = a.fim_em ? timeToMinutes(a.fim_em.split('T')[1]?.substring(0, 5) || '00:00') : min + 30;
+                        const fimMin = Math.ceil(fimRaw / PASSO_MIN) * PASSO_MIN;
                         const altura = Math.max(24, ((fimMin - min) / PASSO_MIN) * 15 - 2);
                         const servNome = servicos.find(s => s.id === a.servico_id)?.nome || 'Serviço';
                         return (
