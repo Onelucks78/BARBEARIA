@@ -211,11 +211,11 @@ export default function AgendaSemanal({
                             type="button"
                             onClick={(e) => { e.stopPropagation(); onAgendamentoClick(a); }}
                             className={`absolute left-1 right-1 z-10 border-l-4 rounded-sm px-2 py-1 text-left shadow-sm transition cursor-pointer ${statusClasses(a.status)}`}
-                            style={{ top: 2, height: altura, overflow: 'hidden' }}
+                            style={{ top: 2, minHeight: altura, height: 'auto', overflow: 'visible' }}
                             title={`${a.nome_cliente} — ${servNome} (${a.inicio_em.split('T')[1]?.substring(0, 5)}h)`}
                           >
-                            <span className="block text-[10px] font-black truncate">{a.nome_cliente}</span>
-                            <span className="block text-[9px] truncate opacity-80">
+                            <span className="block text-[10px] font-black break-words">{a.nome_cliente}</span>
+                            <span className="block text-[9px] break-words opacity-80">
                               {a.inicio_em.split('T')[1]?.substring(0, 5)} · {servNome}
                             </span>
                           </button>

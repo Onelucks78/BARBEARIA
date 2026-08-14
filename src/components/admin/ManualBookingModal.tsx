@@ -102,6 +102,7 @@ export default function ManualBookingModal({
 
   // Fetch live availability from database API
   useEffect(() => {
+    if (!isOpen) return;
     if (!selectedProfissionalId || !selectedDate || selectedServices.length === 0) {
       setAvailableSlots([]);
       return;
@@ -139,7 +140,7 @@ export default function ManualBookingModal({
     };
 
     fetchSlots();
-  }, [selectedProfissionalId, selectedDate, selectedServices]);
+  }, [isOpen, selectedProfissionalId, selectedDate, selectedServices]);
 
   // Um serviço por agendamento. Combos ("Cabelo + Barba + Sobrancelha") já
   // existem como serviço próprio no catálogo. Mantemos array porque as rotas
@@ -389,7 +390,9 @@ export default function ManualBookingModal({
               {selectedServices.length > 0 && (
                 <span className="text-[11px] font-bold text-primary">
                   R$ {totalPreco.toFixed(2).replace('.', ',')}
-                  {totalDuracao > 0 && ` · ${totalDuracao} min`}
+                  {totalDuracao > 0 && (
+                    <em className="font-semibold text-muted-foreground"> · {totalDuracao} min</em>
+                  )}
                 </span>
               )}
             </div>
@@ -406,7 +409,7 @@ export default function ManualBookingModal({
                 <option value="" className="bg-card text-foreground">Selecione o serviço...</option>
                 {services.map(s => (
                   <option key={s.id} value={s.id} className="bg-card text-foreground">
-                    {s.nome} — R$ {s.preco.toFixed(2).replace('.', ',')}
+                    {s.nome} — R$ {s.preco.toFixed(2).replace('.', ',')} · {s.duracao_minutos} min
                   </option>
                 ))}
               </select>
