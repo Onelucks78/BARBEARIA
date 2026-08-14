@@ -188,40 +188,32 @@ export default function AgendaSemanal({
                   <span className="text-[10px] text-muted-foreground font-semibold">{fmtHora(min)}</span>
                 </div>
                 {colunas.map(p => {
-                  const agendamentosDaColuna: Agendamento[] = agendamentos.filter(a => {
-                    const dataAge = a.inicio_em.split('T')[0];
-                    const minAge = timeToMinutes(a.inicio_em.split('T')[1]?.substring(0, 5) || '00:00');
-                    return a.profissional_id === p.id
-                      && dataAge === dataAtual
-                      && Math.floor(minAge / PASSO_MIN) === min / PASSO_MIN;
+                  const agendamentosDoDia = agendamentos.filter(a =>
+                    a.profissional_id === p.id && a.inicio_em.split('T')[0] === dataAtual
+                  );
+                  const cobrindo = agendamentosDoDia.find(a => {
+                    const s = timeToMinutes(a.inicio_em.split('T')[1]?.substring(0, 5) || '00:00');
+                    const fimRaw = a.fim_em ? timeToMinutes(a.fim_em.split('T')[1]?.substring(0, 5) || '00:00') : s + 30;
+                    const e = Math.ceil(fimRaw / PASSO_MIN) * PASSO_MIN;
+                    return s < min + PASSO_MIN && e > min;
                   });
+                  const ehInicio = cobrindo && timeToMinutes(cobrindo.inicio_em.split('T')[1]?.substring(0, 5) || '00:00') === min;
+                  const servNome = cobrindo ? (servicos.find(s => s.id === cobrindo.servico_id)?.nome || 'Serviço') : '';
                   return (
                     <div
                       key={p.id}
-                      className="relative border-b border-r border-border min-h-[15px] hover:bg-accent/40 transition cursor-pointer"
-                      onClick={() => onSlotClickWrapped(min)}
+                      className={`relative border-b border-r border-border min-h-[15px] transition ${cobrindo ? `border-l-4 cursor-pointer ${statusClasses(cobrindo.status)}` : 'hover:bg-accent/40 cursor-pointer'}`}
+                      onClick={() => cobrindo ? onAgendamentoClick(cobrindo) : onSlotClickWrapped(min)}
+                      title={cobrindo ? `${cobrindo.nome_cliente} — ${servNome} (${cobrindo.inicio_em.split('T')[1]?.substring(0, 5)}h)` : undefined}
                     >
-                      {agendamentosDaColuna.map(a => {
-                        const fimRaw = a.fim_em ? timeToMinutes(a.fim_em.split('T')[1]?.substring(0, 5) || '00:00') : min + 30;
-                        const fimMin = Math.ceil(fimRaw / PASSO_MIN) * PASSO_MIN;
-                        const altura = Math.max(15, ((fimMin - min) / PASSO_MIN) * 15);
-                        const servNome = servicos.find(s => s.id === a.servico_id)?.nome || 'Serviço';
-                        return (
-                          <button
-                            key={a.id}
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); onAgendamentoClick(a); }}
-                            className={`absolute left-1 right-1 z-10 border-l-4 rounded-sm px-2 py-1 text-left shadow-sm transition cursor-pointer ${statusClasses(a.status)}`}
-                            style={{ top: 0, height: altura, overflow: 'visible' }}
-                            title={`${a.nome_cliente} — ${servNome} (${a.inicio_em.split('T')[1]?.substring(0, 5)}h)`}
-                          >
-                            <span className="block text-[10px] font-black break-words leading-tight">{a.nome_cliente}</span>
-                            <span className="block text-[9px] break-words leading-tight opacity-80">
-                              {a.inicio_em.split('T')[1]?.substring(0, 5)} · {servNome}
-                            </span>
-                          </button>
-                        );
-                      })}
+                      {ehInicio && (
+                        <div className="pointer-events-none absolute left-0 right-0 top-0 z-10 px-2 py-1 overflow-visible text-left">
+                          <span className="block text-[10px] font-black break-words leading-tight">{cobrindo.nome_cliente}</span>
+                          <span className="block text-[9px] break-words leading-tight opacity-80">
+                            {cobrindo.inicio_em.split('T')[1]?.substring(0, 5)} · {servNome}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
