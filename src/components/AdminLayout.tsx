@@ -2151,16 +2151,18 @@ export default function AdminLayout({ session, onLogout }: AdminLayoutProps) {
                 onChange={setFiltroProfissional}
               />
 
-              <AgendaSemanal
-                agendamentos={filtroProfissional ? agendamentos.filter(a => a.profissional_id === filtroProfissional) : agendamentos}
-                profissionais={profissionais}
-                servicos={servicos}
-                onSlotClick={(data, horario) => {
-                  setSlotInicial({ data, horario });
-                  setIsManualBookingModalOpen(true);
-                }}
-                onAgendamentoClick={(a) => setAgendamentoDetalhe(a)}
-              />
+              <div className="-mx-6 md:mx-0">
+                <AgendaSemanal
+                  agendamentos={filtroProfissional ? agendamentos.filter(a => a.profissional_id === filtroProfissional) : agendamentos}
+                  profissionais={profissionais}
+                  servicos={servicos}
+                  onSlotClick={(data, horario) => {
+                    setSlotInicial({ data, horario });
+                    setIsManualBookingModalOpen(true);
+                  }}
+                  onAgendamentoClick={(a) => setAgendamentoDetalhe(a)}
+                />
+              </div>
             </div>
           )}
 

@@ -99,41 +99,36 @@ export default function AgendaSemanal({
   return (
     <div className="space-y-4">
       {/* Navegação da semana */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setSemanaInicio(d => addDays(d, -7))}
-            className="p-2 border border-border rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition cursor-pointer"
-            aria-label="Semana anterior"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const d = new Date();
-              d.setDate(d.getDate() - d.getDay());
-              d.setHours(0, 0, 0, 0);
-              setSemanaInicio(d);
-              setDiaSelecionado(new Date().getDay());
-            }}
-            className="px-3 py-2 border border-border rounded-sm text-xs font-bold text-primary hover:bg-accent transition cursor-pointer"
-          >
-            Hoje
-          </button>
-          <button
-            type="button"
-            onClick={() => setSemanaInicio(d => addDays(d, 7))}
-            className="p-2 border border-border rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition cursor-pointer"
-            aria-label="Próxima semana"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-          <span className="ml-1 text-sm font-bold text-foreground">
-            {dias[0].toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} – {dias[6].toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
-          </span>
-        </div>
+      <div className="flex items-center justify-center gap-2">
+        <button
+          type="button"
+          onClick={() => setSemanaInicio(d => addDays(d, -7))}
+          className="p-2 border border-border rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition cursor-pointer"
+          aria-label="Semana anterior"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const d = new Date();
+            d.setDate(d.getDate() - d.getDay());
+            d.setHours(0, 0, 0, 0);
+            setSemanaInicio(d);
+            setDiaSelecionado(new Date().getDay());
+          }}
+          className="px-3 py-2 border border-border rounded-sm text-xs font-bold text-primary hover:bg-accent transition cursor-pointer"
+        >
+          Hoje
+        </button>
+        <button
+          type="button"
+          onClick={() => setSemanaInicio(d => addDays(d, 7))}
+          className="p-2 border border-border rounded-sm text-muted-foreground hover:text-foreground hover:bg-accent transition cursor-pointer"
+          aria-label="Próxima semana"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
       </div>
 
       {/* Seletor dos 7 dias da semana */}
@@ -175,7 +170,7 @@ export default function AgendaSemanal({
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <div className="min-w-[720px]">
+          <div className="w-full">
             {/* Cabeçalho: nomes dos barbeiros acima de cada coluna */}
             <div className="grid" style={{ gridTemplateColumns: `80px repeat(${colunas.length}, 1fr)` }}>
               <div className="border-b border-r border-border bg-card" />
