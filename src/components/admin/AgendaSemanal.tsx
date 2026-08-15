@@ -25,7 +25,6 @@ function addDays(d: Date, dias: number): Date {
   return n;
 }
 
-const DIAS_PT = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 const DIAS_PT_SHORT = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 
 // Cores que alternam a cada agendamento (para diferenciar quando um termina e outro começa)
@@ -154,11 +153,6 @@ export default function AgendaSemanal({
             </button>
           );
         })}
-      </div>
-
-      {/* Título do dia em exibição */}
-      <div className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
-        {DIAS_PT[diaAtual.getDay()]} · {diaAtual.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
       </div>
 
       {colunas.length === 0 ? (
