@@ -30,13 +30,13 @@ const DIAS_PT_SHORT = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 
 // Cores que alternam a cada agendamento (para diferenciar quando um termina e outro começa)
 const CORES_BLOCO = [
-  'border-l-primary bg-primary/20 text-primary',
-  'border-l-purple-500 bg-purple-500/20 text-purple-700 dark:text-purple-300',
-  'border-l-rose-500 bg-rose-500/20 text-rose-700 dark:text-rose-300',
-  'border-l-emerald-500 bg-emerald-500/20 text-emerald-700 dark:text-emerald-300',
-  'border-l-orange-500 bg-orange-500/20 text-orange-700 dark:text-orange-300',
-  'border-l-sky-500 bg-sky-500/20 text-sky-700 dark:text-sky-300',
-  'border-l-fuchsia-500 bg-fuchsia-500/20 text-fuchsia-700 dark:text-fuchsia-300'
+  'border-l-primary bg-primary/30 text-primary',
+  'border-l-purple-500 bg-purple-500/30 text-purple-700 dark:text-purple-300',
+  'border-l-rose-500 bg-rose-500/30 text-rose-700 dark:text-rose-300',
+  'border-l-emerald-500 bg-emerald-500/30 text-emerald-700 dark:text-emerald-300',
+  'border-l-orange-500 bg-orange-500/30 text-orange-700 dark:text-orange-300',
+  'border-l-sky-500 bg-sky-500/30 text-sky-700 dark:text-sky-300',
+  'border-l-fuchsia-500 bg-fuchsia-500/30 text-fuchsia-700 dark:text-fuchsia-300'
 ];
 
 function timeToMinutes(t: string): number {
