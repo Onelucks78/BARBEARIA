@@ -20,10 +20,12 @@ function sb(): SupabaseClient | null {
 }
 
 export function getTodayLocalDateString(): string {
-  const d = new Date();
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
+  // O servidor roda em UTC e vira o dia antes do horário local (Brasil, UTC-3).
+  // Sem isso, o purge apagaria agendamentos do dia local atual depois da meia-noite UTC.
+  const d = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const year = d.getUTCFullYear();
+  const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
 
