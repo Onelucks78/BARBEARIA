@@ -336,7 +336,7 @@ export default function ManualBookingModal({
       <div className="relative w-full max-w-2xl bg-card border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[92dvh]">
         <div className="p-4 sm:p-5 bg-slate-900 text-white border-b border-border flex items-center justify-between shrink-0">
           <div>
-            <h3 className="text-base font-semibold flex items-center gap-2 text-primary">
+            <h3 className="text-base font-semibold flex items-center gap-2 text-white">
               <Calendar className="w-5 h-5" /> Agendar para Cliente
             </h3>
             <p className="text-slate-400 text-xs mt-0.5">
